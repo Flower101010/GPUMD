@@ -12,19 +12,22 @@
 */
 
 #include "force_field_parameters.cuh"
+#include "utilities/common.cuh"
 #include <cmath>
+#include <cstddef>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
-std::vector<std::string> ForceFieldParameters::validate(const Topology& topology) const
+std::vector<std::string> ForceFieldParameters::validate_bond(const Topology& topology) const
 {
   std::vector<std::string> errors = topology.validate();
 
   for (size_t i = 0; i < harmonic_bond_parameters.size(); ++i) {
     const HarmonicBondParameter& parameter = harmonic_bond_parameters[i];
 
-    if (!std::isfinite(parameter.equilibrium_distance) ||
-        parameter.equilibrium_distance <= 0.0) {
+    if (!std::isfinite(parameter.equilibrium_distance) || parameter.equilibrium_distance <= 0.0) {
       std::ostringstream message;
       message << "harmonic_bond_parameter[" << i
               << "] equilibrium_distance must be finite and positive, but is "
@@ -35,8 +38,8 @@ std::vector<std::string> ForceFieldParameters::validate(const Topology& topology
     if (!std::isfinite(parameter.force_constant) || parameter.force_constant <= 0.0) {
       std::ostringstream message;
       message << "harmonic_bond_parameter[" << i
-              << "] force_constant must be finite and positive, but is "
-              << parameter.force_constant << ".";
+              << "] force_constant must be finite and positive, but is " << parameter.force_constant
+              << ".";
       errors.emplace_back(message.str());
     }
   }
@@ -55,9 +58,50 @@ std::vector<std::string> ForceFieldParameters::validate(const Topology& topology
   return errors;
 }
 
+std::vector<std::string> ForceFieldParameters::validate_angle(const Topology& topology) const
+{
+  std::vector<std::string> errors = topology.validate();
+
+  for (size_t i = 0; i < harmonic_angle_parameters.size(); ++i) {
+    const HarmonicAngleParameter& parameter = harmonic_angle_parameters[i];
+
+    if (
+      !std::isfinite(parameter.equilibrium_angle) || parameter.equilibrium_angle <= 0 ||
+      parameter.equilibrium_angle > PI) {
+      std::ostringstream message;
+      message << "harmonic_angle_parameter[" << i
+              << "] equilibrium angle must be finite and within the range [0, PI], but is"
+              << parameter.equilibrium_angle << ".";
+      errors.emplace_back(message.str());
+    }
+    if (!std::isfinite(parameter.angle_constant) || parameter.angle_constant <= 0) {
+      std::ostringstream message;
+      message << "harmonic_angle_parameter[" << i
+              << "] angle constant must be finite and positive, but is" << parameter.angle_constant
+              << ".";
+      errors.emplace_back(message.str());
+    }
+  }
+
+  for (size_t i = 0; i < topology.angles.size(); ++i) {
+    const int type = topology.angles[i].type;
+    if (type >= 0 && static_cast<size_t>(type) >= harmonic_angle_parameters.size()) {
+      std::ostringstream message;
+      message << "angle[" << i << "] type " << type
+              << " is outside the harmonic angle parameter table with "
+              << harmonic_angle_parameters.size() << " entries.";
+      errors.emplace_back(message.str());
+    }
+  }
+
+  return errors;
+}
+
 void ForceFieldParameters::validate_or_throw(const Topology& topology) const
 {
-  const std::vector<std::string> errors = validate(topology);
+  std::vector<std::string> errors = validate_bond(topology);
+  const std::vector<std::string> angle_errors = validate_angle(topology);
+  errors.insert(errors.end(), angle_errors.begin(), angle_errors.end());
   if (errors.empty()) {
     return;
   }
@@ -73,4 +117,5 @@ void ForceFieldParameters::validate_or_throw(const Topology& topology) const
 void ForceFieldParameters::clear()
 {
   harmonic_bond_parameters.clear();
+  harmonic_angle_parameters.clear();
 }

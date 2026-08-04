@@ -24,15 +24,23 @@ struct HarmonicBondParameter {
   double force_constant;
 };
 
+// The Harmonic angle potential is U(/theta)=0.5*angle_constant*(/theta-equilibrium_angle)^2
+struct HarmonicAngleParameter{
+  double equilibrium_angle;
+  double angle_constant;
+};
+
 class ForceFieldParameters
 {
 public:
   // During the harmonic-bond milestone, Bond::type directly indexes this table. A function-type
   // registry can be added later without changing the Topology interaction records.
   std::vector<HarmonicBondParameter> harmonic_bond_parameters;
+  std::vector<HarmonicAngleParameter> harmonic_angle_parameters;
 
   // Validate both the parameter values and all Topology references to this parameter table.
-  std::vector<std::string> validate(const Topology& topology) const;
+  std::vector<std::string> validate_bond(const Topology& topology) const;
+  std::vector<std::string> validate_angle(const Topology& topology) const;
 
   // Throw std::runtime_error containing every topology and parameter validation error.
   void validate_or_throw(const Topology& topology) const;
