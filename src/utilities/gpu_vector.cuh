@@ -45,40 +45,58 @@ public:
     memory_ = 0;
     memory_type_ = Memory_Type::global;
     allocated_ = false;
+    data_ = nullptr;
   }
 
   // only allocate memory
   GPU_Vector(const size_t size, const Memory_Type memory_type = Memory_Type::global)
   {
+    size_ = 0;
+    memory_ = 0;
+    memory_type_ = Memory_Type::global;
     allocated_ = false;
+    data_ = nullptr;
     resize(size, memory_type);
   }
 
   // allocate memory and initialize
   GPU_Vector(const size_t size, const T value, const Memory_Type memory_type = Memory_Type::global)
   {
+    size_ = 0;
+    memory_ = 0;
+    memory_type_ = Memory_Type::global;
     allocated_ = false;
+    data_ = nullptr;
     resize(size, value, memory_type);
   }
 
   // deallocate memory
   ~GPU_Vector()
   {
+    clear();
+  }
+
+  void clear()
+  {
     if (allocated_) {
       CHECK(gpuFree(data_));
-      allocated_ = false;
     }
+    size_ = 0;
+    memory_ = 0;
+    memory_type_ = Memory_Type::global;
+    allocated_ = false;
+    data_ = nullptr;
   }
 
   // only allocate memory
   void resize(const size_t size, const Memory_Type memory_type = Memory_Type::global)
   {
+    clear();
     size_ = size;
     memory_ = size_ * sizeof(T);
     memory_type_ = memory_type;
-    if (allocated_) {
-      CHECK(gpuFree(data_));
-      allocated_ = false;
+    if (size_ == 0) {
+      return;
     }
     if (memory_type_ == Memory_Type::global) {
       CHECK(gpuMalloc((void**)&data_, memory_));
@@ -92,12 +110,12 @@ public:
   // allocate memory and initialize
   void resize(const size_t size, const T value, const Memory_Type memory_type = Memory_Type::global)
   {
+    clear();
     size_ = size;
     memory_ = size_ * sizeof(T);
     memory_type_ = memory_type;
-    if (allocated_) {
-      CHECK(gpuFree(data_));
-      allocated_ = false;
+    if (size_ == 0) {
+      return;
     }
     if (memory_type == Memory_Type::global) {
       CHECK(gpuMalloc((void**)&data_, memory_));
@@ -143,20 +161,20 @@ public:
   }
 
   // copy data to host with the default size
-  void copy_to_host(T* h_data)
+  void copy_to_host(T* h_data) const
   {
     CHECK(gpuMemcpy(h_data, data_, memory_, gpuMemcpyDeviceToHost));
   }
 
   // copy data to host with a given size
-  void copy_to_host(T* h_data, const size_t size)
+  void copy_to_host(T* h_data, const size_t size) const
   {
     const size_t memory = sizeof(T) * size;
     CHECK(gpuMemcpy(h_data, data_, memory, gpuMemcpyDeviceToHost));
   }
 
   // copy data to host with a given size and a gpu offset
-  void copy_to_host(T* h_data, const size_t size, const int offset)
+  void copy_to_host(T* h_data, const size_t size, const int offset) const
   {
     const size_t memory = sizeof(T) * size;
     CHECK(gpuMemcpy(h_data, data_ + offset, memory, gpuMemcpyDeviceToHost));
@@ -178,6 +196,9 @@ public:
   // give "value" to each element
   void fill(const T value)
   {
+    if (size_ == 0) {
+      return;
+    }
     if (memory_type_ == Memory_Type::global) {
       const int block_size = 128;
       const int grid_size = (size_ + block_size - 1) / block_size;
