@@ -19,7 +19,8 @@
 // All atom and type indices in Topology are zero-based. Topology stores an expanded connectivity
 // graph for one simulation system and is intended to remain unchanged during a simulation.
 // Interaction parameters and GPU storage are kept outside this first-stage data model and will be
-// added as separate layers.
+// added as separate layers. Each interaction's type indexes the parameter table for the same
+// interaction family (bond, angle, dihedral, and so on).
 
 struct Bond {
   int atom_i;
@@ -35,6 +36,7 @@ struct Angle {
 };
 
 struct Dihedral {
+  // Ordered atoms of a proper torsion i-j-k-l.
   int atom_i;
   int atom_j;
   int atom_k;
@@ -43,6 +45,7 @@ struct Dihedral {
 };
 
 struct Improper {
+  // Ordered atoms of an improper torsion. The parameter function defines its center convention.
   int atom_i;
   int atom_j;
   int atom_k;
@@ -57,11 +60,13 @@ struct Constraint {
 };
 
 struct Exclusion {
+  // A pair omitted from the ordinary non-bonded calculation.
   int atom_i;
   int atom_j;
 };
 
 struct SpecialPair {
+  // An explicitly evaluated non-bonded pair, normally a scaled 1-4 pair.
   int atom_i;
   int atom_j;
   int type;

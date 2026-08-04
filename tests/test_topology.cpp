@@ -54,6 +54,16 @@ static void test_empty_optional_atom_metadata()
   assert(topology.validate().empty());
 }
 
+static void test_duplicate_interaction_terms_are_allowed()
+{
+  Topology topology;
+  topology.number_of_atoms = 4;
+  topology.dihedrals = {{0, 1, 2, 3, 0}, {0, 1, 2, 3, 1}};
+
+  // A force field may apply multiple parameter terms to the same ordered atom tuple.
+  assert(topology.validate().empty());
+}
+
 static void test_clear()
 {
   Topology topology;
@@ -74,7 +84,7 @@ int main()
   test_valid_topology();
   test_invalid_topology_reports_all_errors();
   test_empty_optional_atom_metadata();
+  test_duplicate_interaction_terms_are_allowed();
   test_clear();
   return 0;
 }
-
