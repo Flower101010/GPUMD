@@ -53,6 +53,17 @@ Force::Force(void)
   has_non_nep = false;
 }
 
+void Force::initialize_molecular_force(
+  const Topology& topology, const ForceFieldParameters& parameters)
+{
+  molecular_force_.initialize(topology, parameters);
+}
+
+void Force::clear_molecular_force()
+{
+  molecular_force_.clear();
+}
+
 void Force::check_types(const char* file_potential)
 {
   std::ifstream input(file_potential);
@@ -564,6 +575,9 @@ void Force::compute(
     PRINT_INPUT_ERROR("Invalid mode for multiple potentials.\n");
   }
 
+  molecular_force_.compute(
+    box, position_per_atom, potential_per_atom, force_per_atom, virial_per_atom);
+
   if (compute_hnemd_) {
     // the virial tensor:
     // xx xy xz    0 3 4
@@ -853,6 +867,9 @@ void Force::compute(
   } else {
     PRINT_INPUT_ERROR("Invalid mode for multiple potentials.\n");
   }
+
+  molecular_force_.compute(
+    box, position_per_atom, potential_per_atom, force_per_atom, virial_per_atom);
 
   if (compute_hnemd_) {
     // the virial tensor:

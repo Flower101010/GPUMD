@@ -16,7 +16,10 @@
 #pragma once
 
 #include "model/box.cuh"
+#include "model/force_field_parameters.cuh"
 #include "model/group.cuh"
+#include "model/topology.cuh"
+#include "molecular_force.cuh"
 #include "potential.cuh"
 #include "utilities/common.cuh"
 #include <memory>
@@ -65,6 +68,10 @@ public:
     const std::vector<int>& type_size,
     const double T);
   void set_multiple_potentials_mode(std::string mode);
+  void initialize_molecular_force(
+    const Topology& topology, const ForceFieldParameters& parameters);
+  void clear_molecular_force();
+  bool has_molecular_force() const { return molecular_force_.is_initialized(); }
 
   bool compute_hnemd_ = false;
   int compute_hnemdec_ = -1;
@@ -80,6 +87,7 @@ private:
   bool has_non_nep = false;
   std::string multiple_potentials_mode_ = "observe"; // "observe" or "average"
   std::string atom_types[NUM_ELEMENTS];
+  MolecularForce molecular_force_;
 
   void check_types(const char* file_potential);
 };
