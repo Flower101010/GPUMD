@@ -66,6 +66,7 @@ Run simulation according to the inputs in the run.in file.
 #include "measure/viscosity.cuh"
 #include "minimize/minimize.cuh"
 #include "model/box.cuh"
+#include "model/read_molecular_force.cuh"
 #include "model/read_xyz.cuh"
 #include "phonon/hessian.cuh"
 #include "replicate.cuh"
@@ -76,6 +77,8 @@ Run simulation according to the inputs in the run.in file.
 #include "velocity.cuh"
 #include <chrono>
 #include <cstring>
+#include <exception>
+#include <sstream>
 
 static __global__ void gpu_find_largest_v2(
   int N, int number_of_rounds, double* g_vx, double* g_vy, double* g_vz, double* g_v2_max)
@@ -353,7 +356,12 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
 
   if (strcmp(param[0], "potential") == 0) {
     force.parse_potential(param, num_param, box, atom.type.size());
+  } else if (strcmp(param[0], "molecular_force") == 0) {
+    parse_molecular_force(param, num_param);
   } else if (strcmp(param[0], "replicate") == 0) {
+    if (force.has_molecular_force()) {
+      PRINT_INPUT_ERROR("replicate must appear before molecular_force in run.in.\n");
+    }
     Replicate(param, num_param, box, atom, group);
     allocate_memory_gpu(group, atom, thermo);
   } else if (strcmp(param[0], "minimize") == 0) {
@@ -571,6 +579,36 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     parse_run(param, num_param);
   } else {
     PRINT_KEYWORD_ERROR(param[0]);
+  }
+}
+
+void Run::parse_molecular_force(const char** param, int num_param)
+{
+  if (num_param != 2) {
+    PRINT_INPUT_ERROR("molecular_force should have 1 parameter.\n");
+  }
+  if (force.has_molecular_force()) {
+    PRINT_INPUT_ERROR("molecular_force cannot be used more than once in run.in.\n");
+  }
+
+  try {
+    const MolecularForceDefinition definition = read_molecular_force(param[1]);
+    if (definition.topology.number_of_atoms != atom.number_of_atoms) {
+      std::ostringstream message;
+      message << "number_of_atoms in " << param[1] << " is "
+              << definition.topology.number_of_atoms << ", but the current model contains "
+              << atom.number_of_atoms << " atoms.\n";
+      PRINT_INPUT_ERROR(message.str().c_str());
+    }
+
+    force.initialize_molecular_force(definition.topology, definition.parameters);
+    printf("Initialized molecular force from %s.\n", param[1]);
+    printf("    number of atoms = %d.\n", definition.topology.number_of_atoms);
+    printf("    number of harmonic bond parameter types = %zu.\n",
+           definition.parameters.harmonic_bond_parameters.size());
+    printf("    number of harmonic bonds = %zu.\n", definition.topology.bonds.size());
+  } catch (const std::exception& error) {
+    PRINT_INPUT_ERROR(error.what());
   }
 }
 
