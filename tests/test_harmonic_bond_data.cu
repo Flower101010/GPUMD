@@ -63,6 +63,7 @@ static void test_upload_and_clear()
   HarmonicBondData data;
   data.upload(topology, parameters);
 
+  assert(data.number_of_atoms() == 3);
   assert(data.number_of_bonds() == 2);
   assert(data.number_of_parameters() == 2);
   assert(copy_to_host(data.atom_i()) == std::vector<int>({0, 1}));
@@ -72,6 +73,7 @@ static void test_upload_and_clear()
   assert(copy_to_host(data.force_constant()) == std::vector<double>({20.0, 30.0}));
 
   data.clear();
+  assert(data.number_of_atoms() == 0);
   assert(data.number_of_bonds() == 0);
   assert(data.number_of_parameters() == 0);
   assert(data.atom_i().data() == nullptr);
@@ -94,6 +96,7 @@ static void test_reupload_empty_data()
   parameters.harmonic_bond_parameters.clear();
   data.upload(topology, parameters);
 
+  assert(data.number_of_atoms() == 2);
   assert(data.number_of_bonds() == 0);
   assert(data.number_of_parameters() == 0);
   assert(data.atom_i().data() == nullptr);

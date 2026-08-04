@@ -27,6 +27,7 @@ public:
   void upload(const Topology& topology, const ForceFieldParameters& parameters);
   void clear();
 
+  int number_of_atoms() const { return number_of_atoms_; }
   size_t number_of_bonds() const { return atom_i_.size(); }
   size_t number_of_parameters() const { return equilibrium_distance_.size(); }
 
@@ -37,6 +38,7 @@ public:
   const GPU_Vector<double>& force_constant() const { return force_constant_; }
 
 private:
+  int number_of_atoms_ = 0;
   GPU_Vector<int> atom_i_;
   GPU_Vector<int> atom_j_;
   GPU_Vector<int> type_;

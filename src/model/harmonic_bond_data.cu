@@ -30,6 +30,7 @@ void HarmonicBondData::upload(
   const Topology& topology, const ForceFieldParameters& parameters)
 {
   parameters.validate_or_throw(topology);
+  number_of_atoms_ = topology.number_of_atoms;
 
   std::vector<int> atom_i(topology.bonds.size());
   std::vector<int> atom_j(topology.bonds.size());
@@ -56,6 +57,7 @@ void HarmonicBondData::upload(
 
 void HarmonicBondData::clear()
 {
+  number_of_atoms_ = 0;
   atom_i_.clear();
   atom_j_.clear();
   type_.clear();
