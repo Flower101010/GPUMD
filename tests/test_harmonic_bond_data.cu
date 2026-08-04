@@ -112,5 +112,6 @@ int main()
 
   test_upload_and_clear();
   test_reupload_empty_data();
+  std::cout << "PASS: HarmonicBondData GPU upload tests.\n";
   return 0;
 }
