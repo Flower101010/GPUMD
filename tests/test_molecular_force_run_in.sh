@@ -4,6 +4,20 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 gpumd_binary=${1:-"${repo_root}/build/gpumd"}
+gpu_probe=${2:-}
+
+if [[ -n "${gpu_probe}" ]]; then
+  if [[ ! -x "${gpu_probe}" ]]; then
+    echo "ERROR: GPU probe is not executable: ${gpu_probe}" >&2
+    exit 2
+  fi
+
+  probe_output=$("${gpu_probe}")
+  if [[ "${probe_output}" == SKIP:* ]]; then
+    echo "SKIP: no accessible GPU for molecular_force run.in integration test."
+    exit 0
+  fi
+fi
 
 if [[ ! -x "${gpumd_binary}" ]]; then
   echo "ERROR: GPUMD is not executable: ${gpumd_binary}" >&2
