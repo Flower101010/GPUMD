@@ -1,0 +1,10 @@
+# zero_lj.txt is needed by the current GPUMD input path, but epsilon is zero.
+potential zero_lj.txt
+molecular_force molecular_force.in
+
+time_step 0.05
+ensemble nve
+
+dump_thermo 10
+dump_position 100 precision double
+run 4000

@@ -46,4 +46,5 @@ potential YOUR_NEP_MODEL.txt z # force to partition along the z direction (the c
 | nep_prediction         | Predicting a `train.xyz` dataset using the `nep` executable. |
 | gpumd_static           | Doing a static calculation using the `gpumd` executable.     |
 | gpumd_dynamic          | Doing a dynamic simulation using the `gpumd` executable.     |
+| gpumd_harmonic_trimer  | Testing a three-particle chain with harmonic bonds.          |
 | gpumd_mdi              | Minimal GPUMD-VASP MDI coupling test (Cu dimer).             |
