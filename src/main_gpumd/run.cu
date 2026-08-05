@@ -607,6 +607,8 @@ void Run::parse_molecular_force(const char** param, int num_param)
     printf("    number of harmonic bond parameter types = %zu.\n",
            definition.parameters.harmonic_bond_parameters.size());
     printf("    number of harmonic bonds = %zu.\n", definition.topology.bonds.size());
+    printf("    number of harmonic angles = %zu.\n", definition.topology.angles.size());
+    printf("    number of periodic dihedrals = %zu.\n", definition.topology.dihedrals.size());
   } catch (const std::exception& error) {
     PRINT_INPUT_ERROR(error.what());
   }

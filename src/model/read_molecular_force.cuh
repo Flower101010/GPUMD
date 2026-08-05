@@ -22,8 +22,9 @@ struct MolecularForceDefinition {
   ForceFieldParameters parameters;
 };
 
-// Version-1 file format (indices are zero-based; distances are angstrom; force constants are
-// eV/angstrom^2):
+// Version 1 contains harmonic bonds only. Version 2 appends harmonic-angle and periodic-proper-
+// dihedral parameter/interaction sections. Indices are zero-based, distances are angstrom,
+// energies are eV, and all angular values are radians.
 //
 //   gpumd_molecular_force 1
 //   number_of_atoms N
@@ -31,6 +32,10 @@ struct MolecularForceDefinition {
 //   equilibrium_distance force_constant  # repeated M times
 //   bonds B
 //   atom_i atom_j type                    # repeated B times
+//
+// Version 2 order after number_of_atoms:
+//   harmonic_bond_parameters, harmonic_angle_parameters, periodic_dihedral_parameters,
+//   bonds, angles, dihedrals.
 //
 // Blank lines and comments beginning with # are ignored.
 MolecularForceDefinition read_molecular_force(const std::string& filename);

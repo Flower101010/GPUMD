@@ -2,10 +2,14 @@
 # have to compile the same CUDA translation units independently.  The production gpumd
 # target still owns its normal source list; this library is only a test fixture.
 add_library(gpumd_molecular_force_test_support STATIC
+    ${PROJECT_SOURCE_DIR}/src/force/harmonic_angle.cu
     ${PROJECT_SOURCE_DIR}/src/force/harmonic_bond.cu
     ${PROJECT_SOURCE_DIR}/src/force/molecular_force.cu
+    ${PROJECT_SOURCE_DIR}/src/force/periodic_dihedral.cu
     ${PROJECT_SOURCE_DIR}/src/model/force_field_parameters.cu
+    ${PROJECT_SOURCE_DIR}/src/model/harmonic_angle_data.cu
     ${PROJECT_SOURCE_DIR}/src/model/harmonic_bond_data.cu
+    ${PROJECT_SOURCE_DIR}/src/model/periodic_dihedral_data.cu
     ${PROJECT_SOURCE_DIR}/src/model/read_molecular_force.cu
     ${PROJECT_SOURCE_DIR}/src/model/topology.cu)
 target_include_directories(gpumd_molecular_force_test_support PUBLIC ${PROJECT_SOURCE_DIR}/src)
@@ -35,14 +39,23 @@ gpumd_add_unit_test(test_topology test_topology.cpp)
 gpumd_add_unit_test(test_force_field_parameters test_force_field_parameters.cpp)
 gpumd_add_unit_test(test_read_molecular_force test_read_molecular_force.cpp)
 gpumd_add_unit_test(test_gpu_vector test_gpu_vector.cu)
+gpumd_add_unit_test(test_bonded_geometry test_bonded_geometry.cu)
 gpumd_add_unit_test(test_harmonic_bond_data test_harmonic_bond_data.cu)
 gpumd_add_unit_test(test_harmonic_bond test_harmonic_bond.cu)
+gpumd_add_unit_test(test_harmonic_angle_data test_harmonic_angle_data.cu)
+gpumd_add_unit_test(test_harmonic_angle test_harmonic_angle.cu)
+gpumd_add_unit_test(test_periodic_dihedral_data test_periodic_dihedral_data.cu)
+gpumd_add_unit_test(test_periodic_dihedral test_periodic_dihedral.cu)
 gpumd_add_unit_test(test_molecular_force test_molecular_force.cu)
 
 set(GPUMD_GPU_UNIT_TESTS
     unit.test_gpu_vector
     unit.test_harmonic_bond_data
     unit.test_harmonic_bond
+    unit.test_harmonic_angle_data
+    unit.test_harmonic_angle
+    unit.test_periodic_dihedral_data
+    unit.test_periodic_dihedral
     unit.test_molecular_force)
 set_tests_properties(${GPUMD_GPU_UNIT_TESTS} PROPERTIES
     LABELS "unit;gpu"

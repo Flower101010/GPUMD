@@ -69,4 +69,6 @@ F0 + F1 + F2 = 0
 
 通过该示例可以检查 harmonic bond 是否真正参与 MD，并验证短时间 NVE 中能量与力的基本一致性。
 
-它还不能验证完整高分子力场，因为当前没有 angle、dihedral、非键排除、Coulomb 和 1–4 相互作用。后续仍应使用 GROMACS 或其他独立实现进行逐项交叉对照。
+它是格式版本 1 的 bond 专项示例，因此本例本身不覆盖已经由格式版本 2 支持的 harmonic
+angle 和 periodic proper dihedral。它仍不能验证完整高分子力场，因为尚未实现非键排除、
+Coulomb 和 1–4 相互作用；后续仍应使用 GROMACS 或其他独立实现进行逐项交叉对照。

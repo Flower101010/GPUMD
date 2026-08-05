@@ -14,8 +14,8 @@
 
 * You can develop `GPUMD` in either Linux or Windows, as long as you have a working CUDA and/or HIP development toolkit, and one or more suitable GPUs (Nvidia or AMD).
 
-* `GPUMD` uses `make` to manage installation (or compilation).
-We have not seen the necessity of using `cmake`, yet.
+* `GPUMD` supports the existing `make` build and a CMake build. CMake/CTest is used by the
+  molecular-force unit and integration tests; see [`tests/readme.md`](../tests/readme.md).
 
 * There is no message passing interface (MPI) support in `GPUMD` yet, so currently you don't need to have MPI.
 We might add MPI support in the future.
@@ -38,6 +38,13 @@ You also need to give detailed instructions for setting up the necessary tools.
 * There are a few regression tests in the `tests` folder.
 
 * During the development, please add `-DDEBUG` to the makefile and remove it right before merging the PR. 
+
+* CMake-registered tests can be built and run with:
+
+```bash
+cmake -S . -B build -DBUILD_TESTING=ON
+cmake --build build --target check -j2
+```
 
 * A developer should run the regression tests before starting a PR, saving the output files, and run the regression tests frequently during the creation of the PR.
 
@@ -100,5 +107,11 @@ If you use new CUDA and HIP APIs, they should be added to this file.
   * Mass: Dalton
   * Temperature: K
   * Charge: e (proton charge)
+
+## Molecular force development documents
+
+* [格式版本 1：harmonic bond](molecular_force_input_format_v1_zh.md)
+* [格式版本 2：harmonic bond、harmonic angle、periodic proper dihedral](molecular_force_input_format_v2_zh.md)
+* [高分子拓扑与 bonded interaction 开发路线](polymer_topology_bonded_development_roadmap_zh.md)
 
   

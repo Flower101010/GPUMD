@@ -39,10 +39,12 @@ cleanup()
 trap cleanup EXIT
 
 cat > "${test_directory}/model.xyz" <<'EOF'
-2
+4
 pbc="T T T" Lattice="30 0 0 0 30 0 0 0 30" Properties=species:S:1:pos:R:3:vel:R:3
-Ar 5.0 5.0 5.0 0.0 0.0 0.0
-Ar 7.0 5.0 5.0 0.0 0.0 0.0
+Ar 10.0 10.0 10.0 0.0 0.0 0.0
+Ar 11.0 10.0 10.0 0.0 0.0 0.0
+Ar 11.0 11.0 10.0 0.0 0.0 0.0
+Ar 11.0 11.0 11.0 0.0 0.0 0.0
 EOF
 
 # Keep the existing LJ neighbor-list sort capacity below CUDA's 1024-thread block limit.
@@ -53,18 +55,26 @@ lj 1 Ar
 EOF
 
 cat > "${test_directory}/molecular_force.in" <<'EOF'
-gpumd_molecular_force 1
-number_of_atoms 2
+gpumd_molecular_force 2
+number_of_atoms 4
 harmonic_bond_parameters 1
-1.0 2.0
+1.0 10.0
+harmonic_angle_parameters 1
+1.0471975511965976 2.0
+periodic_dihedral_parameters 1
+1.7 3 0.4
 bonds 1
 0 1 0
+angles 1
+0 1 2 0
+dihedrals 1
+0 1 2 3 0
 EOF
 
 cat > "${test_directory}/run.in" <<'EOF'
 potential zero_lj.txt
 molecular_force molecular_force.in
-time_step 0.001
+time_step 0.00000001
 ensemble nve
 dump_thermo 1
 run 1
@@ -89,10 +99,10 @@ if [[ -z "${potential_energy}" ]]; then
   exit 1
 fi
 
-if ! awk -v value="${potential_energy}" 'BEGIN { exit !(value > 0.9 && value < 1.1) }'; then
-  echo "FAIL: expected approximately 1 eV harmonic energy, got ${potential_energy} eV." >&2
+if ! awk -v value="${potential_energy}" 'BEGIN { exit !(value > 1.3120 && value < 1.3123) }'; then
+  echo "FAIL: expected approximately 1.3121445 eV bonded energy, got ${potential_energy} eV." >&2
   exit 1
 fi
 
 echo "PASS: molecular_force was loaded from run.in."
-echo "PASS: stretched harmonic bond produced ${potential_energy} eV potential energy."
+echo "PASS: version-2 bond, angle, and dihedral input produced ${potential_energy} eV potential energy."

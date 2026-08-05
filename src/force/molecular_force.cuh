@@ -13,7 +13,9 @@
 
 #pragma once
 
+#include "harmonic_angle.cuh"
 #include "harmonic_bond.cuh"
+#include "periodic_dihedral.cuh"
 #include "model/force_field_parameters.cuh"
 #include "model/topology.cuh"
 
@@ -27,6 +29,11 @@ public:
 
   bool is_initialized() const { return initialized_; }
   size_t number_of_harmonic_bonds() const { return harmonic_bond_data_.number_of_bonds(); }
+  size_t number_of_harmonic_angles() const { return harmonic_angle_data_.number_of_angles(); }
+  size_t number_of_periodic_dihedrals() const
+  {
+    return periodic_dihedral_data_.number_of_dihedrals();
+  }
 
   // Add molecular-mechanics contributions to pre-existing per-atom output arrays. Calling compute
   // before initialize is a no-op so existing GPUMD simulations remain unaffected when this module
@@ -42,4 +49,8 @@ private:
   bool initialized_ = false;
   HarmonicBondData harmonic_bond_data_;
   HarmonicBond harmonic_bond_;
+  HarmonicAngleData harmonic_angle_data_;
+  HarmonicAngle harmonic_angle_;
+  PeriodicDihedralData periodic_dihedral_data_;
+  PeriodicDihedral periodic_dihedral_;
 };

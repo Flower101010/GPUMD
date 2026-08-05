@@ -17,12 +17,16 @@ void MolecularForce::initialize(
   const Topology& topology, const ForceFieldParameters& parameters)
 {
   harmonic_bond_data_.upload(topology, parameters);
+  harmonic_angle_data_.upload(topology, parameters);
+  periodic_dihedral_data_.upload(topology, parameters);
   initialized_ = true;
 }
 
 void MolecularForce::clear()
 {
   harmonic_bond_data_.clear();
+  harmonic_angle_data_.clear();
+  periodic_dihedral_data_.clear();
   initialized_ = false;
 }
 
@@ -40,6 +44,20 @@ void MolecularForce::compute(
   harmonic_bond_.compute(
     box,
     harmonic_bond_data_,
+    position_per_atom,
+    potential_per_atom,
+    force_per_atom,
+    virial_per_atom);
+  harmonic_angle_.compute(
+    box,
+    harmonic_angle_data_,
+    position_per_atom,
+    potential_per_atom,
+    force_per_atom,
+    virial_per_atom);
+  periodic_dihedral_.compute(
+    box,
+    periodic_dihedral_data_,
     position_per_atom,
     potential_per_atom,
     force_per_atom,

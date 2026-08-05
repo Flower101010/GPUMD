@@ -5,6 +5,8 @@
 > 格式版本：1
 >
 > 当前支持的拓扑相互作用：harmonic bond（简谐键）
+> 本文只定义并冻结格式版本 1。当前开发分支新增的 harmonic angle 和 periodic proper
+> dihedral 使用[格式版本 2](molecular_force_input_format_v2_zh.md)；版本 1 文件继续兼容。
 
 ## 1. 文件的作用
 
@@ -160,7 +162,7 @@ bonds 0
 
 ## 7. 第一版的边界
 
-版本 1 当前不包含：
+版本 1 的格式不包含：
 
 - angle、proper/improper dihedral；
 - constraint、rigid water、virtual site；

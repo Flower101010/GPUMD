@@ -24,10 +24,19 @@ struct HarmonicBondParameter {
   double force_constant;
 };
 
-// The Harmonic angle potential is U(/theta)=0.5*angle_constant*(/theta-equilibrium_angle)^2
-struct HarmonicAngleParameter{
+// Angles are in radians and the potential is
+// U(theta) = 0.5 * angle_constant * (theta - equilibrium_angle)^2.
+struct HarmonicAngleParameter {
   double equilibrium_angle;
   double angle_constant;
+};
+
+// Proper torsion potential: U(phi) = k * [1 + cos(multiplicity * phi - phase)].
+// The force constant is in eV and phase is in radians.
+struct PeriodicDihedralParameter {
+  double force_constant;
+  int multiplicity;
+  double phase;
 };
 
 class ForceFieldParameters
@@ -37,10 +46,12 @@ public:
   // registry can be added later without changing the Topology interaction records.
   std::vector<HarmonicBondParameter> harmonic_bond_parameters;
   std::vector<HarmonicAngleParameter> harmonic_angle_parameters;
+  std::vector<PeriodicDihedralParameter> periodic_dihedral_parameters;
 
   // Validate both the parameter values and all Topology references to this parameter table.
   std::vector<std::string> validate_bond(const Topology& topology) const;
   std::vector<std::string> validate_angle(const Topology& topology) const;
+  std::vector<std::string> validate_dihedral(const Topology& topology) const;
 
   // Throw std::runtime_error containing every topology and parameter validation error.
   void validate_or_throw(const Topology& topology) const;

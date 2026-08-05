@@ -77,9 +77,38 @@ void test_empty_bond_sections_are_valid()
   assert(definition.parameters.harmonic_bond_parameters.empty());
 }
 
+void test_valid_version_2_with_angles_and_dihedrals()
+{
+  TemporaryInput input(
+    "gpumd_molecular_force 2\n"
+    "number_of_atoms 4\n"
+    "harmonic_bond_parameters 1\n"
+    "1.5 20.0\n"
+    "harmonic_angle_parameters 1\n"
+    "1.5707963267948966 4.0\n"
+    "periodic_dihedral_parameters 1\n"
+    "2.0 3 0.5\n"
+    "bonds 1\n"
+    "0 1 0\n"
+    "angles 1\n"
+    "0 1 2 0\n"
+    "dihedrals 1\n"
+    "0 1 2 3 0\n");
+
+  const MolecularForceDefinition definition = read_molecular_force(input.filename());
+  assert(definition.topology.bonds.size() == 1);
+  assert(definition.topology.angles.size() == 1);
+  assert(definition.topology.dihedrals.size() == 1);
+  assert(definition.topology.angles[0].atom_j == 1);
+  assert(definition.topology.dihedrals[0].atom_l == 3);
+  assert(definition.parameters.harmonic_angle_parameters[0].angle_constant == 4.0);
+  assert(definition.parameters.periodic_dihedral_parameters[0].multiplicity == 3);
+  assert(definition.parameters.periodic_dihedral_parameters[0].phase == 0.5);
+}
+
 void test_syntax_and_version_errors()
 {
-  expect_error("gpumd_molecular_force 2\n", "unsupported molecular force format version");
+  expect_error("gpumd_molecular_force 3\n", "unsupported molecular force format version");
   expect_error("wrong_header 1\n", "expected 'gpumd_molecular_force'");
   expect_error(
     "gpumd_molecular_force 1\nnumber_of_atoms three\n",
@@ -114,6 +143,7 @@ int main()
 {
   test_valid_file_with_comments_and_blank_lines();
   test_empty_bond_sections_are_valid();
+  test_valid_version_2_with_angles_and_dihedrals();
   test_syntax_and_version_errors();
   test_semantic_and_trailing_content_errors();
   return 0;

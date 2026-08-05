@@ -13,6 +13,7 @@
 
 #include "force_field_parameters.cuh"
 #include "utilities/common.cuh"
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <sstream>
@@ -97,11 +98,65 @@ std::vector<std::string> ForceFieldParameters::validate_angle(const Topology& to
   return errors;
 }
 
+std::vector<std::string> ForceFieldParameters::validate_dihedral(const Topology& topology) const
+{
+  std::vector<std::string> errors = topology.validate();
+
+  for (size_t i = 0; i < periodic_dihedral_parameters.size(); ++i) {
+    const PeriodicDihedralParameter& parameter = periodic_dihedral_parameters[i];
+    if (!std::isfinite(parameter.force_constant) || parameter.force_constant < 0.0) {
+      std::ostringstream message;
+      message << "periodic_dihedral_parameter[" << i
+              << "] force_constant must be finite and non-negative, but is "
+              << parameter.force_constant << ".";
+      errors.emplace_back(message.str());
+    }
+    if (parameter.multiplicity <= 0) {
+      std::ostringstream message;
+      message << "periodic_dihedral_parameter[" << i
+              << "] multiplicity must be positive, but is " << parameter.multiplicity << ".";
+      errors.emplace_back(message.str());
+    }
+    if (!std::isfinite(parameter.phase)) {
+      std::ostringstream message;
+      message << "periodic_dihedral_parameter[" << i << "] phase must be finite, but is "
+              << parameter.phase << ".";
+      errors.emplace_back(message.str());
+    }
+  }
+
+  for (size_t i = 0; i < topology.dihedrals.size(); ++i) {
+    const int type = topology.dihedrals[i].type;
+    if (type >= 0 && static_cast<size_t>(type) >= periodic_dihedral_parameters.size()) {
+      std::ostringstream message;
+      message << "dihedral[" << i << "] type " << type
+              << " is outside the periodic dihedral parameter table with "
+              << periodic_dihedral_parameters.size() << " entries.";
+      errors.emplace_back(message.str());
+    }
+  }
+
+  return errors;
+}
+
+namespace
+{
+void append_unique(
+  std::vector<std::string>& destination, const std::vector<std::string>& source)
+{
+  for (const auto& error : source) {
+    if (std::find(destination.begin(), destination.end(), error) == destination.end()) {
+      destination.emplace_back(error);
+    }
+  }
+}
+} // namespace
+
 void ForceFieldParameters::validate_or_throw(const Topology& topology) const
 {
   std::vector<std::string> errors = validate_bond(topology);
-  const std::vector<std::string> angle_errors = validate_angle(topology);
-  errors.insert(errors.end(), angle_errors.begin(), angle_errors.end());
+  append_unique(errors, validate_angle(topology));
+  append_unique(errors, validate_dihedral(topology));
   if (errors.empty()) {
     return;
   }
@@ -118,4 +173,5 @@ void ForceFieldParameters::clear()
 {
   harmonic_bond_parameters.clear();
   harmonic_angle_parameters.clear();
+  periodic_dihedral_parameters.clear();
 }

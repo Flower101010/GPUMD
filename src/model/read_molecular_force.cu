@@ -54,7 +54,7 @@ public:
     return {};
   }
 
-  void require_end()
+  void require_end(const std::string& final_section)
   {
     std::string line;
     while (std::getline(input_, line)) {
@@ -66,7 +66,7 @@ public:
       std::istringstream stream(line);
       std::string token;
       if (stream >> token) {
-        fail("unexpected content after the bonds section: " + token);
+        fail("unexpected content after the " + final_section + " section: " + token);
       }
     }
   }
@@ -145,7 +145,7 @@ MolecularForceDefinition read_molecular_force(const std::string& filename)
   std::vector<std::string> tokens = reader.next_tokens("gpumd_molecular_force header");
   reader.require_line(tokens, "gpumd_molecular_force", 2);
   const int version = reader.parse_int(tokens[1], "format version");
-  if (version != 1) {
+  if (version != 1 && version != 2) {
     reader.fail("unsupported molecular force format version: " + tokens[1]);
   }
 
@@ -169,6 +169,36 @@ MolecularForceDefinition read_molecular_force(const std::string& filename)
        reader.parse_double(tokens[1], "force_constant")});
   }
 
+  if (version == 2) {
+    const int number_of_angle_parameters = read_non_negative_count(
+      reader, "harmonic_angle_parameters", "number of harmonic angle parameters");
+    definition.parameters.harmonic_angle_parameters.reserve(number_of_angle_parameters);
+    for (int i = 0; i < number_of_angle_parameters; ++i) {
+      tokens = reader.next_tokens("harmonic angle parameter");
+      if (tokens.size() != 2) {
+        reader.fail("each harmonic angle parameter requires equilibrium_angle and angle_constant");
+      }
+      definition.parameters.harmonic_angle_parameters.push_back(
+        {reader.parse_double(tokens[0], "equilibrium_angle"),
+         reader.parse_double(tokens[1], "angle_constant")});
+    }
+
+    const int number_of_dihedral_parameters = read_non_negative_count(
+      reader, "periodic_dihedral_parameters", "number of periodic dihedral parameters");
+    definition.parameters.periodic_dihedral_parameters.reserve(number_of_dihedral_parameters);
+    for (int i = 0; i < number_of_dihedral_parameters; ++i) {
+      tokens = reader.next_tokens("periodic dihedral parameter");
+      if (tokens.size() != 3) {
+        reader.fail(
+          "each periodic dihedral parameter requires force_constant, multiplicity, and phase");
+      }
+      definition.parameters.periodic_dihedral_parameters.push_back(
+        {reader.parse_double(tokens[0], "dihedral force_constant"),
+         reader.parse_int(tokens[1], "dihedral multiplicity"),
+         reader.parse_double(tokens[2], "dihedral phase")});
+    }
+  }
+
   const int number_of_bonds = read_non_negative_count(reader, "bonds", "number of bonds");
   definition.topology.bonds.reserve(number_of_bonds);
   for (int i = 0; i < number_of_bonds; ++i) {
@@ -182,7 +212,40 @@ MolecularForceDefinition read_molecular_force(const std::string& filename)
        reader.parse_int(tokens[2], "bond type")});
   }
 
-  reader.require_end();
+  if (version == 2) {
+    const int number_of_angles = read_non_negative_count(reader, "angles", "number of angles");
+    definition.topology.angles.reserve(number_of_angles);
+    for (int i = 0; i < number_of_angles; ++i) {
+      tokens = reader.next_tokens("angle");
+      if (tokens.size() != 4) {
+        reader.fail("each angle requires atom_i, atom_j, atom_k, and type");
+      }
+      definition.topology.angles.push_back(
+        {reader.parse_int(tokens[0], "angle atom_i"),
+         reader.parse_int(tokens[1], "angle atom_j"),
+         reader.parse_int(tokens[2], "angle atom_k"),
+         reader.parse_int(tokens[3], "angle type")});
+    }
+
+    const int number_of_dihedrals =
+      read_non_negative_count(reader, "dihedrals", "number of dihedrals");
+    definition.topology.dihedrals.reserve(number_of_dihedrals);
+    for (int i = 0; i < number_of_dihedrals; ++i) {
+      tokens = reader.next_tokens("dihedral");
+      if (tokens.size() != 5) {
+        reader.fail("each dihedral requires atom_i, atom_j, atom_k, atom_l, and type");
+      }
+      definition.topology.dihedrals.push_back(
+        {reader.parse_int(tokens[0], "dihedral atom_i"),
+         reader.parse_int(tokens[1], "dihedral atom_j"),
+         reader.parse_int(tokens[2], "dihedral atom_k"),
+         reader.parse_int(tokens[3], "dihedral atom_l"),
+         reader.parse_int(tokens[4], "dihedral type")});
+    }
+    reader.require_end("dihedrals");
+  } else {
+    reader.require_end("bonds");
+  }
 
   try {
     definition.parameters.validate_or_throw(definition.topology);

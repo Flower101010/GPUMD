@@ -80,6 +80,33 @@ static void test_invalid_angle_parameters_report_all_errors()
   assert(threw);
 }
 
+static void test_valid_and_invalid_periodic_dihedral_parameters()
+{
+  Topology topology;
+  topology.number_of_atoms = 4;
+  topology.dihedrals = {{0, 1, 2, 3, 0}};
+  ForceFieldParameters parameters;
+  parameters.periodic_dihedral_parameters = {{2.0, 3, 0.5}};
+  assert(parameters.validate_dihedral(topology).empty());
+  parameters.validate_or_throw(topology);
+
+  parameters.periodic_dihedral_parameters = {
+    {std::numeric_limits<double>::infinity(), 0, std::numeric_limits<double>::infinity()}};
+  const auto errors = parameters.validate_dihedral(topology);
+  assert(errors.size() == 3);
+  bool threw = false;
+  try {
+    parameters.validate_or_throw(topology);
+  } catch (const std::runtime_error& error) {
+    threw = true;
+    const std::string message = error.what();
+    assert(message.find("force_constant") != std::string::npos);
+    assert(message.find("multiplicity") != std::string::npos);
+    assert(message.find("phase") != std::string::npos);
+  }
+  assert(threw);
+}
+
 static void test_topology_errors_are_included()
 {
   Topology topology;
@@ -99,11 +126,13 @@ static void test_clear()
   ForceFieldParameters parameters;
   parameters.harmonic_bond_parameters = {{1.5, 20.0}};
   parameters.harmonic_angle_parameters = {{1.5, 20.0}};
+  parameters.periodic_dihedral_parameters = {{2.0, 3, 0.5}};
 
   parameters.clear();
 
   assert(parameters.harmonic_bond_parameters.empty());
   assert(parameters.harmonic_angle_parameters.empty());
+  assert(parameters.periodic_dihedral_parameters.empty());
 }
 
 int main()
@@ -112,6 +141,7 @@ int main()
   test_valid_harmonic_angle_parameters();
   test_invalid_parameters_report_all_errors();
   test_invalid_angle_parameters_report_all_errors();
+  test_valid_and_invalid_periodic_dihedral_parameters();
   test_topology_errors_are_included();
   test_clear();
   return 0;

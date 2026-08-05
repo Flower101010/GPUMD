@@ -4,6 +4,10 @@
 > 版本：v0.1  
 > 首个候选验证体系：PNIPAM（poly(N-isopropylacrylamide)）  
 > 目标用途：用于与导师讨论项目范围、科学目标、实现路径和验收标准  
+> 当前开发进展（`polymer-development`）：固定拓扑与 harmonic bond 最小闭环已经完成；
+> harmonic angle 和 periodic proper dihedral 按 molecular force 格式版本 2 开发。该进展只覆盖
+> bonded interaction，不改变本文关于 exclusions、special 1–4、经典 Coulomb 和 constraints
+> 等完整分子力场能力边界的判断。
 
 ## 1. 项目定位
 
@@ -43,7 +47,6 @@
 - 经典力场与机器学习势的混合模型。
 
 ### 2.2 软件开发目标
-
 
 1. 正确表达目标力场的拓扑、参数和相互作用规则；
 2. 正确计算能量、力和 virial；
@@ -689,7 +692,7 @@ interaction-centric kernel 需要向多个原子累加。控制方法：
 ## 12. 建议的一期支持矩阵
 
 | 功能 | 一期建议 |
-|---|---|
+| --- | --- |
 | 单 GPU | 支持 |
 | CUDA | 支持 |
 | HIP | 设计时保留，按 GPUMD 宏接口实现 |
@@ -725,28 +728,28 @@ interaction-centric kernel 需要向多个原子累加。控制方法：
 
 ### 13.2 力场和参考
 
-7. 是否已有指定 PNIPAM 力场参数或参考论文？
-8. 是否已有可以运行的 GROMACS/LAMMPS 输入文件？
-9. 水模型是否已经确定？
-10. 是否接受先完整支持 OPLS 类力场，再扩展其他力场？
-11. 是否需要与已有文献做到定量复现？
-12. 参考软件优先使用 GROMACS 还是 LAMMPS？
+1. 是否已有指定 PNIPAM 力场参数或参考论文？
+2. 是否已有可以运行的 GROMACS/LAMMPS 输入文件？
+3. 水模型是否已经确定？
+4. 是否接受先完整支持 OPLS 类力场，再扩展其他力场？
+5. 是否需要与已有文献做到定量复现？
+6. 参考软件优先使用 GROMACS 还是 LAMMPS？
 
 ### 13.3 项目定位
 
-13. 项目首要贡献是“支持高分子”，还是“实现 NEP–bonded hybrid”？
-14. 预期成果是内部科研工具、论文方法，还是希望向 GPUMD 上游贡献？
-15. 是否要求 CUDA 和 HIP 同时支持？
-16. 是否要求多 GPU？
-17. 是否要求第一版就支持热输运和 HNEMD？
-18. 项目可接受的开发周期和人力是多少？
+ 1. 项目首要贡献是“支持高分子”，还是“实现 NEP–bonded hybrid”？
+ 2. 预期成果是内部科研工具、论文方法，还是希望向 GPUMD 上游贡献？
+ 3. 是否要求 CUDA 和 HIP 同时支持？
+ 4. 是否要求多 GPU？
+ 5. 是否要求第一版就支持热输运和 HNEMD？
+ 6. 项目可接受的开发周期和人力是多少？
 
 ### 13.4 验收标准
 
-19. 单点能量、力和 virial 的数值容差是多少？
-20. 需要复现哪些统计性质？
-21. 性能目标相对于什么软件、硬件和体系定义？
-22. 第一篇或第一个项目计划以什么体系产生科研结果？
+ 1. 单点能量、力和 virial 的数值容差是多少？
+ 2. 需要复现哪些统计性质？
+ 3. 性能目标相对于什么软件、硬件和体系定义？
+ 4. 第一篇或第一个项目计划以什么体系产生科研结果？
 
 ## 14. 下次讨论后需要形成的文档
 
@@ -796,4 +799,3 @@ interaction-centric kernel 需要向多个原子累加。控制方法：
 - PNIPAM explicit-solvent coarse-grained model: <https://pubs.rsc.org/en/content/articlelanding/2020/cp/d0cp03101a>
 - PNIPAM pressure-induced coil–globule study: <https://pmc.ncbi.nlm.nih.gov/articles/PMC8247264/>
 - PNIPAM water-model comparison: <https://pmc.ncbi.nlm.nih.gov/articles/PMC9150113/>
-
