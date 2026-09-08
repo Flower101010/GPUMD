@@ -38,6 +38,8 @@ file(GLOB NEP_SOURCES
 add_executable(nep ${NEP_SOURCES})
 target_include_directories(nep PRIVATE src)
 target_link_libraries(nep PRIVATE CUDA::cublas CUDA::cusolver CUDA::cufft)
+target_compile_definitions(
+    nep PRIVATE GPUMD_COMPILED_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src")
 option(NEP_TEST_DIAGNOSTICS "Export deterministic NEP training diagnostics" OFF)
 if(NEP_TEST_DIAGNOSTICS)
     target_compile_definitions(nep PRIVATE NEP_TEST_DIAGNOSTICS)

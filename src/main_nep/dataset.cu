@@ -21,6 +21,7 @@
 #include "utilities/gpu_macro.cuh"
 #include "utilities/nep_utilities.cuh"
 #include <cstring>
+#include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 
@@ -33,6 +34,8 @@ Dataset::~Dataset()
 
 void Dataset::copy_structures(std::vector<Structure>& structures_input, int n1, int n2)
 {
+  borrowed_structures = nullptr;
+  borrowed_begin = 0;
   Nc = n2 - n1;
   structures.resize(Nc);
 
@@ -114,13 +117,21 @@ void Dataset::copy_structures(std::vector<Structure>& structures_input, int n1, 
   }
 }
 
+const Structure& Dataset::get_structure(const int index) const
+{
+  return borrowed_structures == nullptr
+    ? structures[index]
+    : (*borrowed_structures)[borrowed_begin + index];
+}
+
 void Dataset::find_has_type(Parameters& para)
 {
-  has_type.resize((para.num_types + 1) * Nc, false);
+  has_type.assign((para.num_types + 1) * Nc, false);
   for (int n = 0; n < Nc; ++n) {
+    const Structure& structure = get_structure(n);
     has_type[para.num_types * Nc + n] = true;
-    for (int na = 0; na < structures[n].num_atom; ++na) {
-      has_type[structures[n].type[na] * Nc + n] = true;
+    for (int na = 0; na < structure.num_atom; ++na) {
+      has_type[structure.type[na] * Nc + n] = true;
     }
   }
 }
@@ -134,26 +145,29 @@ void Dataset::find_Na(Parameters& para)
   max_Na = 0;
   int num_virial_configurations = 0;
   for (int nc = 0; nc < Nc; ++nc) {
-    Na_cpu[nc] = structures[nc].num_atom;
+    Na_cpu[nc] = get_structure(nc).num_atom;
     Na_sum_cpu[nc] = 0;
   }
 
   for (int nc = 0; nc < Nc; ++nc) {
-    N += structures[nc].num_atom;
-    if (structures[nc].num_atom > max_Na) {
-      max_Na = structures[nc].num_atom;
+    const Structure& structure = get_structure(nc);
+    N += structure.num_atom;
+    if (structure.num_atom > max_Na) {
+      max_Na = structure.num_atom;
     }
-    num_virial_configurations += structures[nc].has_virial;
+    num_virial_configurations += structure.has_virial;
   }
 
   for (int nc = 1; nc < Nc; ++nc) {
     Na_sum_cpu[nc] = Na_sum_cpu[nc - 1] + Na_cpu[nc - 1];
   }
 
-  printf("Total number of atoms = %d.\n", N);
-  printf("Number of atoms in the largest configuration = %d.\n", max_Na);
-  if (para.train_mode == 0 || para.train_mode == 3) {
-    printf("Number of configurations having virial = %d.\n", num_virial_configurations);
+  if (print_statistics) {
+    printf("Total number of atoms = %d.\n", N);
+    printf("Number of atoms in the largest configuration = %d.\n", max_Na);
+    if (para.train_mode == 0 || para.train_mode == 3) {
+      printf("Number of configurations having virial = %d.\n", num_virial_configurations);
+    }
   }
 
   Na.resize(Nc);
@@ -193,52 +207,54 @@ void Dataset::initialize_gpu_data(Parameters& para)
   energy_weight_cpu.resize(Nc);
   virial_ref_cpu.resize(Nc * 6);
   force_ref_cpu.resize(N * 3);
-  if (structures[0].has_atomic_virial) {
-    avirial_ref_cpu.resize(N * (structures[0].atomic_virial_diag_only ? 3 : 6));
+  const Structure& first_structure = get_structure(0);
+  if (first_structure.has_atomic_virial) {
+    avirial_ref_cpu.resize(N * (first_structure.atomic_virial_diag_only ? 3 : 6));
   }
   temperature_ref_cpu.resize(N);
 
   for (int n = 0; n < Nc; ++n) {
-    weight_cpu[n] = structures[n].weight;
+    const Structure& structure = get_structure(n);
+    weight_cpu[n] = structure.weight;
     if ((para.charge_mode || para.charge_vdw)) {
-      charge_ref_cpu[n] = structures[n].charge;
+      charge_ref_cpu[n] = structure.charge;
     }
-    energy_ref_cpu[n] = structures[n].energy;
-    energy_weight_cpu[n] = structures[n].energy_weight;
+    energy_ref_cpu[n] = structure.energy;
+    energy_weight_cpu[n] = structure.energy_weight;
     for (int k = 0; k < 6; ++k) {
-      virial_ref_cpu[k * Nc + n] = structures[n].virial[k];
+      virial_ref_cpu[k * Nc + n] = structure.virial[k];
     }
     for (int k = 0; k < 18; ++k) {
-      box_cpu[k + n * 18] = structures[n].box[k];
+      box_cpu[k + n * 18] = structure.box[k];
     }
     for (int k = 0; k < 9; ++k) {
-      box_original_cpu[k + n * 9] = structures[n].box_original[k];
+      box_original_cpu[k + n * 9] = structure.box_original[k];
     }
     for (int k = 0; k < 3; ++k) {
-      num_cell_cpu[k + n * 3] = structures[n].num_cell[k];
+      num_cell_cpu[k + n * 3] = structure.num_cell[k];
     }
-    for (int na = 0; na < structures[n].num_atom; ++na) {
-      type_cpu[Na_sum_cpu[n] + na] = structures[n].type[na];
-      r_cpu[Na_sum_cpu[n] + na] = structures[n].x[na];
-      r_cpu[Na_sum_cpu[n] + na + N] = structures[n].y[na];
-      r_cpu[Na_sum_cpu[n] + na + N * 2] = structures[n].z[na];
-      force_ref_cpu[Na_sum_cpu[n] + na] = structures[n].fx[na];
-      force_ref_cpu[Na_sum_cpu[n] + na + N] = structures[n].fy[na];
-      force_ref_cpu[Na_sum_cpu[n] + na + N * 2] = structures[n].fz[na];
-      temperature_ref_cpu[Na_sum_cpu[n] + na] = structures[n].temperature;
-      if (structures[n].has_atomic_virial) {
-        avirial_ref_cpu[Na_sum_cpu[n] + na] = structures[n].avirialxx[na];
-        avirial_ref_cpu[Na_sum_cpu[n] + na + N] = structures[n].avirialyy[na];
-        avirial_ref_cpu[Na_sum_cpu[n] + na + N * 2] = structures[n].avirialzz[na];
-        if (!structures[n].atomic_virial_diag_only) {
-          avirial_ref_cpu[Na_sum_cpu[n] + na + N * 3] = structures[n].avirialxy[na];
-          avirial_ref_cpu[Na_sum_cpu[n] + na + N * 4] = structures[n].avirialyz[na];
-          avirial_ref_cpu[Na_sum_cpu[n] + na + N * 5] = structures[n].avirialzx[na];
+    for (int na = 0; na < structure.num_atom; ++na) {
+      type_cpu[Na_sum_cpu[n] + na] = structure.type[na];
+      r_cpu[Na_sum_cpu[n] + na] = structure.x[na];
+      r_cpu[Na_sum_cpu[n] + na + N] = structure.y[na];
+      r_cpu[Na_sum_cpu[n] + na + N * 2] = structure.z[na];
+      force_ref_cpu[Na_sum_cpu[n] + na] = structure.fx[na];
+      force_ref_cpu[Na_sum_cpu[n] + na + N] = structure.fy[na];
+      force_ref_cpu[Na_sum_cpu[n] + na + N * 2] = structure.fz[na];
+      temperature_ref_cpu[Na_sum_cpu[n] + na] = structure.temperature;
+      if (structure.has_atomic_virial) {
+        avirial_ref_cpu[Na_sum_cpu[n] + na] = structure.avirialxx[na];
+        avirial_ref_cpu[Na_sum_cpu[n] + na + N] = structure.avirialyy[na];
+        avirial_ref_cpu[Na_sum_cpu[n] + na + N * 2] = structure.avirialzz[na];
+        if (!structure.atomic_virial_diag_only) {
+          avirial_ref_cpu[Na_sum_cpu[n] + na + N * 3] = structure.avirialxy[na];
+          avirial_ref_cpu[Na_sum_cpu[n] + na + N * 4] = structure.avirialyz[na];
+          avirial_ref_cpu[Na_sum_cpu[n] + na + N * 5] = structure.avirialzx[na];
         }
       }
       if ((para.charge_mode || para.charge_vdw)) {
         for (int d = 0; d < 9; ++d) {
-          bec_ref_cpu[Na_sum_cpu[n] + na + N * d] = structures[n].bec[na * 9 + d];
+          bec_ref_cpu[Na_sum_cpu[n] + na + N * d] = structure.bec[na * 9 + d];
         }
       }
     }
@@ -250,8 +266,8 @@ void Dataset::initialize_gpu_data(Parameters& para)
   energy_weight_gpu.resize(Nc);
   virial_ref_gpu.resize(Nc * 6);
   force_ref_gpu.resize(N * 3);
-  if (structures[0].has_atomic_virial) {
-    avirial_ref_gpu.resize(N * (structures[0].atomic_virial_diag_only ? 3 : 6));
+  if (first_structure.has_atomic_virial) {
+    avirial_ref_gpu.resize(N * (first_structure.atomic_virial_diag_only ? 3 : 6));
   }
   temperature_ref_gpu.resize(N);
   type_weight_gpu.copy_from_host(para.type_weight_cpu.data());
@@ -263,7 +279,7 @@ void Dataset::initialize_gpu_data(Parameters& para)
   energy_weight_gpu.copy_from_host(energy_weight_cpu.data());
   virial_ref_gpu.copy_from_host(virial_ref_cpu.data());
   force_ref_gpu.copy_from_host(force_ref_cpu.data());
-  if (structures[0].has_atomic_virial) {
+  if (first_structure.has_atomic_virial) {
     avirial_ref_gpu.copy_from_host(avirial_ref_cpu.data());
   }
   temperature_ref_gpu.copy_from_host(temperature_ref_cpu.data());
@@ -539,14 +555,16 @@ void Dataset::find_neighbor(Parameters& para)
     z12_angular.data());
   GPU_CHECK_KERNEL
 
-  printf("Radial descriptor with a cutoff of %g A:\n", para.rc_radial_max);
-  printf("    Minimum number of neighbors for one atom = %d.\n", min_NN_radial);
-  printf("    Maximum number of neighbors for one atom = %d.\n", max_NN_radial);
-  printf("    Average number of neighbors for one atom = %g.\n", sum_NN_radial / float(N));
-  printf("Angular descriptor with a cutoff of %g A:\n", para.rc_angular_max);
-  printf("    Minimum number of neighbors for one atom = %d.\n", min_NN_angular);
-  printf("    Maximum number of neighbors for one atom = %d.\n", max_NN_angular);
-  printf("    Average number of neighbors for one atom = %g.\n", sum_NN_angular / float(N));
+  if (print_statistics) {
+    printf("Radial descriptor with a cutoff of %g A:\n", para.rc_radial_max);
+    printf("    Minimum number of neighbors for one atom = %d.\n", min_NN_radial);
+    printf("    Maximum number of neighbors for one atom = %d.\n", max_NN_radial);
+    printf("    Average number of neighbors for one atom = %g.\n", sum_NN_radial / float(N));
+    printf("Angular descriptor with a cutoff of %g A:\n", para.rc_angular_max);
+    printf("    Minimum number of neighbors for one atom = %d.\n", min_NN_angular);
+    printf("    Maximum number of neighbors for one atom = %d.\n", max_NN_angular);
+    printf("    Average number of neighbors for one atom = %g.\n", sum_NN_angular / float(N));
+  }
 #ifdef OUTPUT_NEIGHBOR_FOR_TRAIN
   FILE* fid = fopen("neighbor.txt", "a");
   for (int nc = 0; nc < Nc; ++nc) {
@@ -567,11 +585,24 @@ void Dataset::find_neighbor(Parameters& para)
 }
 
 void Dataset::construct(
-  Parameters& para, std::vector<Structure>& structures_input, int n1, int n2, int device_id)
+  Parameters& para,
+  std::vector<Structure>& structures_input,
+  int n1,
+  int n2,
+  int device_id,
+  bool borrow_input_structures)
 {
   this->device_id = device_id;
+  print_statistics = !borrow_input_structures || std::getenv("GPUMD_STREAM_VERBOSE") != nullptr;
   CHECK(gpuSetDevice(device_id));
-  copy_structures(structures_input, n1, n2);
+  if (borrow_input_structures) {
+    borrowed_structures = &structures_input;
+    borrowed_begin = n1;
+    Nc = n2 - n1;
+    structures.clear();
+  } else {
+    copy_structures(structures_input, n1, n2);
+  }
   find_has_type(para);
   error_cpu.resize(Nc);
   error_gpu.resize(Nc);
@@ -776,7 +807,7 @@ std::vector<float> Dataset::get_rmse_avirial(Parameters& para, const bool use_we
   CHECK(gpuSetDevice(device_id));
   const int block_size = 256;
 
-  if (structures[0].atomic_virial_diag_only) {
+  if (get_structure(0).atomic_virial_diag_only) {
     gpu_sum_avirial_diag_only_error<<<Nc, block_size, sizeof(float) * block_size>>>(
       N,
       Na.data(),
@@ -1028,7 +1059,7 @@ std::vector<float> Dataset::get_rmse_virial(Parameters& para, const bool use_wei
     error_gpu.data());
   CHECK(gpuMemcpy(error_cpu.data(), error_gpu.data(), mem, gpuMemcpyDeviceToHost));
   for (int n = 0; n < Nc; ++n) {
-    if (structures[n].has_virial) {
+    if (get_structure(n).has_virial) {
       float rmse_temp = use_weight ? weight_cpu[n] * weight_cpu[n] * error_cpu[n] : error_cpu[n];
       for (int t = 0; t < para.num_types + 1; ++t) {
         if (has_type[t * Nc + n]) {
@@ -1179,7 +1210,7 @@ std::vector<float> Dataset::get_rmse_bec(Parameters& para, int device_id)
     error_gpu.data());
   CHECK(gpuMemcpy(error_cpu.data(), error_gpu.data(), mem, gpuMemcpyDeviceToHost));
   for (int n = 0; n < Nc; ++n) {
-    if (structures[n].has_bec) {
+    if (get_structure(n).has_bec) {
       float rmse_temp = error_cpu[n];
       for (int t = 0; t < para.num_types + 1; ++t) {
         if (has_type[t * Nc + n]) {

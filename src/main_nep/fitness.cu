@@ -31,6 +31,7 @@ Get the fitness
 #include "utilities/nep_parameters.cuh"
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <ctime>
 #include <iostream>
 #include <random>
@@ -40,11 +41,17 @@ Get the fitness
 
 Fitness::Fitness(Parameters& para)
 {
+  using Clock = std::chrono::steady_clock;
+  benchmark_start = Clock::now();
+  perf_timing = std::getenv("GPUMD_PERF_TIMING") != nullptr;
+  const auto constructor_begin = Clock::now();
   int deviceCount;
   CHECK(gpuGetDeviceCount(&deviceCount));
 
   stream_train = para.stream_train == 1;
+  const auto train_read_begin = Clock::now();
   read_structures(true, para, structures_train);
+  const auto train_read_end = Clock::now();
   num_batches = (structures_train.size() - 1) / para.batch_size + 1;
   printf("Number of devices = %d\n", deviceCount);
   printf("Number of batches = %d\n", num_batches);
@@ -85,6 +92,7 @@ Fitness::Fitness(Parameters& para)
     }
   }
 
+  const auto test_begin = Clock::now();
   std::vector<Structure> structures_test;
   has_test_set = read_structures(false, para, structures_test);
   if (has_test_set) {
@@ -100,43 +108,25 @@ Fitness::Fitness(Parameters& para)
 
   int N = -1;
   int Nc = -1;
-  int N_times_max_NN_radial = -1;
-  int N_times_max_NN_angular = -1;
   max_NN_radial = -1;
   max_NN_angular = -1;
   if (has_test_set) {
     N = test_set[0].N;
     Nc = test_set[0].Nc;
-    N_times_max_NN_radial = test_set[0].N * test_set[0].max_NN_radial;
-    N_times_max_NN_angular = test_set[0].N * test_set[0].max_NN_angular;
     max_NN_radial = test_set[0].max_NN_radial;
     max_NN_angular = test_set[0].max_NN_angular;
   }
   for (int n = 0; n < num_batches; ++n) {
-    std::vector<Dataset>& batch = stream_train
-      ? load_train_batch(para, n, "capacity-load")
-      : train_set[n];
-    Dataset& dataset = batch[0];
-    if (dataset.N > N) {
-      N = dataset.N;
-    };
-    if (dataset.Nc > Nc) {
-      Nc = dataset.Nc;
-    };
-    if (dataset.N * dataset.max_NN_radial > N_times_max_NN_radial) {
-      N_times_max_NN_radial = dataset.N * dataset.max_NN_radial;
-    };
-    if (dataset.N * dataset.max_NN_angular > N_times_max_NN_angular) {
-      N_times_max_NN_angular = dataset.N * dataset.max_NN_angular;
-    };
-
-    if (dataset.max_NN_radial > max_NN_radial) {
-      max_NN_radial = dataset.max_NN_radial;
+    int batch_atoms = 0;
+    for (int i = batch_begin[n]; i < batch_end[n]; ++i) {
+      batch_atoms += structures_train[i].num_atom;
     }
-    if (dataset.max_NN_angular > max_NN_angular) {
-      max_NN_angular = dataset.max_NN_angular;
+    N = std::max(N, batch_atoms);
+    Nc = std::max(Nc, batch_end[n] - batch_begin[n]);
+    if (!stream_train) {
+      max_NN_radial = std::max(max_NN_radial, train_set[n][0].max_NN_radial);
+      max_NN_angular = std::max(max_NN_angular, train_set[n][0].max_NN_angular);
     }
-    if (stream_train) release_train_batch("capacity-destroy");
   }
 
   if (para.train_mode == 1 || para.train_mode == 2) {
@@ -160,6 +150,14 @@ Fitness::Fitness(Parameters& para)
     structures_train.clear();
     structures_train.shrink_to_fit();
   }
+  if (perf_timing) {
+    const auto constructor_end = Clock::now();
+    printf(
+      "PERF_TIMING phase=fitness_initialization train_read_s=%.6f test_read_construct_s=%.6f total_s=%.6f\n",
+      std::chrono::duration<double>(train_read_end - train_read_begin).count(),
+      std::chrono::duration<double>(constructor_end - test_begin).count(),
+      std::chrono::duration<double>(constructor_end - constructor_begin).count());
+  }
 }
 
 Fitness::~Fitness()
@@ -172,6 +170,8 @@ Fitness::~Fitness()
 
 void Fitness::log_stream_memory(const char* phase, int batch_id, int live_datasets)
 {
+  const char* enabled = std::getenv("GPUMD_STREAM_TELEMETRY");
+  if (enabled == nullptr || strcmp(enabled, "1") != 0) return;
   int device_count = 0;
   CHECK(gpuGetDeviceCount(&device_count));
   for (int device_id = 0; device_id < device_count; ++device_id) {
@@ -188,15 +188,8 @@ void Fitness::log_stream_memory(const char* phase, int batch_id, int live_datase
 
 void Fitness::release_train_batch(const char* phase)
 {
-  if (!stream_train || !current_train_set) return;
+  if (!stream_train || !current_train_set || current_batch_id < 0) return;
   const int released_batch = current_batch_id;
-  int device_count = 0;
-  CHECK(gpuGetDeviceCount(&device_count));
-  for (int device_id = 0; device_id < device_count; ++device_id) {
-    CHECK(gpuSetDevice(device_id));
-    CHECK(gpuDeviceSynchronize());
-  }
-  current_train_set.reset();
   current_batch_id = -1;
   log_stream_memory(phase, released_batch, 0);
 }
@@ -210,13 +203,17 @@ std::vector<Dataset>& Fitness::load_train_batch(
   log_stream_memory("before-load", batch_id, 0);
   int device_count = 0;
   CHECK(gpuGetDeviceCount(&device_count));
-  current_train_set.reset(new std::vector<Dataset>(device_count));
+  if (!current_train_set) {
+    current_train_set.reset(new std::vector<Dataset>(device_count));
+  }
   for (int device_id = 0; device_id < device_count; ++device_id) {
     CHECK(gpuSetDevice(device_id));
     (*current_train_set)[device_id].construct(
-      para, structures_train, batch_begin[batch_id], batch_end[batch_id], device_id);
+      para, structures_train, batch_begin[batch_id], batch_end[batch_id], device_id, true);
   }
   current_batch_id = batch_id;
+  max_NN_radial = std::max(max_NN_radial, (*current_train_set)[0].max_NN_radial);
+  max_NN_angular = std::max(max_NN_angular, (*current_train_set)[0].max_NN_angular);
   log_stream_memory(phase, batch_id, device_count);
   return *current_train_set;
 }
@@ -231,6 +228,7 @@ void Fitness::compute(
   float* fitness_charge,
   float* fitness_bec)
 {
+  using Clock = std::chrono::steady_clock;
   int deviceCount;
   CHECK(gpuGetDeviceCount(&deviceCount));
   int population_iter = (para.population_size - 1) / deviceCount + 1;
@@ -238,21 +236,36 @@ void Fitness::compute(
   if (generation == 0) {
     std::vector<float> dummy_solution(para.number_of_variables * deviceCount, para.initial_para);
     for (int n = 0; n < num_batches; ++n) {
+      const auto load_begin = Clock::now();
       std::vector<Dataset>& batch = load_train_batch(para, n, "q-scaler-load");
+      const auto load_end = Clock::now();
       potential->find_force(
         para,
         dummy_solution.data(),
         batch,
         (para.fine_tune || para.import_q_scaler) ? false : true,
         deviceCount);
+      const auto compute_end = Clock::now();
+      q_scaler_load_seconds += std::chrono::duration<double>(load_end - load_begin).count();
+      q_scaler_compute_seconds += std::chrono::duration<double>(compute_end - load_end).count();
       if (stream_train) {
         log_stream_memory("q-scaler-compute", n, deviceCount);
         release_train_batch("q-scaler-destroy");
       }
     }
+    if (perf_timing) {
+      printf(
+        "PERF_TIMING phase=q_scaler batches=%d load_s=%.6f compute_s=%.6f total_s=%.6f\n",
+        num_batches,
+        q_scaler_load_seconds,
+        q_scaler_compute_seconds,
+        q_scaler_load_seconds + q_scaler_compute_seconds);
+    }
   } else {
     int batch_id = generation % num_batches;
+    const auto load_begin = Clock::now();
     std::vector<Dataset>& batch = load_train_batch(para, batch_id, "train-load");
+    const auto load_end = Clock::now();
     for (int n = 0; n < population_iter; ++n) {
       const float* individual = population + deviceCount * n * para.number_of_variables;
       potential->find_force(para, individual, batch, false, deviceCount);
@@ -279,6 +292,11 @@ void Fitness::compute(
         }
       }
     }
+    const auto compute_end = Clock::now();
+    train_load_seconds += std::chrono::duration<double>(load_end - load_begin).count();
+    train_compute_seconds += std::chrono::duration<double>(compute_end - load_end).count();
+    train_configurations += batch_end[batch_id] - batch_begin[batch_id];
+    ++train_generations;
     if (stream_train) {
       log_stream_memory("train-compute", batch_id, deviceCount);
       release_train_batch("train-destroy");
@@ -304,14 +322,14 @@ void Fitness::output(
       if (!is_stress) {
         fprintf(fid, "%g ", data_nc / dataset.Na_cpu[nc]);
       } else {
-        fprintf(fid, "%g ", data_nc / dataset.structures[nc].volume * PRESSURE_UNIT_CONVERSION);
+        fprintf(fid, "%g ", data_nc / dataset.get_structure(nc).volume * PRESSURE_UNIT_CONVERSION);
       }
     }
     for (int n = 0; n < num_components; ++n) {
       float ref_value = reference[n * dataset.Nc + nc];
       if (is_stress) {
         if (ref_value > -1e5) {
-          ref_value *= dataset.Na_cpu[nc] / dataset.structures[nc].volume * PRESSURE_UNIT_CONVERSION;
+          ref_value *= dataset.Na_cpu[nc] / dataset.get_structure(nc).volume * PRESSURE_UNIT_CONVERSION;
         }
       }
       if (n == num_components - 1) {
@@ -332,7 +350,7 @@ void Fitness::output_atomic(
 {
 for (int nc = 0; nc < dataset.Nc; ++nc) {
   int offset = dataset.Na_sum_cpu[nc];
-  for (int m = 0; m < dataset.structures[nc].num_atom; ++m) {
+  for (int m = 0; m < dataset.get_structure(nc).num_atom; ++m) {
     for (int n = 0; n < num_components; ++n) {
       int index = n * dataset.N + offset + m;
       fprintf(fid, "%g ", prediction[index]);
@@ -497,7 +515,9 @@ void Fitness::report_error(
   const float loss_L2,
   float* elite)
 {
+  using Clock = std::chrono::steady_clock;
   if (0 == (generation + 1) % para.output_interval) {
+    const auto report_train_begin = Clock::now();
     int batch_id = generation % num_batches;
     std::vector<Dataset>& batch = load_train_batch(para, batch_id, "report-load");
     potential->find_force(para, elite, batch, false, 1);
@@ -523,12 +543,16 @@ void Fitness::report_error(
       log_stream_memory("report-compute", batch_id, 1);
       release_train_batch("report-destroy");
     }
+    const auto report_train_end = Clock::now();
+    report_train_seconds +=
+      std::chrono::duration<double>(report_train_end - report_train_begin).count();
 
     float rmse_energy_test = 0.0f;
     float rmse_force_test = 0.0f;
     float rmse_virial_test = 0.0f;
     float rmse_charge_test = 0.0f;
     float rmse_bec_test = 0.0f;
+    const auto validation_begin = Clock::now();
     if (has_test_set) {
       potential->find_force(para, elite, test_set, false, 1);
       float energy_shift_per_structure_not_used;
@@ -544,6 +568,9 @@ void Fitness::report_error(
       rmse_charge_test = rmse_charge_test_array.back();
       rmse_bec_test = rmse_bec_test_array.back();
     }
+    const auto validation_end = Clock::now();
+    validation_compute_seconds +=
+      std::chrono::duration<double>(validation_end - validation_begin).count();
 
     FILE* fid_nep = my_fopen("nep.txt", "w");
     write_nep_txt(fid_nep, para, elite);
@@ -646,6 +673,7 @@ void Fitness::report_error(
     fflush(stdout);
     fflush(fid_loss_out);
 
+    const auto validation_output_begin = Clock::now();
     if (has_test_set) {
       if (para.train_mode == 0 || para.train_mode == 3) {
         FILE* fid_force = my_fopen("force_test.out", "w");
@@ -677,6 +705,40 @@ void Fitness::report_error(
         fclose(fid_polarizability);
       }
     }
+    const auto validation_output_end = Clock::now();
+    validation_output_seconds +=
+      std::chrono::duration<double>(validation_output_end - validation_output_begin).count();
+
+    if (perf_timing) {
+      const int interval_generations = train_generations - previous_train_generations;
+      const double interval_load = train_load_seconds - previous_train_load_seconds;
+      const double interval_compute = train_compute_seconds - previous_train_compute_seconds;
+      const double interval_training = interval_load + interval_compute;
+      const long long interval_configurations =
+        train_configurations - previous_train_configurations;
+      printf(
+        "PERF_TIMING phase=training generation=%d interval_generations=%d load_s=%.6f compute_s=%.6f seconds_per_generation=%.9f configurations_per_second=%.3f report_train_s=%.6f validation_compute_s=%.6f validation_output_s=%.6f\n",
+        generation + 1,
+        interval_generations,
+        interval_load,
+        interval_compute,
+        interval_training / interval_generations,
+        interval_training > 0.0 ? interval_configurations / interval_training : 0.0,
+        report_train_seconds,
+        validation_compute_seconds,
+        validation_output_seconds);
+      if (first_report) {
+        printf(
+          "PERF_TIMING phase=first_loss generation=%d elapsed_s=%.6f\n",
+          generation + 1,
+          std::chrono::duration<double>(Clock::now() - benchmark_start).count());
+        first_report = false;
+      }
+      previous_train_load_seconds = train_load_seconds;
+      previous_train_compute_seconds = train_compute_seconds;
+      previous_train_configurations = train_configurations;
+      previous_train_generations = train_generations;
+    }
   }
 
   if (0 == (generation + 1) % 1000) {
@@ -693,7 +755,7 @@ void Fitness::update_energy_force_virial(
 
   for (int nc = 0; nc < dataset.Nc; ++nc) {
     int offset = dataset.Na_sum_cpu[nc];
-    for (int m = 0; m < dataset.structures[nc].num_atom; ++m) {
+    for (int m = 0; m < dataset.get_structure(nc).num_atom; ++m) {
       int n = offset + m;
       fprintf(
         fid_force,

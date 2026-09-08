@@ -45,12 +45,14 @@ public:
     : allocated_(other.allocated_),
       size_(other.size_),
       memory_(other.memory_),
+      capacity_(other.capacity_),
       memory_type_(other.memory_type_),
       data_(other.data_)
   {
     other.allocated_ = false;
     other.size_ = 0;
     other.memory_ = 0;
+    other.capacity_ = 0;
     other.data_ = nullptr;
   }
 
@@ -61,11 +63,13 @@ public:
       allocated_ = other.allocated_;
       size_ = other.size_;
       memory_ = other.memory_;
+      capacity_ = other.capacity_;
       memory_type_ = other.memory_type_;
       data_ = other.data_;
       other.allocated_ = false;
       other.size_ = 0;
       other.memory_ = 0;
+      other.capacity_ = 0;
       other.data_ = nullptr;
     }
     return *this;
@@ -76,21 +80,22 @@ public:
   {
     size_ = 0;
     memory_ = 0;
+    capacity_ = 0;
     memory_type_ = Memory_Type::global;
     allocated_ = false;
   }
 
   // only allocate memory
   GPU_Vector(const size_t size, const Memory_Type memory_type = Memory_Type::global)
+    : GPU_Vector()
   {
-    allocated_ = false;
     resize(size, memory_type);
   }
 
   // allocate memory and initialize
   GPU_Vector(const size_t size, const T value, const Memory_Type memory_type = Memory_Type::global)
+    : GPU_Vector()
   {
-    allocated_ = false;
     resize(size, value, memory_type);
   }
 
@@ -109,6 +114,7 @@ public:
     data_ = nullptr;
     size_ = 0;
     memory_ = 0;
+    capacity_ = 0;
   }
 
   // only allocate memory
@@ -116,37 +122,34 @@ public:
   {
     size_ = size;
     memory_ = size_ * sizeof(T);
-    memory_type_ = memory_type;
-    if (allocated_) {
+    // Keep an existing allocation when the logical vector becomes empty. This
+    // avoids cudaMalloc(0) and lets a later batch reuse the same capacity.
+    if (memory_ == 0) {
+      return;
+    }
+    const bool must_reallocate =
+      !allocated_ || memory_type_ != memory_type || memory_ > capacity_;
+    if (must_reallocate && allocated_) {
       CHECK(gpuFree(data_));
       allocated_ = false;
     }
-    if (memory_type_ == Memory_Type::global) {
-      CHECK(gpuMalloc((void**)&data_, memory_));
-      allocated_ = true;
-    } else {
-      CHECK(gpuMallocManaged((void**)&data_, memory_));
-      allocated_ = true;
+    memory_type_ = memory_type;
+    if (must_reallocate) {
+      capacity_ = memory_;
+      if (memory_type_ == Memory_Type::global) {
+        CHECK(gpuMalloc((void**)&data_, capacity_));
+        allocated_ = true;
+      } else {
+        CHECK(gpuMallocManaged((void**)&data_, capacity_));
+        allocated_ = true;
+      }
     }
   }
 
   // allocate memory and initialize
   void resize(const size_t size, const T value, const Memory_Type memory_type = Memory_Type::global)
   {
-    size_ = size;
-    memory_ = size_ * sizeof(T);
-    memory_type_ = memory_type;
-    if (allocated_) {
-      CHECK(gpuFree(data_));
-      allocated_ = false;
-    }
-    if (memory_type == Memory_Type::global) {
-      CHECK(gpuMalloc((void**)&data_, memory_));
-      allocated_ = true;
-    } else {
-      CHECK(gpuMallocManaged((void**)&data_, memory_));
-      allocated_ = true;
-    }
+    resize(size, memory_type);
     fill(value);
   }
 
@@ -219,6 +222,9 @@ public:
   // give "value" to each element
   void fill(const T value)
   {
+    if (size_ == 0) {
+      return;
+    }
     if (memory_type_ == Memory_Type::global) {
       const int block_size = 128;
       const int grid_size = (size_ + block_size - 1) / block_size;
@@ -243,6 +249,7 @@ private:
   bool allocated_;          // true for allocated memory
   size_t size_;             // number of elements
   size_t memory_;           // memory in bytes
+  size_t capacity_;         // allocated memory in bytes
   Memory_Type memory_type_; // global or unified memory
   T* data_;                 // data pointer
 };
