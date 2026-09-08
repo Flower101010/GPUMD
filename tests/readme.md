@@ -21,12 +21,21 @@ Useful subsets are selected by labels:
 ```bash
 ctest --test-dir build -L unit --output-on-failure
 ctest --test-dir build -L integration --output-on-failure
+ctest --test-dir build -L validation --output-on-failure
 ctest --test-dir build -L gpu --output-on-failure
 ```
 
 CUDA runtime tests report `Skipped` when no accessible GPU is present. The
 `integration.molecular_force_run_in` test launches the CMake-built `gpumd` in an isolated
 temporary directory.
+
+When GROMACS is available as `gmx`, `gmx_mpi`, or under `$HOME/gromacs/bin`, CMake also
+registers three layered eight-bead-chain validations: bond-only, bond+harmonic-angle, and
+bond+angle+periodic-dihedral. They compare deterministic NVE trajectories, including
+coordinates, active bonded geometry, all-pair distances, radius of gyration, potential
+energy, and total energy. See
+[`validation/gromacs_harmonic_chain/README.md`](validation/gromacs_harmonic_chain/README.md)
+for the model, unit conversion, tolerances, and standalone command.
 
 The no-op regression needs a separate, unmodified GPUMD executable, so it is opt-in:
 

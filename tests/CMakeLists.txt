@@ -74,6 +74,46 @@ if(UNIX)
         TIMEOUT 120)
 endif()
 
+# Optional independent cross-validation against an installed GROMACS.  The
+# reference executable is also searched in the common per-user install prefix
+# because non-interactive shells do not necessarily source GMXRC or shell aliases.
+find_package(Python3 QUIET COMPONENTS Interpreter)
+find_program(GPUMD_GROMACS_EXECUTABLE
+    NAMES gmx gmx_mpi
+    HINTS "$ENV{HOME}/gromacs/bin"
+    DOC "GROMACS executable used for independent molecular-force validation")
+if(UNIX AND Python3_Interpreter_FOUND AND GPUMD_GROMACS_EXECUTABLE)
+    set(GPUMD_GROMACS_VALIDATION_COMMON
+        ${CMAKE_CURRENT_SOURCE_DIR}/validation/gromacs_harmonic_chain)
+
+    function(gpumd_add_gromacs_validation test_name case_directory)
+        add_test(
+            NAME validation.${test_name}
+            COMMAND bash
+                ${GPUMD_GROMACS_VALIDATION_COMMON}/run_validation.sh
+                $<TARGET_FILE:gpumd>
+                ${GPUMD_GROMACS_EXECUTABLE}
+                ${Python3_EXECUTABLE}
+                ${GPUMD_GROMACS_VALIDATION_COMMON}
+                ${case_directory}
+                ${GPUMD_GROMACS_VALIDATION_COMMON}/compare_trajectories.py)
+        set_tests_properties(validation.${test_name} PROPERTIES
+            LABELS "validation;external;gpu"
+            RESOURCE_LOCK gpu
+            TIMEOUT 180)
+    endfunction()
+
+    gpumd_add_gromacs_validation(
+        gromacs_harmonic_chain
+        ${CMAKE_CURRENT_SOURCE_DIR}/validation/gromacs_harmonic_chain)
+    gpumd_add_gromacs_validation(
+        gromacs_harmonic_angle_chain
+        ${CMAKE_CURRENT_SOURCE_DIR}/validation/gromacs_harmonic_angle_chain)
+    gpumd_add_gromacs_validation(
+        gromacs_full_bonded_chain
+        ${CMAKE_CURRENT_SOURCE_DIR}/validation/gromacs_full_bonded_chain)
+endif()
+
 set(GPUMD_BASELINE_EXECUTABLE "" CACHE FILEPATH
     "Optional unmodified gpumd executable used by the molecular-force no-op regression")
 if(UNIX AND GPUMD_BASELINE_EXECUTABLE)
