@@ -1,0 +1,9 @@
+type 2 Te Pb
+batch 5
+population 10
+generation 2
+output_interval 100
+lambda_e 1.0
+lambda_f 1.0
+lambda_v 0.3
+nep_compile 0

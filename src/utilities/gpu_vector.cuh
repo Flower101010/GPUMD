@@ -38,6 +38,39 @@ template <typename T>
 class GPU_Vector
 {
 public:
+  GPU_Vector(const GPU_Vector&) = delete;
+  GPU_Vector& operator=(const GPU_Vector&) = delete;
+
+  GPU_Vector(GPU_Vector&& other) noexcept
+    : allocated_(other.allocated_),
+      size_(other.size_),
+      memory_(other.memory_),
+      memory_type_(other.memory_type_),
+      data_(other.data_)
+  {
+    other.allocated_ = false;
+    other.size_ = 0;
+    other.memory_ = 0;
+    other.data_ = nullptr;
+  }
+
+  GPU_Vector& operator=(GPU_Vector&& other) noexcept
+  {
+    if (this != &other) {
+      clear();
+      allocated_ = other.allocated_;
+      size_ = other.size_;
+      memory_ = other.memory_;
+      memory_type_ = other.memory_type_;
+      data_ = other.data_;
+      other.allocated_ = false;
+      other.size_ = 0;
+      other.memory_ = 0;
+      other.data_ = nullptr;
+    }
+    return *this;
+  }
+
   // default constructor
   GPU_Vector()
   {
@@ -64,10 +97,18 @@ public:
   // deallocate memory
   ~GPU_Vector()
   {
+    clear();
+  }
+
+  void clear()
+  {
     if (allocated_) {
       CHECK(gpuFree(data_));
       allocated_ = false;
     }
+    data_ = nullptr;
+    size_ = 0;
+    memory_ = 0;
   }
 
   // only allocate memory

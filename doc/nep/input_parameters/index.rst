@@ -34,6 +34,7 @@ Below you can find a listing of keywords for the ``nep.in`` input file.
    lambda_shear
    force_delta
    batch
+   stream_train
    population
    generation
    save_potential

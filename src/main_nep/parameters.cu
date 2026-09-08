@@ -107,6 +107,7 @@ void Parameters::set_default_parameters()
   lambda_z = 0.5f;             // close to optimal
   force_delta = 0.0f;          // no modification of force loss
   batch_size = 1000;           // large enough in most cases
+  stream_train = 0;            // preserve the V5.8.1 resident-dataset path
   population_size = 50;        // almost optimal
   maximum_generation = 100000; // a good starting point
   save_potential = 100000;     // write checkpoint nep.txt files at these intervals
@@ -1260,6 +1261,8 @@ void Parameters::parse_one_keyword(std::vector<std::string>& tokens)
     parse_neuron(param, num_param);
   } else if (strcmp(param[0], "batch") == 0) {
     parse_batch(param, num_param);
+  } else if (strcmp(param[0], "stream_train") == 0) {
+    parse_stream_train(param, num_param);
   } else if (strcmp(param[0], "population") == 0) {
     parse_population(param, num_param);
   } else if (strcmp(param[0], "nep_compile") == 0) {
@@ -1866,6 +1869,16 @@ void Parameters::parse_batch(const char** param, int num_param)
   }
   if (batch_size < 1) {
     PRINT_INPUT_ERROR("batch size should >= 1.");
+  }
+}
+
+void Parameters::parse_stream_train(const char** param, int num_param)
+{
+  if (num_param != 2) {
+    PRINT_INPUT_ERROR("stream_train should have 1 parameter.\n");
+  }
+  if (!is_valid_int(param[1], &stream_train) || (stream_train != 0 && stream_train != 1)) {
+    PRINT_INPUT_ERROR("stream_train should = 0 or 1.\n");
   }
 }
 

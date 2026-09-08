@@ -97,6 +97,7 @@ void Parameters::set_default_parameters()
   force_delta = 0.0f;          // no modification of force loss
   batch_size = 2;           // mini-batch for adam optimizer
   use_full_batch = 0;          // default is not to enable effective full-batch
+  stream_train = 0;            // preserve the V5.8.1 resident-dataset path
   epoch = 50;               
   use_typewise_cutoff_zbl = false;
   typewise_cutoff_zbl_factor = -1.0f;
@@ -449,6 +450,8 @@ void Parameters::parse_one_keyword(std::vector<std::string>& tokens)
     parse_neuron(param, num_param);
   } else if (strcmp(param[0], "batch") == 0) {
     parse_batch(param, num_param);
+  } else if (strcmp(param[0], "stream_train") == 0) {
+    parse_stream_train(param, num_param);
   } else if (strcmp(param[0], "epoch") == 0) {
     parse_epoch(param, num_param);
   } else if (strcmp(param[0], "weight_decay") == 0) {
@@ -914,6 +917,16 @@ void Parameters::parse_batch(const char** param, int num_param)
     if (use_full_batch != 0 && use_full_batch != 1) {
       PRINT_INPUT_ERROR("use_full_batch should = 0 or 1.");
     }
+  }
+}
+
+void Parameters::parse_stream_train(const char** param, int num_param)
+{
+  if (num_param != 2) {
+    PRINT_INPUT_ERROR("stream_train should have 1 parameter.\n");
+  }
+  if (!is_valid_int(param[1], &stream_train) || (stream_train != 0 && stream_train != 1)) {
+    PRINT_INPUT_ERROR("stream_train should = 0 or 1.\n");
   }
 }
 

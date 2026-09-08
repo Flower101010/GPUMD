@@ -38,6 +38,7 @@ public:
 
   // parameters to be read in
   int batch_size;         // number of configurations in one batch
+  int stream_train;       // keep only the current training batch on GPU
   int use_full_batch;     // 1 for effective full-batch even though batch_size is not full-batch
   int num_types;          // number of atom types
   int epoch;              // maximum number of epochs for training
@@ -161,6 +162,7 @@ private:
   void parse_lambda_shear(const char** param, int num_param);
   void parse_force_delta(const char** param, int num_param);
   void parse_batch(const char** param, int num_param);
+  void parse_stream_train(const char** param, int num_param);
   void parse_epoch(const char** param, int num_param);
   void parse_use_typewise_cutoff_zbl(const char** param, int num_param);
   void parse_energy_shift(const char** param, int num_param);

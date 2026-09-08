@@ -32,6 +32,7 @@
 #define gpuMemcpyHostToHost hipMemcpyHostToHost
 #define gpuMemcpyDeviceToDevice hipMemcpyDeviceToDevice
 #define gpuMemset hipMemset
+#define gpuMemGetInfo hipMemGetInfo
 
 // error handling
 #define gpuError_t hipError_t
@@ -120,6 +121,7 @@
 #define gpuMemcpyHostToHost cudaMemcpyHostToHost
 #define gpuMemcpyDeviceToDevice cudaMemcpyDeviceToDevice
 #define gpuMemset cudaMemset
+#define gpuMemGetInfo cudaMemGetInfo
 
 // error handling
 #define gpuError_t cudaError_t

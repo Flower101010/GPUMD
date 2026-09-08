@@ -449,6 +449,27 @@ void SNES::compute(Parameters& para, Fitness* fitness_function)
         fitness_charge.data(),
         fitness_bec.data());
 
+#ifdef NEP_TEST_DIAGNOSTICS
+      {
+        FILE* diagnostic = my_fopen(
+          "nep_diagnostic_fitness.tsv", n == 0 ? "w" : "a");
+        const int count = population_size * (para.num_types + 1);
+        for (int i = 0; i < count; ++i) {
+          fprintf(
+            diagnostic,
+            "%d\t%d\t%.9e\t%.9e\t%.9e\t%.9e\t%.9e\n",
+            n,
+            i,
+            fitness_energy[i],
+            fitness_force[i],
+            fitness_virial[i],
+            fitness_charge[i],
+            fitness_bec[i]);
+        }
+        fclose(diagnostic);
+      }
+#endif
+
       regularize_NEP4(para);
 
       sort_population(para);
