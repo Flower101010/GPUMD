@@ -26,11 +26,12 @@ heat transport, Phys. Rev. B. 104, 104309 (2021).
 #include "utilities/gpu_macro.cuh"
 #include "utilities/nep_parameters.cuh"
 #include "utilities/nep_utilities.cuh"
+#include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
-#include <cstring>
 
 const std::string ELEMENTS[NUM_ELEMENTS] = {
   "H",  "He", "Li", "Be", "B",  "C",  "N",  "O",  "F",  "Ne", "Na", "Mg", "Al", "Si", "P",  "S",
@@ -60,8 +61,7 @@ void NEP_Energy::initialize(const char* file_potential)
   } else if (tokens[0] == "nep4_zbl") {
     zbl.enabled = true;
   } else {
-    std::cout << tokens[0]
-              << " is an unsupported NEP model. We only support NEP4 models now."
+    std::cout << tokens[0] << " is an unsupported NEP model. We only support NEP4 models now."
               << std::endl;
     exit(1);
   }
@@ -106,7 +106,8 @@ void NEP_Energy::initialize(const char* file_potential)
       if (tokens.size() == 4) {
         paramb.typewise_cutoff_zbl_factor = get_double_from_token(tokens[3], __FILE__, __LINE__);
         paramb.use_typewise_cutoff_zbl = true;
-        printf("    has the universal ZBL with typewise cutoff with a factor of %g.\n",
+        printf(
+          "    has the universal ZBL with typewise cutoff with a factor of %g.\n",
           paramb.typewise_cutoff_zbl_factor);
       } else {
         printf(
@@ -163,9 +164,44 @@ void NEP_Energy::initialize(const char* file_potential)
   printf("    enlarged MN_radial = %d.\n", paramb.MN_radial);
   printf("    enlarged MN_angular = %d.\n", paramb.MN_angular);
 
-  // n_max 10 8
+  std::vector<float> radial_pair_cpu(paramb.num_types * paramb.num_types, -1.0f);
+  std::vector<float> angular_pair_cpu(paramb.num_types * paramb.num_types, -1.0f);
   tokens = get_tokens(input);
-  if (tokens.size() != 3) {
+  while (!tokens.empty() && tokens[0] == "cross_cutoff") {
+    if (tokens.size() != 5) {
+      std::cout << "cross_cutoff should have 4 parameters." << std::endl;
+      exit(1);
+    }
+    const int type_i = get_int_from_token(tokens[1], __FILE__, __LINE__);
+    const int type_j = get_int_from_token(tokens[2], __FILE__, __LINE__);
+    if (
+      type_i < 0 || type_i >= paramb.num_types || type_j < 0 || type_j >= paramb.num_types ||
+      type_i == type_j) {
+      std::cout << "cross_cutoff should specify two different valid type indices." << std::endl;
+      exit(1);
+    }
+    const float radial = get_double_from_token(tokens[3], __FILE__, __LINE__);
+    const float angular = get_double_from_token(tokens[4], __FILE__, __LINE__);
+    if (angular > radial || angular < 3.0f || radial > 100.0f) {
+      std::cout << "cross_cutoff values should satisfy 3 <= angular <= radial <= 100." << std::endl;
+      exit(1);
+    }
+    const int ij = type_i * paramb.num_types + type_j;
+    const int ji = type_j * paramb.num_types + type_i;
+    if (radial_pair_cpu[ij] >= 0.0f) {
+      std::cout << "cross_cutoff for this type pair has already been set." << std::endl;
+      exit(1);
+    }
+    radial_pair_cpu[ij] = radial_pair_cpu[ji] = radial;
+    angular_pair_cpu[ij] = angular_pair_cpu[ji] = angular;
+    paramb.rc_radial_max = std::max(paramb.rc_radial_max, radial);
+    paramb.rc_angular_max = std::max(paramb.rc_angular_max, angular);
+    printf("    cross cutoff (%d, %d) = (%g A, %g A).\n", type_i, type_j, radial, angular);
+    tokens = get_tokens(input);
+  }
+
+  // n_max 10 8
+  if (tokens.size() != 3 || tokens[0] != "n_max") {
     std::cout << "This line should be n_max n_max_radial n_max_angular." << std::endl;
     exit(1);
   }
@@ -189,7 +225,9 @@ void NEP_Energy::initialize(const char* file_potential)
   // l_max
   tokens = get_tokens(input);
   if (tokens.size() < 4) {
-    std::cout << "This line should be l_max l_max_3body has_q_222 has_q_1111 [has_q_112] [has_q_123] [has_q_233] [has_q_134]." << std::endl;
+    std::cout << "This line should be l_max l_max_3body has_q_222 has_q_1111 [has_q_112] "
+                 "[has_q_123] [has_q_233] [has_q_134]."
+              << std::endl;
     exit(1);
   }
 
@@ -284,6 +322,12 @@ void NEP_Energy::initialize(const char* file_potential)
   }
   nep_parameters.resize(annmb.num_para);
   nep_parameters.copy_from_host(parameters.data());
+  rc_radial_pair.resize(radial_pair_cpu.size());
+  rc_radial_pair.copy_from_host(radial_pair_cpu.data());
+  rc_angular_pair.resize(angular_pair_cpu.size());
+  rc_angular_pair.copy_from_host(angular_pair_cpu.data());
+  paramb.rc_radial_pair = rc_radial_pair.data();
+  paramb.rc_angular_pair = rc_angular_pair.data();
   update_potential(nep_parameters.data(), annmb);
   for (int d = 0; d < annmb.dim; ++d) {
     tokens = get_tokens(input);
@@ -355,7 +399,7 @@ static __global__ void find_energy_nep(
       float d12 = sqrt(r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2]);
       float fc12;
       int t2 = g_t2_radial[index];
-      float rc = (paramb.rc_radial[t1] + paramb.rc_radial[t2]) * 0.5f;
+      float rc = select_cutoff(paramb.rc_radial, paramb.rc_radial_pair, paramb.num_types, t1, t2);
       float rcinv = 1.0f / rc;
       find_fc(rc, rcinv, d12, fc12);
 
@@ -381,7 +425,8 @@ static __global__ void find_energy_nep(
         float d12 = sqrt(r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2]);
         float fc12;
         int t2 = g_t2_angular[index];
-        float rc = (paramb.rc_angular[t1] + paramb.rc_angular[t2]) * 0.5f;
+        float rc =
+          select_cutoff(paramb.rc_angular, paramb.rc_angular_pair, paramb.num_types, t1, t2);
         float rcinv = 1.0f / rc;
         find_fc(rc, rcinv, d12, fc12);
 
@@ -400,8 +445,18 @@ static __global__ void find_energy_nep(
         }
         accumulate_s(paramb.L_max, d12, r12[0], r12[1], r12[2], gn12, s);
       }
-      find_q(paramb.L_max, paramb.has_q_222, paramb.has_q_1111, paramb.has_q_112, paramb.has_q_123, paramb.has_q_233, paramb.has_q_134,
-        paramb.n_max_angular + 1, n, s, q + (paramb.n_max_radial + 1));
+      find_q(
+        paramb.L_max,
+        paramb.has_q_222,
+        paramb.has_q_1111,
+        paramb.has_q_112,
+        paramb.has_q_123,
+        paramb.has_q_233,
+        paramb.has_q_134,
+        paramb.n_max_angular + 1,
+        n,
+        s,
+        q + (paramb.n_max_radial + 1));
     }
 
     // nomalize descriptor

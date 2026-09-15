@@ -15,6 +15,7 @@
 
 #include "nep_compile.cuh"
 #include "parameters.cuh"
+#include <algorithm>
 
 #include <cerrno>
 #include <cstdio>
@@ -39,8 +40,7 @@ const int NEP_SPECIALIZED_INTERFACE_VERSION = 2;
 
 void warning_compile(const std::string& message)
 {
-  std::cerr << "Warning: NEP training specialization disabled: "
-            << message << std::endl;
+  std::cerr << "Warning: NEP training specialization disabled: " << message << std::endl;
 }
 
 const char* mode_name(const NEP_Compile_Mode mode)
@@ -104,8 +104,7 @@ std::string get_gpumd_source_dir()
       file_exists(source_dir + "/main_nep/nep_specialized.cu")) {
       return source_dir;
     }
-    warning_compile(
-      "GPUMD_SRC does not point to a valid GPUMD src directory.");
+    warning_compile("GPUMD_SRC does not point to a valid GPUMD src directory.");
     return std::string();
   }
 
@@ -159,9 +158,11 @@ std::string make_float_array(const std::vector<float>& values)
 
 bool all_equal(const std::vector<float>& values)
 {
-  if (values.empty()) return true;
+  if (values.empty())
+    return true;
   for (size_t i = 1; i < values.size(); ++i) {
-    if (values[i] != values[0]) return false;
+    if (values[i] != values[0])
+      return false;
   }
   return true;
 }
@@ -183,17 +184,14 @@ bool validate_config(const NEP_Compile_Config& c)
     return false;
   }
   if (
-    (c.mode == NEP_Compile_Mode::CHARGE ||
-     c.mode == NEP_Compile_Mode::VDW ||
+    (c.mode == NEP_Compile_Mode::CHARGE || c.mode == NEP_Compile_Mode::VDW ||
      c.mode == NEP_Compile_Mode::CHARGE_VDW) &&
     c.num_hidden_layers != 1) {
-    warning_compile(
-      "qNEP/vdW/charge-vdW specialization requires one hidden ANN layer.");
+    warning_compile("qNEP/vdW/charge-vdW specialization requires one hidden ANN layer.");
     return false;
   }
   if (
-    (c.mode == NEP_Compile_Mode::VDW ||
-     c.mode == NEP_Compile_Mode::CHARGE_VDW) &&
+    (c.mode == NEP_Compile_Mode::VDW || c.mode == NEP_Compile_Mode::CHARGE_VDW) &&
     static_cast<int>(c.c6_ref_sqrt.size()) != c.num_types) {
     warning_compile("vdW specialization requires C6 reference values.");
     return false;
@@ -209,16 +207,19 @@ std::string make_config_text(const NEP_Compile_Config& c)
 {
   const int num_abc = (c.L_max + 1) * (c.L_max + 1) - 1;
   const int dim_radial = c.n_max_radial + 1;
-  const bool common_radial = all_equal(c.rc_radial);
-  const bool common_angular = all_equal(c.rc_angular);
+  const bool has_pair_cutoff = std::any_of(
+    c.rc_radial_pair.begin(), c.rc_radial_pair.end(), [](float value) { return value >= 0.0f; });
+  const bool common_radial = !has_pair_cutoff && all_equal(c.rc_radial);
+  const bool common_angular = !has_pair_cutoff && all_equal(c.rc_angular);
 
   std::vector<float> c6 = c.c6_ref_sqrt;
-  if (c6.empty()) c6.assign(c.num_types, 0.0f);
+  if (c6.empty())
+    c6.assign(c.num_types, 0.0f);
 
   std::ostringstream output;
   output << "#pragma once\n";
-  output << "#define NEP_SPECIAL_CONFIG_INTERFACE_VERSION "
-         << NEP_SPECIALIZED_INTERFACE_VERSION << "\n";
+  output << "#define NEP_SPECIAL_CONFIG_INTERFACE_VERSION " << NEP_SPECIALIZED_INTERFACE_VERSION
+         << "\n";
   output << "#define NEP_MODEL_NEP 0\n";
   output << "#define NEP_MODEL_CHARGE 1\n";
   output << "#define NEP_MODEL_VDW 2\n";
@@ -250,19 +251,23 @@ std::string make_config_text(const NEP_Compile_Config& c)
   output << "#define HAS_Q_134_JIT " << c.has_q_134 << "\n";
   output << "#define NUM_L_JIT " << c.num_L << "\n";
   output << "#define NUM_C_RADIAL_JIT " << c.num_c_radial << "\n";
-  output << "#define DESCRIPTOR_USE_CJ_JIT "
-         << (c.descriptor_use_cj ? 1 : 0) << "\n";
+  output << "#define DESCRIPTOR_USE_CJ_JIT " << (c.descriptor_use_cj ? 1 : 0) << "\n";
   output << "#define RC_RADIAL_COMMON_JIT " << (common_radial ? 1 : 0) << "\n";
   output << "#define RC_ANGULAR_COMMON_JIT " << (common_angular ? 1 : 0) << "\n";
-  output << "#define RC_RADIAL_COMMON_VALUE_JIT "
-         << float_literal(c.rc_radial[0]) << "\n";
-  output << "#define RC_ANGULAR_COMMON_VALUE_JIT "
-         << float_literal(c.rc_angular[0]) << "\n";
+  output << "#define HAS_PAIR_CUTOFF_JIT " << (has_pair_cutoff ? 1 : 0) << "\n";
+  output << "#define RC_RADIAL_COMMON_VALUE_JIT " << float_literal(c.rc_radial[0]) << "\n";
+  output << "#define RC_ANGULAR_COMMON_VALUE_JIT " << float_literal(c.rc_angular[0]) << "\n";
   output << "#define C6_SCALING_FACTOR_JIT 1.000000000e-01f\n";
   output << "static __device__ __constant__ float RC_RADIAL_JIT[NUM_TYPES_JIT] = "
          << make_float_array(c.rc_radial) << ";\n";
   output << "static __device__ __constant__ float RC_ANGULAR_JIT[NUM_TYPES_JIT] = "
          << make_float_array(c.rc_angular) << ";\n";
+  output
+    << "static __device__ __constant__ float RC_RADIAL_PAIR_JIT[NUM_TYPES_JIT * NUM_TYPES_JIT] = "
+    << make_float_array(c.rc_radial_pair) << ";\n";
+  output
+    << "static __device__ __constant__ float RC_ANGULAR_PAIR_JIT[NUM_TYPES_JIT * NUM_TYPES_JIT] = "
+    << make_float_array(c.rc_angular_pair) << ";\n";
   output << "static __device__ __constant__ float C6_REF_SQRT_JIT[NUM_TYPES_JIT] = "
          << make_float_array(c6) << ";\n";
   return output.str();
@@ -275,9 +280,7 @@ bool load_symbol(void* library, const char* name, T& function)
   function = reinterpret_cast<T>(dlsym(library, name));
   const char* error = dlerror();
   if (error != nullptr || function == nullptr) {
-    warning_compile(
-      std::string("Cannot find symbol ") + name +
-      " in the specialized NEP library.");
+    warning_compile(std::string("Cannot find symbol ") + name + " in the specialized NEP library.");
     function = nullptr;
     return false;
   }
@@ -287,14 +290,11 @@ bool load_symbol(void* library, const char* name, T& function)
 } // namespace
 
 NEP_Compile_Config make_nep_compile_config(
-  const Parameters& para,
-  const NEP_Compile_Mode mode,
-  const float* c6_ref_sqrt)
+  const Parameters& para, const NEP_Compile_Mode mode, const float* c6_ref_sqrt)
 {
 #ifdef USE_CJ
   if (
-    mode == NEP_Compile_Mode::CHARGE ||
-    mode == NEP_Compile_Mode::CHARGE_VDW ||
+    mode == NEP_Compile_Mode::CHARGE || mode == NEP_Compile_Mode::CHARGE_VDW ||
     mode == NEP_Compile_Mode::TNEP) {
     warning_compile(
       "qNEP, charge-vdW, and TNEP specialization is not available in "
@@ -336,21 +336,19 @@ NEP_Compile_Config make_nep_compile_config(
   c.num_L = para.dim_angular / (para.n_max_angular + 1);
 
 #ifdef USE_CJ
-  c.descriptor_use_cj =
-    (mode == NEP_Compile_Mode::NEP || mode == NEP_Compile_Mode::VDW);
+  c.descriptor_use_cj = (mode == NEP_Compile_Mode::NEP || mode == NEP_Compile_Mode::VDW);
 #else
   c.descriptor_use_cj = false;
 #endif
 
   const int num_descriptor_types =
     c.descriptor_use_cj ? para.num_types : para.num_types * para.num_types;
-  c.num_c_radial =
-    num_descriptor_types *
-    (para.n_max_radial + 1) *
-    (para.basis_size_radial + 1);
+  c.num_c_radial = num_descriptor_types * (para.n_max_radial + 1) * (para.basis_size_radial + 1);
 
   c.rc_radial.resize(para.num_types);
   c.rc_angular.resize(para.num_types);
+  c.rc_radial_pair = para.rc_radial_pair;
+  c.rc_angular_pair = para.rc_angular_pair;
   if (mode == NEP_Compile_Mode::CHARGE) {
     // qNEP's generic ParaMB uses the first, uniform cutoff value.
     for (int t = 0; t < para.num_types; ++t) {
@@ -364,9 +362,7 @@ NEP_Compile_Config make_nep_compile_config(
     }
   }
 
-  if (
-    mode == NEP_Compile_Mode::VDW ||
-    mode == NEP_Compile_Mode::CHARGE_VDW) {
+  if (mode == NEP_Compile_Mode::VDW || mode == NEP_Compile_Mode::CHARGE_VDW) {
     if (c6_ref_sqrt == nullptr) {
       warning_compile("vdW specialization requires C6 reference values.");
       return NEP_Compile_Config();
@@ -412,8 +408,7 @@ bool NEP_Compile::compile(const NEP_Compile_Config& config)
   if (source_dir.empty()) {
     return false;
   }
-  const std::string specialized_file =
-    source_dir + "/main_nep/nep_specialized.cu";
+  const std::string specialized_file = source_dir + "/main_nep/nep_specialized.cu";
   const std::string config_text = make_config_text(config);
 
   int device_count = 0;
@@ -449,23 +444,19 @@ bool NEP_Compile::compile(const NEP_Compile_Config& config)
   // Runtime specialization is intentionally non-persistent.
   // Prefer TMPDIR supplied by the user/scheduler; fall back to /tmp.
   const char* tmpdir_env = std::getenv("TMPDIR");
-  std::string tmp_base =
-    (tmpdir_env != nullptr && tmpdir_env[0] != '\0') ? tmpdir_env : "/tmp";
+  std::string tmp_base = (tmpdir_env != nullptr && tmpdir_env[0] != '\0') ? tmpdir_env : "/tmp";
   while (tmp_base.size() > 1 && tmp_base.back() == '/') {
     tmp_base.pop_back();
   }
 
-  std::string temp_template =
-    tmp_base + "/gpumd-nep-train-compile-XXXXXX";
-  std::vector<char> temp_buffer(
-    temp_template.begin(), temp_template.end());
+  std::string temp_template = tmp_base + "/gpumd-nep-train-compile-XXXXXX";
+  std::vector<char> temp_buffer(temp_template.begin(), temp_template.end());
   temp_buffer.push_back('\0');
 
   char* temp_dir = mkdtemp(temp_buffer.data());
   if (temp_dir == nullptr) {
     warning_compile(
-      "Cannot create the runtime-specialization temporary directory under " +
-      tmp_base + ".");
+      "Cannot create the runtime-specialization temporary directory under " + tmp_base + ".");
     return false;
   }
 
@@ -486,27 +477,18 @@ bool NEP_Compile::compile(const NEP_Compile_Config& config)
 
   const char* compiler_env = std::getenv("CUDACXX");
   const std::string compiler =
-    (compiler_env != nullptr && compiler_env[0] != '\0')
-      ? compiler_env
-      : "nvcc";
+    (compiler_env != nullptr && compiler_env[0] != '\0') ? compiler_env : "nvcc";
 
   std::ostringstream command;
-  command
-    << shell_quote(compiler)
-    << " -std=c++14 -O3";
+  command << shell_quote(compiler) << " -std=c++14 -O3";
   for (size_t i = 0; i < architectures.size(); ++i) {
-    command
-      << " -gencode=arch=compute_" << architectures[i]
-      << ",code=sm_" << architectures[i];
+    command << " -gencode=arch=compute_" << architectures[i] << ",code=sm_" << architectures[i];
   }
-  command
-    << " -shared -Xcompiler=-fPIC"
-    << " -DNEP_SPECIALIZED_RUNTIME_BUILD"
-    << " -I" << shell_quote(temp_dir_)
-    << " -I" << shell_quote(source_dir)
-    << " " << shell_quote(specialized_file)
-    << " -o " << shell_quote(library_file_)
-    << " > " << shell_quote(log_file_) << " 2>&1";
+  command << " -shared -Xcompiler=-fPIC"
+          << " -DNEP_SPECIALIZED_RUNTIME_BUILD"
+          << " -I" << shell_quote(temp_dir_) << " -I" << shell_quote(source_dir) << " "
+          << shell_quote(specialized_file) << " -o " << shell_quote(library_file_) << " > "
+          << shell_quote(log_file_) << " 2>&1";
 
   printf("Compile specialized %s training kernels (", mode_name(config.mode));
   for (size_t i = 0; i < architectures.size(); ++i) {
@@ -537,29 +519,24 @@ bool NEP_Compile::compile(const NEP_Compile_Config& config)
       std::cerr << log;
     }
     cleanup_files();
-    warning_compile(
-      "nvcc failed while compiling specialized NEP training kernels.");
+    warning_compile("nvcc failed while compiling specialized NEP training kernels.");
     return false;
   }
 
   library_ = dlopen(library_file_.c_str(), RTLD_NOW | RTLD_LOCAL);
   if (library_ == nullptr) {
     const char* error_message = dlerror();
-    const std::string message =
-      (error_message == nullptr) ? "unknown dlopen error" : error_message;
+    const std::string message = (error_message == nullptr) ? "unknown dlopen error" : error_message;
     cleanup_files();
-    warning_compile(
-      "Cannot load the specialized NEP training library: " + message);
+    warning_compile("Cannot load the specialized NEP training library: " + message);
     return false;
   }
 
   typedef int (*InterfaceVersionFunction)();
   InterfaceVersionFunction interface_version = nullptr;
-  if (!load_symbol(
-        library_,
-        "nep_train_specialized_interface_version",
-        interface_version) ||
-      interface_version() != NEP_SPECIALIZED_INTERFACE_VERSION) {
+  if (
+    !load_symbol(library_, "nep_train_specialized_interface_version", interface_version) ||
+    interface_version() != NEP_SPECIALIZED_INTERFACE_VERSION) {
     warning_compile("Incompatible NEP specialization interface version.");
     dlclose(library_);
     library_ = nullptr;
@@ -568,30 +545,18 @@ bool NEP_Compile::compile(const NEP_Compile_Config& config)
   }
 
   bool symbols_ok = true;
-  symbols_ok &= load_symbol(
-    library_, "nep_train_launch_descriptor_radial", descriptor_radial_);
-  symbols_ok &= load_symbol(
-    library_, "nep_train_launch_descriptor_angular", descriptor_angular_);
-  symbols_ok &= load_symbol(
-    library_, "nep_train_launch_ann_nep", ann_nep_);
-  symbols_ok &= load_symbol(
-    library_, "nep_train_launch_ann_temperature", ann_temperature_);
-  symbols_ok &= load_symbol(
-    library_, "nep_train_launch_ann_charge", ann_charge_);
-  symbols_ok &= load_symbol(
-    library_, "nep_train_launch_ann_vdw", ann_vdw_);
-  symbols_ok &= load_symbol(
-    library_, "nep_train_launch_ann_charge_vdw", ann_charge_vdw_);
-  symbols_ok &= load_symbol(
-    library_, "nep_train_launch_ann_tnep_pol", ann_tnep_pol_);
-  symbols_ok &= load_symbol(
-    library_, "nep_train_launch_bec_radial", bec_radial_);
-  symbols_ok &= load_symbol(
-    library_, "nep_train_launch_bec_angular", bec_angular_);
-  symbols_ok &= load_symbol(
-    library_, "nep_train_launch_force_radial", force_radial_);
-  symbols_ok &= load_symbol(
-    library_, "nep_train_launch_force_angular", force_angular_);
+  symbols_ok &= load_symbol(library_, "nep_train_launch_descriptor_radial", descriptor_radial_);
+  symbols_ok &= load_symbol(library_, "nep_train_launch_descriptor_angular", descriptor_angular_);
+  symbols_ok &= load_symbol(library_, "nep_train_launch_ann_nep", ann_nep_);
+  symbols_ok &= load_symbol(library_, "nep_train_launch_ann_temperature", ann_temperature_);
+  symbols_ok &= load_symbol(library_, "nep_train_launch_ann_charge", ann_charge_);
+  symbols_ok &= load_symbol(library_, "nep_train_launch_ann_vdw", ann_vdw_);
+  symbols_ok &= load_symbol(library_, "nep_train_launch_ann_charge_vdw", ann_charge_vdw_);
+  symbols_ok &= load_symbol(library_, "nep_train_launch_ann_tnep_pol", ann_tnep_pol_);
+  symbols_ok &= load_symbol(library_, "nep_train_launch_bec_radial", bec_radial_);
+  symbols_ok &= load_symbol(library_, "nep_train_launch_bec_angular", bec_angular_);
+  symbols_ok &= load_symbol(library_, "nep_train_launch_force_radial", force_radial_);
+  symbols_ok &= load_symbol(library_, "nep_train_launch_force_angular", force_angular_);
 
   if (!symbols_ok) {
     dlclose(library_);
@@ -629,25 +594,19 @@ void NEP_Compile::cleanup_files()
 #endif
 }
 
-void NEP_Compile::check_launch(
-  const int error_code,
-  const char* kernel_name)
+void NEP_Compile::check_launch(const int error_code, const char* kernel_name)
 {
 #if !defined(USE_HIP) && !defined(_WIN32)
   if (error_code != static_cast<int>(cudaSuccess)) {
-    std::cerr << "Specialized kernel launch failed in "
-              << kernel_name << ": "
-              << cudaGetErrorString(static_cast<cudaError_t>(error_code))
-              << std::endl;
+    std::cerr << "Specialized kernel launch failed in " << kernel_name << ": "
+              << cudaGetErrorString(static_cast<cudaError_t>(error_code)) << std::endl;
     std::exit(1);
   }
 #ifdef STRONG_DEBUG
   const cudaError_t sync_error = cudaDeviceSynchronize();
   if (sync_error != cudaSuccess) {
-    std::cerr << "Specialized kernel execution failed in "
-              << kernel_name << ": "
-              << cudaGetErrorString(sync_error)
-              << std::endl;
+    std::cerr << "Specialized kernel execution failed in " << kernel_name << ": "
+              << cudaGetErrorString(sync_error) << std::endl;
     std::exit(1);
   }
 #endif
@@ -670,8 +629,7 @@ void NEP_Compile::launch_descriptor_radial(
   float* descriptors)
 {
   check_launch(
-    descriptor_radial_(
-      N, NN_sum, NN, NL, type, x12, y12, z12, parameters, descriptors),
+    descriptor_radial_(N, NN_sum, NN, NL, type, x12, y12, z12, parameters, descriptors),
     "descriptor_radial_jit");
 }
 
@@ -689,9 +647,7 @@ void NEP_Compile::launch_descriptor_angular(
   float* sum_fxyz)
 {
   check_launch(
-    descriptor_angular_(
-      N, NN_sum, NN, NL, type, x12, y12, z12,
-      parameters, descriptors, sum_fxyz),
+    descriptor_angular_(N, NN_sum, NN, NL, type, x12, y12, z12, parameters, descriptors, sum_fxyz),
     "descriptor_angular_jit");
 }
 
@@ -704,10 +660,7 @@ void NEP_Compile::launch_ann(
   float* pe,
   float* Fp)
 {
-  check_launch(
-    ann_nep_(
-      N, type, descriptors, q_scaler, parameters, pe, Fp),
-    "ann_nep_jit");
+  check_launch(ann_nep_(N, type, descriptors, q_scaler, parameters, pe, Fp), "ann_nep_jit");
 }
 
 void NEP_Compile::launch_ann_temperature(
@@ -721,9 +674,7 @@ void NEP_Compile::launch_ann_temperature(
   float* Fp)
 {
   check_launch(
-    ann_temperature_(
-      N, type, descriptors, q_scaler, temperature,
-      parameters, pe, Fp),
+    ann_temperature_(N, type, descriptors, q_scaler, temperature, parameters, pe, Fp),
     "ann_temperature_jit");
 }
 
@@ -739,9 +690,7 @@ void NEP_Compile::launch_ann_charge(
   float* charge_derivative)
 {
   check_launch(
-    ann_charge_(
-      N, type, descriptors, q_scaler, parameters,
-      pe, Fp, charge, charge_derivative),
+    ann_charge_(N, type, descriptors, q_scaler, parameters, pe, Fp, charge, charge_derivative),
     "ann_charge_jit");
 }
 
@@ -757,10 +706,7 @@ void NEP_Compile::launch_ann_vdw(
   float* C6_derivative)
 {
   check_launch(
-    ann_vdw_(
-      N, type, descriptors, q_scaler, parameters,
-      pe, Fp, C6, C6_derivative),
-    "ann_vdw_jit");
+    ann_vdw_(N, type, descriptors, q_scaler, parameters, pe, Fp, C6, C6_derivative), "ann_vdw_jit");
 }
 
 void NEP_Compile::launch_ann_charge_vdw(
@@ -778,9 +724,17 @@ void NEP_Compile::launch_ann_charge_vdw(
 {
   check_launch(
     ann_charge_vdw_(
-      N, type, descriptors, q_scaler, parameters,
-      pe, Fp, charge, charge_derivative,
-      C6, C6_derivative),
+      N,
+      type,
+      descriptors,
+      q_scaler,
+      parameters,
+      pe,
+      Fp,
+      charge,
+      charge_derivative,
+      C6,
+      C6_derivative),
     "ann_charge_vdw_jit");
 }
 
@@ -794,194 +748,470 @@ void NEP_Compile::launch_ann_tnep_pol(
   float* Fp)
 {
   check_launch(
-    ann_tnep_pol_(
-      N, type, descriptors, q_scaler, parameters, virial, Fp),
-    "ann_tnep_pol_jit");
+    ann_tnep_pol_(N, type, descriptors, q_scaler, parameters, virial, Fp), "ann_tnep_pol_jit");
 }
 
 void NEP_Compile::launch_bec_radial(
-  int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-  const float* x12, const float* y12, const float* z12,
-  const float* parameters, const float* charge_derivative, float* bec)
+  int N,
+  const int* NN_sum,
+  const int* NN,
+  const int* NL,
+  const int* type,
+  const float* x12,
+  const float* y12,
+  const float* z12,
+  const float* parameters,
+  const float* charge_derivative,
+  float* bec)
 {
   check_launch(
-    bec_radial_(
-      N, NN_sum, NN, NL, type, x12, y12, z12,
-      parameters, charge_derivative, bec),
+    bec_radial_(N, NN_sum, NN, NL, type, x12, y12, z12, parameters, charge_derivative, bec),
     "bec_radial_jit");
 }
 void NEP_Compile::launch_bec_angular(
-  int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-  const float* x12, const float* y12, const float* z12,
-  const float* parameters, const float* charge_derivative,
-  const float* sum_fxyz, float* bec)
+  int N,
+  const int* NN_sum,
+  const int* NN,
+  const int* NL,
+  const int* type,
+  const float* x12,
+  const float* y12,
+  const float* z12,
+  const float* parameters,
+  const float* charge_derivative,
+  const float* sum_fxyz,
+  float* bec)
 {
   check_launch(
     bec_angular_(
-      N, NN_sum, NN, NL, type, x12, y12, z12,
-      parameters, charge_derivative, sum_fxyz, bec),
+      N, NN_sum, NN, NL, type, x12, y12, z12, parameters, charge_derivative, sum_fxyz, bec),
     "bec_angular_jit");
 }
 
 void NEP_Compile::launch_force_radial(
-  int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-  const float* x12, const float* y12, const float* z12,
-  const float* parameters, const float* Fp,
-  float* fx, float* fy, float* fz, float* virial)
+  int N,
+  const int* NN_sum,
+  const int* NN,
+  const int* NL,
+  const int* type,
+  const float* x12,
+  const float* y12,
+  const float* z12,
+  const float* parameters,
+  const float* Fp,
+  float* fx,
+  float* fy,
+  float* fz,
+  float* virial)
 {
   check_launch(
     force_radial_(
-      N, NN_sum, NN, NL, type, x12, y12, z12,
-      parameters, Fp,
-      nullptr, nullptr, nullptr, nullptr,
-      0, fx, fy, fz, virial),
+      N,
+      NN_sum,
+      NN,
+      NL,
+      type,
+      x12,
+      y12,
+      z12,
+      parameters,
+      Fp,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      0,
+      fx,
+      fy,
+      fz,
+      virial),
     "force_radial_jit");
 }
 
 void NEP_Compile::launch_force_angular(
-  int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-  const float* x12, const float* y12, const float* z12,
-  const float* parameters, const float* Fp, const float* sum_fxyz,
-  float* fx, float* fy, float* fz, float* virial)
+  int N,
+  const int* NN_sum,
+  const int* NN,
+  const int* NL,
+  const int* type,
+  const float* x12,
+  const float* y12,
+  const float* z12,
+  const float* parameters,
+  const float* Fp,
+  const float* sum_fxyz,
+  float* fx,
+  float* fy,
+  float* fz,
+  float* virial)
 {
   check_launch(
     force_angular_(
-      N, NN_sum, NN, NL, type, x12, y12, z12,
-      parameters, Fp,
-      nullptr, nullptr, nullptr, nullptr,
-      sum_fxyz, 0, fx, fy, fz, virial),
+      N,
+      NN_sum,
+      NN,
+      NL,
+      type,
+      x12,
+      y12,
+      z12,
+      parameters,
+      Fp,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      sum_fxyz,
+      0,
+      fx,
+      fy,
+      fz,
+      virial),
     "force_angular_jit");
 }
 
 void NEP_Compile::launch_force_charge_radial(
-  int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-  const float* x12, const float* y12, const float* z12,
-  const float* parameters, const float* Fp,
-  const float* charge_derivative, const float* D_real,
-  float* fx, float* fy, float* fz, float* virial)
+  int N,
+  const int* NN_sum,
+  const int* NN,
+  const int* NL,
+  const int* type,
+  const float* x12,
+  const float* y12,
+  const float* z12,
+  const float* parameters,
+  const float* Fp,
+  const float* charge_derivative,
+  const float* D_real,
+  float* fx,
+  float* fy,
+  float* fz,
+  float* virial)
 {
   check_launch(
     force_radial_(
-      N, NN_sum, NN, NL, type, x12, y12, z12,
-      parameters, Fp,
-      charge_derivative, D_real, nullptr, nullptr,
-      0, fx, fy, fz, virial),
+      N,
+      NN_sum,
+      NN,
+      NL,
+      type,
+      x12,
+      y12,
+      z12,
+      parameters,
+      Fp,
+      charge_derivative,
+      D_real,
+      nullptr,
+      nullptr,
+      0,
+      fx,
+      fy,
+      fz,
+      virial),
     "force_charge_radial_jit");
 }
 
 void NEP_Compile::launch_force_charge_angular(
-  int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-  const float* x12, const float* y12, const float* z12,
-  const float* parameters, const float* Fp,
-  const float* charge_derivative, const float* D_real,
+  int N,
+  const int* NN_sum,
+  const int* NN,
+  const int* NL,
+  const int* type,
+  const float* x12,
+  const float* y12,
+  const float* z12,
+  const float* parameters,
+  const float* Fp,
+  const float* charge_derivative,
+  const float* D_real,
   const float* sum_fxyz,
-  float* fx, float* fy, float* fz, float* virial)
+  float* fx,
+  float* fy,
+  float* fz,
+  float* virial)
 {
   check_launch(
     force_angular_(
-      N, NN_sum, NN, NL, type, x12, y12, z12,
-      parameters, Fp,
-      charge_derivative, D_real, nullptr, nullptr,
-      sum_fxyz, 0, fx, fy, fz, virial),
+      N,
+      NN_sum,
+      NN,
+      NL,
+      type,
+      x12,
+      y12,
+      z12,
+      parameters,
+      Fp,
+      charge_derivative,
+      D_real,
+      nullptr,
+      nullptr,
+      sum_fxyz,
+      0,
+      fx,
+      fy,
+      fz,
+      virial),
     "force_charge_angular_jit");
 }
 
 void NEP_Compile::launch_force_vdw_radial(
-  int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-  const float* x12, const float* y12, const float* z12,
-  const float* parameters, const float* Fp,
-  const float* C6_derivative, const float* D_C6,
-  float* fx, float* fy, float* fz, float* virial)
+  int N,
+  const int* NN_sum,
+  const int* NN,
+  const int* NL,
+  const int* type,
+  const float* x12,
+  const float* y12,
+  const float* z12,
+  const float* parameters,
+  const float* Fp,
+  const float* C6_derivative,
+  const float* D_C6,
+  float* fx,
+  float* fy,
+  float* fz,
+  float* virial)
 {
   check_launch(
     force_radial_(
-      N, NN_sum, NN, NL, type, x12, y12, z12,
-      parameters, Fp,
-      nullptr, nullptr, C6_derivative, D_C6,
-      0, fx, fy, fz, virial),
+      N,
+      NN_sum,
+      NN,
+      NL,
+      type,
+      x12,
+      y12,
+      z12,
+      parameters,
+      Fp,
+      nullptr,
+      nullptr,
+      C6_derivative,
+      D_C6,
+      0,
+      fx,
+      fy,
+      fz,
+      virial),
     "force_vdw_radial_jit");
 }
 
 void NEP_Compile::launch_force_vdw_angular(
-  int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-  const float* x12, const float* y12, const float* z12,
-  const float* parameters, const float* Fp,
-  const float* C6_derivative, const float* D_C6,
+  int N,
+  const int* NN_sum,
+  const int* NN,
+  const int* NL,
+  const int* type,
+  const float* x12,
+  const float* y12,
+  const float* z12,
+  const float* parameters,
+  const float* Fp,
+  const float* C6_derivative,
+  const float* D_C6,
   const float* sum_fxyz,
-  float* fx, float* fy, float* fz, float* virial)
+  float* fx,
+  float* fy,
+  float* fz,
+  float* virial)
 {
   check_launch(
     force_angular_(
-      N, NN_sum, NN, NL, type, x12, y12, z12,
-      parameters, Fp,
-      nullptr, nullptr, C6_derivative, D_C6,
-      sum_fxyz, 0, fx, fy, fz, virial),
+      N,
+      NN_sum,
+      NN,
+      NL,
+      type,
+      x12,
+      y12,
+      z12,
+      parameters,
+      Fp,
+      nullptr,
+      nullptr,
+      C6_derivative,
+      D_C6,
+      sum_fxyz,
+      0,
+      fx,
+      fy,
+      fz,
+      virial),
     "force_vdw_angular_jit");
 }
 
 void NEP_Compile::launch_force_charge_vdw_radial(
-  int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-  const float* x12, const float* y12, const float* z12,
-  const float* parameters, const float* Fp,
-  const float* charge_derivative, const float* D_real,
-  const float* C6_derivative, const float* D_C6,
-  float* fx, float* fy, float* fz, float* virial)
+  int N,
+  const int* NN_sum,
+  const int* NN,
+  const int* NL,
+  const int* type,
+  const float* x12,
+  const float* y12,
+  const float* z12,
+  const float* parameters,
+  const float* Fp,
+  const float* charge_derivative,
+  const float* D_real,
+  const float* C6_derivative,
+  const float* D_C6,
+  float* fx,
+  float* fy,
+  float* fz,
+  float* virial)
 {
   check_launch(
     force_radial_(
-      N, NN_sum, NN, NL, type, x12, y12, z12,
-      parameters, Fp,
-      charge_derivative, D_real, C6_derivative, D_C6,
-      0, fx, fy, fz, virial),
+      N,
+      NN_sum,
+      NN,
+      NL,
+      type,
+      x12,
+      y12,
+      z12,
+      parameters,
+      Fp,
+      charge_derivative,
+      D_real,
+      C6_derivative,
+      D_C6,
+      0,
+      fx,
+      fy,
+      fz,
+      virial),
     "force_charge_vdw_radial_jit");
 }
 
 void NEP_Compile::launch_force_charge_vdw_angular(
-  int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-  const float* x12, const float* y12, const float* z12,
-  const float* parameters, const float* Fp,
-  const float* charge_derivative, const float* D_real,
-  const float* C6_derivative, const float* D_C6,
+  int N,
+  const int* NN_sum,
+  const int* NN,
+  const int* NL,
+  const int* type,
+  const float* x12,
+  const float* y12,
+  const float* z12,
+  const float* parameters,
+  const float* Fp,
+  const float* charge_derivative,
+  const float* D_real,
+  const float* C6_derivative,
+  const float* D_C6,
   const float* sum_fxyz,
-  float* fx, float* fy, float* fz, float* virial)
+  float* fx,
+  float* fy,
+  float* fz,
+  float* virial)
 {
   check_launch(
     force_angular_(
-      N, NN_sum, NN, NL, type, x12, y12, z12,
-      parameters, Fp,
-      charge_derivative, D_real, C6_derivative, D_C6,
-      sum_fxyz, 0, fx, fy, fz, virial),
+      N,
+      NN_sum,
+      NN,
+      NL,
+      type,
+      x12,
+      y12,
+      z12,
+      parameters,
+      Fp,
+      charge_derivative,
+      D_real,
+      C6_derivative,
+      D_C6,
+      sum_fxyz,
+      0,
+      fx,
+      fy,
+      fz,
+      virial),
     "force_charge_vdw_angular_jit");
 }
 
 void NEP_Compile::launch_force_tnep_radial(
   bool is_dipole,
-  int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-  const float* x12, const float* y12, const float* z12,
-  const float* parameters, const float* Fp,
-  float* fx, float* fy, float* fz, float* virial)
+  int N,
+  const int* NN_sum,
+  const int* NN,
+  const int* NL,
+  const int* type,
+  const float* x12,
+  const float* y12,
+  const float* z12,
+  const float* parameters,
+  const float* Fp,
+  float* fx,
+  float* fy,
+  float* fz,
+  float* virial)
 {
   check_launch(
     force_radial_(
-      N, NN_sum, NN, NL, type, x12, y12, z12,
-      parameters, Fp,
-      nullptr, nullptr, nullptr, nullptr,
-      is_dipole ? 1 : 0, fx, fy, fz, virial),
+      N,
+      NN_sum,
+      NN,
+      NL,
+      type,
+      x12,
+      y12,
+      z12,
+      parameters,
+      Fp,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      is_dipole ? 1 : 0,
+      fx,
+      fy,
+      fz,
+      virial),
     "force_tnep_radial_jit");
 }
 
 void NEP_Compile::launch_force_tnep_angular(
   bool is_dipole,
-  int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-  const float* x12, const float* y12, const float* z12,
-  const float* parameters, const float* Fp, const float* sum_fxyz,
-  float* fx, float* fy, float* fz, float* virial)
+  int N,
+  const int* NN_sum,
+  const int* NN,
+  const int* NL,
+  const int* type,
+  const float* x12,
+  const float* y12,
+  const float* z12,
+  const float* parameters,
+  const float* Fp,
+  const float* sum_fxyz,
+  float* fx,
+  float* fy,
+  float* fz,
+  float* virial)
 {
   check_launch(
     force_angular_(
-      N, NN_sum, NN, NL, type, x12, y12, z12,
-      parameters, Fp,
-      nullptr, nullptr, nullptr, nullptr,
-      sum_fxyz, is_dipole ? 1 : 0, fx, fy, fz, virial),
+      N,
+      NN_sum,
+      NN,
+      NL,
+      type,
+      x12,
+      y12,
+      z12,
+      parameters,
+      Fp,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      sum_fxyz,
+      is_dipole ? 1 : 0,
+      fx,
+      fy,
+      fz,
+      virial),
     "force_tnep_angular_jit");
 }

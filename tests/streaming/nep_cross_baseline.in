@@ -1,0 +1,14 @@
+type 3 Ba Ti O
+cutoff 6 4 5 3.5 4.5 3
+cross_cutoff 0 1 7 4.5
+cross_cutoff 1 2 5.5 3.5
+type_weight 1.0 1.25 0.75
+batch 2
+population 10
+generation 4
+output_interval 1
+save_potential 100 0 0
+lambda_e 1.0
+lambda_f 1.0
+lambda_v 0.3
+nep_compile 0

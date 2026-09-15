@@ -26,3 +26,21 @@ The cutoff between two species (:math:`a` and :math:`b`) is the arithmetic avera
 .. math::
    
    r_\mathrm{c}^\mathrm{R/A}(a,b) = r_\mathrm{c}^\mathrm{R/A}(b,a) = \frac{r_\mathrm{c}^\mathrm{R/A}(a) + r_\mathrm{c}^\mathrm{R/A}(b)}{2}
+
+An individual pair can override this arithmetic-average rule by placing one or more
+``cross_cutoff`` lines after ``cutoff``::
+
+  cross_cutoff <type_i> <type_j> <radial_cutoff> <angular_cutoff>
+
+Here ``type_i`` and ``type_j`` are different, zero-based indices in the order given by
+:ref:`type <kw_type>`.  The override is symmetric, so only one of ``i j`` and ``j i`` may be
+specified.  Pairs without an override continue to use the arithmetic average.  For example::
+
+  type 3 C H O
+  cutoff 6 4 5 3.5 7 4.5
+  cross_cutoff 0 2 8 5
+
+uses explicit radial and angular cutoffs of 8 Å and 5 Å for C--O, while C--H and H--O retain
+the arithmetic-average rule.  Pair-specific cutoffs are currently supported for ordinary NEP
+potential, dipole, polarizability, and temperature-dependent models.  They are not supported
+for qNEP, gNEP, vdW, or charge-vdW models.

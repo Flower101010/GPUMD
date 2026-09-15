@@ -146,11 +146,13 @@ NEP_Charge::NEP_Charge(const char* file_potential, const int num_atoms)
   }
 
   if (paramb.num_types == 1) {
-    printf("Use the NEP4-Charge%d potential with %d atom type.\n", 
-      paramb.charge_mode, paramb.num_types);
+    printf(
+      "Use the NEP4-Charge%d potential with %d atom type.\n", paramb.charge_mode, paramb.num_types);
   } else {
-    printf("Use the NEP4-Charge%d potential with %d atom types.\n", 
-      paramb.charge_mode, paramb.num_types);
+    printf(
+      "Use the NEP4-Charge%d potential with %d atom types.\n",
+      paramb.charge_mode,
+      paramb.num_types);
   }
 
   for (int n = 0; n < paramb.num_types; ++n) {
@@ -181,7 +183,8 @@ NEP_Charge::NEP_Charge(const char* file_potential, const int num_atoms)
       if (tokens.size() == 4) {
         paramb.typewise_cutoff_zbl_factor = get_double_from_token(tokens[3], __FILE__, __LINE__);
         paramb.use_typewise_cutoff_zbl = true;
-        printf("    has the universal ZBL with typewise cutoff with a factor of %g.\n",
+        printf(
+          "    has the universal ZBL with typewise cutoff with a factor of %g.\n",
           paramb.typewise_cutoff_zbl_factor);
       } else {
         printf(
@@ -218,6 +221,10 @@ NEP_Charge::NEP_Charge(const char* file_potential, const int num_atoms)
 
   // n_max 10 8
   tokens = get_tokens(input);
+  if (!tokens.empty() && tokens[0] == "cross_cutoff") {
+    std::cout << "cross_cutoff is not supported by qNEP." << std::endl;
+    exit(1);
+  }
   if (tokens.size() != 3) {
     std::cout << "This line should be n_max n_max_radial n_max_angular." << std::endl;
     exit(1);
@@ -242,7 +249,9 @@ NEP_Charge::NEP_Charge(const char* file_potential, const int num_atoms)
   // l_max
   tokens = get_tokens(input);
   if (tokens.size() < 4) {
-    std::cout << "This line should be l_max l_max_3body has_q_222 has_q_1111 [has_q_112] [has_q_123] [has_q_233] [has_q_134]." << std::endl;
+    std::cout << "This line should be l_max l_max_3body has_q_222 has_q_1111 [has_q_112] "
+                 "[has_q_123] [has_q_233] [has_q_134]."
+              << std::endl;
     exit(1);
   }
 
@@ -363,7 +372,7 @@ NEP_Charge::NEP_Charge(const char* file_potential, const int num_atoms)
   charge_para.two_alpha_over_sqrt_pi = 2.0f * charge_para.alpha / sqrt(float(PI));
   charge_para.A = erfc(float(PI)) / (paramb.rc_radial * paramb.rc_radial);
   charge_para.A += charge_para.two_alpha_over_sqrt_pi * exp(-float(PI * PI)) / paramb.rc_radial;
-  charge_para.B = - erfc(float(PI)) / paramb.rc_radial - charge_para.A * paramb.rc_radial;
+  charge_para.B = -erfc(float(PI)) / paramb.rc_radial - charge_para.A * paramb.rc_radial;
   nep_data.D_real.resize(num_atoms);
   nep_data.charge.resize(num_atoms);
   nep_data.charge_derivative.resize(num_atoms * annmb.dim);
@@ -549,8 +558,17 @@ static __global__ void find_descriptor(
         accumulate_s(paramb.L_max, d12, x12, y12, z12, gn12, s);
       }
       find_q(
-        paramb.L_max, paramb.has_q_222, paramb.has_q_1111, paramb.has_q_112, paramb.has_q_123, paramb.has_q_233, paramb.has_q_134,
-        paramb.n_max_angular + 1, n, s, q + (paramb.n_max_radial + 1));
+        paramb.L_max,
+        paramb.has_q_222,
+        paramb.has_q_1111,
+        paramb.has_q_112,
+        paramb.has_q_123,
+        paramb.has_q_233,
+        paramb.has_q_134,
+        paramb.n_max_angular + 1,
+        n,
+        s,
+        q + (paramb.n_max_radial + 1));
       for (int abc = 0; abc < (paramb.L_max + 1) * (paramb.L_max + 1) - 1; ++abc) {
         g_sum_fxyz[(n * ((paramb.L_max + 1) * (paramb.L_max + 1) - 1) + abc) * N + n1] = s[abc];
       }
@@ -561,30 +579,30 @@ static __global__ void find_descriptor(
       q[d] = q[d] * annmb.q_scaler[d];
     }
 
-      float F = 0.0f, Fp[MAX_DIM] = {0.0f};
-      float charge = 0.0f;
-      float charge_derivative[MAX_DIM] = {0.0f};
+    float F = 0.0f, Fp[MAX_DIM] = {0.0f};
+    float charge = 0.0f;
+    float charge_derivative[MAX_DIM] = {0.0f};
 
-      apply_ann_one_layer_charge(
-        annmb.dim,
-        annmb.num_neurons1,
-        annmb.w0[t1],
-        annmb.b0[t1],
-        annmb.w1[t1],
-        annmb.b1,
-        q,
-        F,
-        Fp,
-        charge,
-        charge_derivative);
+    apply_ann_one_layer_charge(
+      annmb.dim,
+      annmb.num_neurons1,
+      annmb.w0[t1],
+      annmb.b0[t1],
+      annmb.w1[t1],
+      annmb.b1,
+      q,
+      F,
+      Fp,
+      charge,
+      charge_derivative);
 
-      g_pe[n1] += F;
-      g_charge[n1] = charge;
+    g_pe[n1] += F;
+    g_charge[n1] = charge;
 
-      for (int d = 0; d < annmb.dim; ++d) {
-        g_Fp[d * N + n1] = Fp[d] * annmb.q_scaler[d];
-        g_charge_derivative[d * N + n1] = charge_derivative[d] * annmb.q_scaler[d];
-      }
+    for (int d = 0; d < annmb.dim; ++d) {
+      g_Fp[d * N + n1] = Fp[d] * annmb.q_scaler[d];
+      g_charge_derivative[d * N + n1] = charge_derivative[d] * annmb.q_scaler[d];
+    }
   }
 }
 
@@ -617,7 +635,6 @@ static __global__ void zero_total_charge(const int N, float* g_charge)
     }
   }
 }
-
 
 // Chain rule correction: zero_total_charge shifted q by -mean(q),
 // so D_real must be shifted by -mean(D_real) for consistent forces.
@@ -723,15 +740,15 @@ static __global__ void find_bec_radial(
         }
       }
 
-      float bec_xx = 0.5f* (r12[0] * f12[0]);
-      float bec_xy = 0.5f* (r12[0] * f12[1]);
-      float bec_xz = 0.5f* (r12[0] * f12[2]);
-      float bec_yx = 0.5f* (r12[1] * f12[0]);
-      float bec_yy = 0.5f* (r12[1] * f12[1]);
-      float bec_yz = 0.5f* (r12[1] * f12[2]);
-      float bec_zx = 0.5f* (r12[2] * f12[0]);
-      float bec_zy = 0.5f* (r12[2] * f12[1]);
-      float bec_zz = 0.5f* (r12[2] * f12[2]);
+      float bec_xx = 0.5f * (r12[0] * f12[0]);
+      float bec_xy = 0.5f * (r12[0] * f12[1]);
+      float bec_xz = 0.5f * (r12[0] * f12[2]);
+      float bec_yx = 0.5f * (r12[1] * f12[0]);
+      float bec_yy = 0.5f * (r12[1] * f12[1]);
+      float bec_yz = 0.5f * (r12[1] * f12[2]);
+      float bec_zx = 0.5f * (r12[2] * f12[0]);
+      float bec_zy = 0.5f * (r12[2] * f12[1]);
+      float bec_zz = 0.5f * (r12[2] * f12[2]);
 
       atomicAdd(&g_bec[n1], bec_xx);
       atomicAdd(&g_bec[n1 + N], bec_xy);
@@ -825,7 +842,12 @@ static __global__ void find_bec_angular(
         }
         accumulate_f12(
           paramb.L_max,
-          paramb.has_q_222, paramb.has_q_1111, paramb.has_q_112, paramb.has_q_123, paramb.has_q_233, paramb.has_q_134,
+          paramb.has_q_222,
+          paramb.has_q_1111,
+          paramb.has_q_112,
+          paramb.has_q_123,
+          paramb.has_q_233,
+          paramb.has_q_134,
           paramb.num_L,
           n,
           paramb.n_max_angular + 1,
@@ -838,15 +860,15 @@ static __global__ void find_bec_angular(
           f12);
       }
 
-      float bec_xx = 0.5f* (r12[0] * f12[0]);
-      float bec_xy = 0.5f* (r12[0] * f12[1]);
-      float bec_xz = 0.5f* (r12[0] * f12[2]);
-      float bec_yx = 0.5f* (r12[1] * f12[0]);
-      float bec_yy = 0.5f* (r12[1] * f12[1]);
-      float bec_yz = 0.5f* (r12[1] * f12[2]);
-      float bec_zx = 0.5f* (r12[2] * f12[0]);
-      float bec_zy = 0.5f* (r12[2] * f12[1]);
-      float bec_zz = 0.5f* (r12[2] * f12[2]);
+      float bec_xx = 0.5f * (r12[0] * f12[0]);
+      float bec_xy = 0.5f * (r12[0] * f12[1]);
+      float bec_xz = 0.5f * (r12[0] * f12[2]);
+      float bec_yx = 0.5f * (r12[1] * f12[0]);
+      float bec_yy = 0.5f * (r12[1] * f12[1]);
+      float bec_yz = 0.5f * (r12[1] * f12[2]);
+      float bec_zx = 0.5f * (r12[2] * f12[0]);
+      float bec_zy = 0.5f * (r12[2] * f12[1]);
+      float bec_zz = 0.5f * (r12[2] * f12[2]);
 
       atomicAdd(&g_bec[n1], bec_xx);
       atomicAdd(&g_bec[n1 + N], bec_xy);
@@ -1018,8 +1040,8 @@ static __global__ void find_partial_force_angular(
     float Fp[MAX_DIM_ANGULAR] = {0.0f};
     float sum_fxyz[NUM_OF_ABC * MAX_NUM_N];
     for (int d = 0; d < paramb.dim_angular; ++d) {
-      float tmp = g_Fp[(paramb.n_max_radial + 1 + d) * N + n1] 
-        + g_charge_derivative[(paramb.n_max_radial + 1 + d) * N + n1] * g_D_real[n1];
+      float tmp = g_Fp[(paramb.n_max_radial + 1 + d) * N + n1] +
+                  g_charge_derivative[(paramb.n_max_radial + 1 + d) * N + n1] * g_D_real[n1];
       Fp[d] = tmp;
     }
     for (int n = 0; n < paramb.n_max_angular + 1; ++n) {
@@ -1068,7 +1090,12 @@ static __global__ void find_partial_force_angular(
         }
         accumulate_f12(
           paramb.L_max,
-          paramb.has_q_222, paramb.has_q_1111, paramb.has_q_112, paramb.has_q_123, paramb.has_q_233, paramb.has_q_134,
+          paramb.has_q_222,
+          paramb.has_q_1111,
+          paramb.has_q_112,
+          paramb.has_q_123,
+          paramb.has_q_233,
+          paramb.has_q_134,
           paramb.num_L,
           n,
           paramb.n_max_angular + 1,
@@ -1239,7 +1266,7 @@ static __global__ void find_force_charge_real_space(
     double z1 = g_z[n1];
     float q1 = g_charge[n1];
     float s_pe = -charge_para.two_alpha_over_sqrt_pi * 0.5f * q1 * q1; // self energy part
-    float D_real = -q1 * charge_para.two_alpha_over_sqrt_pi; // self energy part
+    float D_real = -q1 * charge_para.two_alpha_over_sqrt_pi;           // self energy part
 
     for (int i1 = 0; i1 < g_NN[n1]; ++i1) {
       int n2 = g_NL[n1 + N * i1];
@@ -1256,7 +1283,8 @@ static __global__ void find_force_charge_real_space(
       float erfc_r = erfc(charge_para.alpha * d12) * d12inv;
       D_real += q2 * erfc_r;
       s_pe += 0.5f * qq * erfc_r;
-      float f2 = erfc_r + charge_para.two_alpha_over_sqrt_pi * exp(-charge_para.alpha * charge_para.alpha * d12 * d12);
+      float f2 = erfc_r + charge_para.two_alpha_over_sqrt_pi *
+                            exp(-charge_para.alpha * charge_para.alpha * d12 * d12);
       f2 *= -0.5f * K_C_SP * qq * d12inv * d12inv;
       float f12[3] = {r12[0] * f2, r12[1] * f2, r12[2] * f2};
       float f21[3] = {-r12[0] * f2, -r12[1] * f2, -r12[2] * f2};
@@ -1304,11 +1332,7 @@ void NEP_Charge::compute_large_box(
   const int N = type.size();
   const int grid_size = (N2 - N1 - 1) / BLOCK_SIZE + 1;
 
-  neighbor.find_neighbor_global(
-    rc,
-    box, 
-    type, 
-    position_per_atom);
+  neighbor.find_neighbor_global(rc, box, type, position_per_atom);
 
   find_neighbor_list_large_box<<<grid_size, BLOCK_SIZE>>>(
     paramb,
@@ -1379,10 +1403,7 @@ void NEP_Charge::compute_large_box(
 
   if (true) { // TODO
     // get BEC (the diagonal part)
-    find_bec_diagonal<<<grid_size, BLOCK_SIZE>>>(
-      N,
-      nep_data.charge.data(),
-      nep_data.bec.data());
+    find_bec_diagonal<<<grid_size, BLOCK_SIZE>>>(N, nep_data.charge.data(), nep_data.bec.data());
     GPU_CHECK_KERNEL
 
     // get BEC (radial descriptor part)
@@ -1423,10 +1444,7 @@ void NEP_Charge::compute_large_box(
     GPU_CHECK_KERNEL
 
     // scale q to q * sqrt(epsilon_inf)
-    scale_bec<<<grid_size, BLOCK_SIZE>>>(
-      N,
-      annmb.sqrt_epsilon_inf,
-      nep_data.bec.data());
+    scale_bec<<<grid_size, BLOCK_SIZE>>>(N, annmb.sqrt_epsilon_inf, nep_data.bec.data());
     GPU_CHECK_KERNEL
   }
 
@@ -1655,10 +1673,7 @@ void NEP_Charge::compute_small_box(
 
   if (true) { // TODO
     // get BEC (the diagonal part)
-    find_bec_diagonal<<<grid_size, BLOCK_SIZE>>>(
-      N,
-      nep_data.charge.data(),
-      nep_data.bec.data());
+    find_bec_diagonal<<<grid_size, BLOCK_SIZE>>>(N, nep_data.charge.data(), nep_data.bec.data());
     GPU_CHECK_KERNEL
 
     // get BEC (radial descriptor part)
@@ -1697,10 +1712,7 @@ void NEP_Charge::compute_small_box(
     GPU_CHECK_KERNEL
 
     // scale q to q * sqrt(epsilon_inf)
-    scale_bec<<<grid_size, BLOCK_SIZE>>>(
-      N,
-      annmb.sqrt_epsilon_inf,
-      nep_data.bec.data());
+    scale_bec<<<grid_size, BLOCK_SIZE>>>(N, annmb.sqrt_epsilon_inf, nep_data.bec.data());
     GPU_CHECK_KERNEL
   }
 

@@ -30,6 +30,8 @@ struct NEP_MULTIGPU_Data {
   GPU_Vector<int> NN_angular;   // angular neighbor list
   GPU_Vector<int> NL_angular;   // angular neighbor list
   GPU_Vector<float> parameters; // parameters to be optimized
+  GPU_Vector<float> rc_radial_pair;
+  GPU_Vector<float> rc_angular_pair;
   GPU_Vector<int> cell_count;
   GPU_Vector<int> cell_count_sum;
   GPU_Vector<int> cell_contents;
@@ -77,9 +79,11 @@ public:
     int num_gpus = 1;
     int model_type = 0; // 0=potential, 3=temperature-dependent free energy
     float rc_radial_max = 0.0f;
-    float rc_radial_max_inv = 0.0f; 
-    float rc_radial[NUM_ELEMENTS];     // radial cutoff
-    float rc_angular[NUM_ELEMENTS];    // angular cutoff
+    float rc_radial_max_inv = 0.0f;
+    float rc_radial[NUM_ELEMENTS];  // radial cutoff
+    float rc_angular[NUM_ELEMENTS]; // angular cutoff
+    const float* rc_radial_pair = nullptr;
+    const float* rc_angular_pair = nullptr;
     int MN_radial = 200;
     int MN_angular = 100;
     int n_max_radial = 0;  // n_radial = 0, 1, 2, ..., n_max_radial

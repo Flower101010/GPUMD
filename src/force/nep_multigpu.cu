@@ -29,13 +29,14 @@ when there is NVlink, but is also not very bad when there is only PCI-E.
 #include "utilities/gpu_macro.cuh"
 #include "utilities/nep_parameters.cuh"
 #include "utilities/nep_utilities.cuh"
+#include <algorithm>
 #include <cstddef>
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <thrust/execution_policy.h>
 #include <thrust/scan.h>
 #include <vector>
-#include <cstring>
 
 const std::string ELEMENTS[NUM_ELEMENTS] = {
   "H",  "He", "Li", "Be", "B",  "C",  "N",  "O",  "F",  "Ne", "Na", "Mg", "Al", "Si", "P",  "S",
@@ -98,8 +99,7 @@ NEP_MULTIGPU::NEP_MULTIGPU(
     paramb.model_type = 3;
     zbl.enabled = true;
   } else {
-    std::cout << tokens[0]
-              << " is an unsupported NEP model. We only support NEP4 models now."
+    std::cout << tokens[0] << " is an unsupported NEP model. We only support NEP4 models now."
               << std::endl;
     exit(1);
   }
@@ -144,7 +144,8 @@ NEP_MULTIGPU::NEP_MULTIGPU(
       if (tokens.size() == 4) {
         paramb.typewise_cutoff_zbl_factor = get_double_from_token(tokens[3], __FILE__, __LINE__);
         paramb.use_typewise_cutoff_zbl = true;
-        printf("    has the universal ZBL with typewise cutoff with a factor of %g.\n",
+        printf(
+          "    has the universal ZBL with typewise cutoff with a factor of %g.\n",
           paramb.typewise_cutoff_zbl_factor);
       } else {
         printf(
@@ -183,8 +184,6 @@ NEP_MULTIGPU::NEP_MULTIGPU(
       paramb.rc_radial_max = paramb.rc_radial[n];
     }
   }
-  paramb.rc_radial_max_inv = 1.0f / paramb.rc_radial_max;
-
   int MN_radial = get_int_from_token(tokens[tokens.size() - 2], __FILE__, __LINE__);
   int MN_angular = get_int_from_token(tokens[tokens.size() - 1], __FILE__, __LINE__);
   if (MN_radial > 819) {
@@ -199,9 +198,44 @@ NEP_MULTIGPU::NEP_MULTIGPU(
   printf("    enlarged MN_radial = %d.\n", paramb.MN_radial);
   printf("    enlarged MN_angular = %d.\n", paramb.MN_angular);
 
-  // n_max 10 8
+  std::vector<float> radial_pair(paramb.num_types * paramb.num_types, -1.0f);
+  std::vector<float> angular_pair(paramb.num_types * paramb.num_types, -1.0f);
   tokens = get_tokens(input);
-  if (tokens.size() != 3) {
+  while (!tokens.empty() && tokens[0] == "cross_cutoff") {
+    if (tokens.size() != 5) {
+      std::cout << "cross_cutoff should have 4 parameters." << std::endl;
+      exit(1);
+    }
+    const int type_i = get_int_from_token(tokens[1], __FILE__, __LINE__);
+    const int type_j = get_int_from_token(tokens[2], __FILE__, __LINE__);
+    if (
+      type_i < 0 || type_i >= paramb.num_types || type_j < 0 || type_j >= paramb.num_types ||
+      type_i == type_j) {
+      std::cout << "cross_cutoff should specify two different valid type indices." << std::endl;
+      exit(1);
+    }
+    const float radial = get_double_from_token(tokens[3], __FILE__, __LINE__);
+    const float angular = get_double_from_token(tokens[4], __FILE__, __LINE__);
+    if (angular > radial || angular < 3.0f || radial > 100.0f) {
+      std::cout << "cross_cutoff values should satisfy 3 <= angular <= radial <= 100." << std::endl;
+      exit(1);
+    }
+    const int ij = type_i * paramb.num_types + type_j;
+    const int ji = type_j * paramb.num_types + type_i;
+    if (radial_pair[ij] >= 0.0f) {
+      std::cout << "cross_cutoff for this type pair has already been set." << std::endl;
+      exit(1);
+    }
+    radial_pair[ij] = radial_pair[ji] = radial;
+    angular_pair[ij] = angular_pair[ji] = angular;
+    paramb.rc_radial_max = std::max(paramb.rc_radial_max, radial);
+    printf("    cross cutoff (%d, %d) = (%g A, %g A).\n", type_i, type_j, radial, angular);
+    tokens = get_tokens(input);
+  }
+  paramb.rc_radial_max_inv = 1.0f / paramb.rc_radial_max;
+
+  // n_max 10 8
+  if (tokens.size() != 3 || tokens[0] != "n_max") {
     std::cout << "This line should be n_max n_max_radial n_max_angular." << std::endl;
     exit(1);
   }
@@ -225,7 +259,9 @@ NEP_MULTIGPU::NEP_MULTIGPU(
   // l_max
   tokens = get_tokens(input);
   if (tokens.size() < 4) {
-    std::cout << "This line should be l_max l_max_3body has_q_222 has_q_1111 [has_q_112] [has_q_123] [has_q_233] [has_q_134]." << std::endl;
+    std::cout << "This line should be l_max l_max_3body has_q_222 has_q_1111 [has_q_112] "
+                 "[has_q_123] [has_q_233] [has_q_134]."
+              << std::endl;
     exit(1);
   }
 
@@ -347,6 +383,10 @@ NEP_MULTIGPU::NEP_MULTIGPU(
 
     nep_data[gpu].parameters.resize(annmb[gpu].num_para + annmb[gpu].dim);
     nep_data[gpu].parameters.copy_from_host(parameters.data());
+    nep_data[gpu].rc_radial_pair.resize(radial_pair.size());
+    nep_data[gpu].rc_radial_pair.copy_from_host(radial_pair.data());
+    nep_data[gpu].rc_angular_pair.resize(angular_pair.size());
+    nep_data[gpu].rc_angular_pair.copy_from_host(angular_pair.data());
     nep_data[gpu].descriptor_parameters_type_pair.resize(num_para_descriptor);
     nep_data[gpu].descriptor_parameters_type_pair.copy_from_host(descriptor_parameters.data());
 
@@ -385,11 +425,13 @@ void NEP_MULTIGPU::allocate_memory()
     nep_data[gpu].f12y.resize(nep_temp_data.num_atoms_per_gpu * paramb.MN_angular);
     nep_data[gpu].f12z.resize(nep_temp_data.num_atoms_per_gpu * paramb.MN_angular);
     nep_data[gpu].NN_radial.resize(nep_temp_data.num_atoms_per_gpu);
-    nep_data[gpu].NL_radial.resize(static_cast<size_t>(nep_temp_data.num_atoms_per_gpu) * paramb.MN_radial);
+    nep_data[gpu].NL_radial.resize(
+      static_cast<size_t>(nep_temp_data.num_atoms_per_gpu) * paramb.MN_radial);
     nep_data[gpu].NN_angular.resize(nep_temp_data.num_atoms_per_gpu);
     nep_data[gpu].NL_angular.resize(nep_temp_data.num_atoms_per_gpu * paramb.MN_angular);
     nep_data[gpu].Fp.resize(static_cast<size_t>(nep_temp_data.num_atoms_per_gpu) * annmb[gpu].dim);
-    nep_data[gpu].sum_fxyz.resize(static_cast<size_t>(nep_temp_data.num_atoms_per_gpu) * (paramb.n_max_angular + 1) *
+    nep_data[gpu].sum_fxyz.resize(
+      static_cast<size_t>(nep_temp_data.num_atoms_per_gpu) * (paramb.n_max_angular + 1) *
       ((paramb.L_max + 1) * (paramb.L_max + 1) - 1));
     nep_data[gpu].type.resize(nep_temp_data.num_atoms_per_gpu);
     nep_data[gpu].position.resize(nep_temp_data.num_atoms_per_gpu * 3);
@@ -743,8 +785,10 @@ static __global__ void find_neighbor_list_large_box(
           float d12_square = x12 * x12 + y12 * y12 + z12 * z12;
 
           int t2 = g_type[n2];
-          float rc_radial = (paramb.rc_radial[t1] + paramb.rc_radial[t2]) * 0.5f;
-          float rc_angular = (paramb.rc_angular[t1] + paramb.rc_angular[t2]) * 0.5f;
+          float rc_radial =
+            select_cutoff(paramb.rc_radial, paramb.rc_radial_pair, paramb.num_types, t1, t2);
+          float rc_angular =
+            select_cutoff(paramb.rc_angular, paramb.rc_angular_pair, paramb.num_types, t1, t2);
 
           if (d12_square >= rc_radial * rc_radial) {
             continue;
@@ -803,7 +847,7 @@ static __global__ void find_descriptor(
       float d12 = sqrt(x12 * x12 + y12 * y12 + z12 * z12);
       float fc12;
       int t2 = g_type[n2];
-      float rc = (paramb.rc_radial[t1] + paramb.rc_radial[t2]) * 0.5f;
+      float rc = select_cutoff(paramb.rc_radial, paramb.rc_radial_pair, paramb.num_types, t1, t2);
       float rcinv = 1.0f / rc;
       find_fc(rc, rcinv, d12, fc12);
       float fn12[MAX_NUM_N];
@@ -832,7 +876,8 @@ static __global__ void find_descriptor(
         float d12 = sqrt(x12 * x12 + y12 * y12 + z12 * z12);
         float fc12;
         int t2 = g_type[n2];
-        float rc = (paramb.rc_angular[t1] + paramb.rc_angular[t2]) * 0.5f;
+        float rc =
+          select_cutoff(paramb.rc_angular, paramb.rc_angular_pair, paramb.num_types, t1, t2);
         float rcinv = 1.0f / rc;
         find_fc(rc, rcinv, d12, fc12);
         float fn12[MAX_NUM_N];
@@ -850,10 +895,22 @@ static __global__ void find_descriptor(
         }
         accumulate_s(paramb.L_max, d12, x12, y12, z12, gn12, s);
       }
-      find_q(paramb.L_max, paramb.has_q_222, paramb.has_q_1111, paramb.has_q_112, paramb.has_q_123, paramb.has_q_233, paramb.has_q_134,
-        paramb.n_max_angular + 1, n, s, q + (paramb.n_max_radial + 1));
+      find_q(
+        paramb.L_max,
+        paramb.has_q_222,
+        paramb.has_q_1111,
+        paramb.has_q_112,
+        paramb.has_q_123,
+        paramb.has_q_233,
+        paramb.has_q_134,
+        paramb.n_max_angular + 1,
+        n,
+        s,
+        q + (paramb.n_max_radial + 1));
       for (int abc = 0; abc < (paramb.L_max + 1) * (paramb.L_max + 1) - 1; ++abc) {
-        g_sum_fxyz[static_cast<size_t>(N) * (n * ((paramb.L_max + 1) * (paramb.L_max + 1) - 1) + abc) + n1] = s[abc];
+        g_sum_fxyz
+          [static_cast<size_t>(N) * (n * ((paramb.L_max + 1) * (paramb.L_max + 1) - 1) + abc) +
+           n1] = s[abc];
       }
     }
 
@@ -866,15 +923,7 @@ static __global__ void find_descriptor(
     float F = 0.0f, Fp[MAX_DIM] = {0.0f};
 
     apply_ann_one_layer(
-      annmb.dim,
-      annmb.num_neurons1,
-      annmb.w0[t1],
-      annmb.b0[t1],
-      annmb.w1[t1],
-      annmb.b1,
-      q,
-      F,
-      Fp);
+      annmb.dim, annmb.num_neurons1, annmb.w0[t1], annmb.b0[t1], annmb.w1[t1], annmb.b1, q, F, Fp);
 
     g_pe[n1] = F;
 
@@ -934,7 +983,7 @@ static __global__ void find_force_radial(
       float f12[3] = {0.0f};
       float f21[3] = {0.0f};
       float fc12, fcp12;
-      float rc = (paramb.rc_radial[t1] + paramb.rc_radial[t2]) * 0.5f;
+      float rc = select_cutoff(paramb.rc_radial, paramb.rc_radial_pair, paramb.num_types, t1, t2);
       float rcinv = 1.0f / rc;
       find_fc_and_fcp(rc, rcinv, d12, fc12, fcp12);
       float fn12[MAX_NUM_N];
@@ -1019,8 +1068,8 @@ static __global__ void find_partial_force_angular(
     }
     for (int n = 0; n < paramb.n_max_angular + 1; ++n) {
       for (int abc = 0; abc < (paramb.L_max + 1) * (paramb.L_max + 1) - 1; ++abc) {
-        sum_fxyz[n * NUM_OF_ABC + abc] = 
-          g_sum_fxyz[static_cast<size_t>(N) * (n * ((paramb.L_max + 1) * (paramb.L_max + 1) - 1) + abc) + n1];
+        sum_fxyz[n * NUM_OF_ABC + abc] = g_sum_fxyz
+          [static_cast<size_t>(N) * (n * ((paramb.L_max + 1) * (paramb.L_max + 1) - 1) + abc) + n1];
       }
     }
 
@@ -1040,7 +1089,7 @@ static __global__ void find_partial_force_angular(
       float f12[3] = {0.0f};
       float fc12, fcp12;
       int t2 = g_type[n2];
-      float rc = (paramb.rc_angular[t1] + paramb.rc_angular[t2]) * 0.5f;
+      float rc = select_cutoff(paramb.rc_angular, paramb.rc_angular_pair, paramb.num_types, t1, t2);
       float rcinv = 1.0f / rc;
       find_fc_and_fcp(rc, rcinv, d12, fc12, fcp12);
 
@@ -1061,8 +1110,24 @@ static __global__ void find_partial_force_angular(
           gn12 += fn12[k] * annmb.c_type_pair[c_index];
           gnp12 += fnp12[k] * annmb.c_type_pair[c_index];
         }
-        accumulate_f12(paramb.L_max, paramb.has_q_222, paramb.has_q_1111, paramb.has_q_112, paramb.has_q_123, paramb.has_q_233, paramb.has_q_134,
-          paramb.num_L, n, paramb.n_max_angular + 1, d12, r12, gn12, gnp12, Fp, sum_fxyz, f12);
+        accumulate_f12(
+          paramb.L_max,
+          paramb.has_q_222,
+          paramb.has_q_1111,
+          paramb.has_q_112,
+          paramb.has_q_123,
+          paramb.has_q_233,
+          paramb.has_q_134,
+          paramb.num_L,
+          n,
+          paramb.n_max_angular + 1,
+          d12,
+          r12,
+          gn12,
+          gnp12,
+          Fp,
+          sum_fxyz,
+          f12);
       }
       g_f12x[index] = f12[0];
       g_f12y[index] = f12[1];
@@ -1393,6 +1458,8 @@ void NEP_MULTIGPU::compute(
     exit(1);
   }
 
+  paramb.rc_radial_pair = nep_data[0].rc_radial_pair.data();
+  paramb.rc_angular_pair = nep_data[0].rc_angular_pair.data();
   find_cell_list(
     nep_data[0].stream,
     partition_direction,
@@ -1527,6 +1594,8 @@ void NEP_MULTIGPU::compute(
     CHECK(gpuSetDevice(gpu));
 #endif
 
+    paramb.rc_radial_pair = nep_data[gpu].rc_radial_pair.data();
+    paramb.rc_angular_pair = nep_data[gpu].rc_angular_pair.data();
     find_cell_list(
       nep_data[gpu].stream,
       partition_direction,
@@ -1781,7 +1850,7 @@ static __global__ void find_descriptor(
       float d12 = sqrt(x12 * x12 + y12 * y12 + z12 * z12);
       float fc12;
       int t2 = g_type[n2];
-      float rc = (paramb.rc_radial[t1] + paramb.rc_radial[t2]) * 0.5f;
+      float rc = select_cutoff(paramb.rc_radial, paramb.rc_radial_pair, paramb.num_types, t1, t2);
       float rcinv = 1.0f / rc;
       find_fc(rc, rcinv, d12, fc12);
       float fn12[MAX_NUM_N];
@@ -1810,7 +1879,8 @@ static __global__ void find_descriptor(
         float d12 = sqrt(x12 * x12 + y12 * y12 + z12 * z12);
         float fc12;
         int t2 = g_type[n2];
-        float rc = (paramb.rc_angular[t1] + paramb.rc_angular[t2]) * 0.5f;
+        float rc =
+          select_cutoff(paramb.rc_angular, paramb.rc_angular_pair, paramb.num_types, t1, t2);
         float rcinv = 1.0f / rc;
         find_fc(rc, rcinv, d12, fc12);
         float fn12[MAX_NUM_N];
@@ -1828,10 +1898,22 @@ static __global__ void find_descriptor(
         }
         accumulate_s(paramb.L_max, d12, x12, y12, z12, gn12, s);
       }
-      find_q(paramb.L_max, paramb.has_q_222, paramb.has_q_1111, paramb.has_q_112, paramb.has_q_123, paramb.has_q_233, paramb.has_q_134,
-        paramb.n_max_angular + 1, n, s, q + (paramb.n_max_radial + 1));
+      find_q(
+        paramb.L_max,
+        paramb.has_q_222,
+        paramb.has_q_1111,
+        paramb.has_q_112,
+        paramb.has_q_123,
+        paramb.has_q_233,
+        paramb.has_q_134,
+        paramb.n_max_angular + 1,
+        n,
+        s,
+        q + (paramb.n_max_radial + 1));
       for (int abc = 0; abc < (paramb.L_max + 1) * (paramb.L_max + 1) - 1; ++abc) {
-        g_sum_fxyz[static_cast<size_t>(N) * (n * ((paramb.L_max + 1) * (paramb.L_max + 1) - 1) + abc) + n1] = s[abc];
+        g_sum_fxyz
+          [static_cast<size_t>(N) * (n * ((paramb.L_max + 1) * (paramb.L_max + 1) - 1) + abc) +
+           n1] = s[abc];
       }
     }
 
@@ -1896,6 +1978,8 @@ void NEP_MULTIGPU::compute(
     exit(1);
   }
 
+  paramb.rc_radial_pair = nep_data[0].rc_radial_pair.data();
+  paramb.rc_angular_pair = nep_data[0].rc_angular_pair.data();
   find_cell_list(
     nep_data[0].stream,
     partition_direction,
@@ -2030,6 +2114,8 @@ void NEP_MULTIGPU::compute(
     CHECK(gpuSetDevice(gpu));
 #endif
 
+    paramb.rc_radial_pair = nep_data[gpu].rc_radial_pair.data();
+    paramb.rc_angular_pair = nep_data[gpu].rc_angular_pair.data();
     find_cell_list(
       nep_data[gpu].stream,
       partition_direction,

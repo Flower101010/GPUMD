@@ -14,8 +14,8 @@
 */
 
 #pragma once
-#include "potential.cuh"
 #include "nep_compile.cuh"
+#include "potential.cuh"
 #include "utilities/common.cuh"
 #include "utilities/gpu_vector.cuh"
 #include <memory>
@@ -27,14 +27,18 @@ struct TNEP_Data {
   GPU_Vector<float> Fp;          // gradient of descriptors
   GPU_Vector<float> sum_fxyz;
   GPU_Vector<float> parameters; // parameters to be optimized
+  GPU_Vector<float> rc_radial_pair;
+  GPU_Vector<float> rc_angular_pair;
 };
 
 class TNEP : public Potential
 {
 public:
   struct ParaMB {
-    float rc_radial[NUM_ELEMENTS];     // radial cutoff
-    float rc_angular[NUM_ELEMENTS];    // angular cutoff
+    float rc_radial[NUM_ELEMENTS];  // radial cutoff
+    float rc_angular[NUM_ELEMENTS]; // angular cutoff
+    const float* rc_radial_pair = nullptr;
+    const float* rc_angular_pair = nullptr;
     int basis_size_radial = 0;
     int basis_size_angular = 0;
     int n_max_radial = 0;  // n_radial = 0, 1, 2, ..., n_max_radial
@@ -55,26 +59,23 @@ public:
   };
 
   struct ANN {
-    int dim = 0;                    // dimension of the descriptor
-    int num_neurons1 = 0;           // number of neurons in the hidden layer
-    int num_neurons2 = 0;           // number of neurons in the output layer
-    int num_hidden_layers = 0;      // number of hidden layers
-    int num_para = 0;               // number of parameters
-    int one_ann_no_bias = 0;        // number of parameters in the ANN without bias
-    const float* wb[NUM_ELEMENTS];  // weight from the input layer to the hidden layer for dipole
-    const float* b;                 // bias for the output layer for dipole
+    int dim = 0;                   // dimension of the descriptor
+    int num_neurons1 = 0;          // number of neurons in the hidden layer
+    int num_neurons2 = 0;          // number of neurons in the output layer
+    int num_hidden_layers = 0;     // number of hidden layers
+    int num_para = 0;              // number of parameters
+    int one_ann_no_bias = 0;       // number of parameters in the ANN without bias
+    const float* wb[NUM_ELEMENTS]; // weight from the input layer to the hidden layer for dipole
+    const float* b;                // bias for the output layer for dipole
     // for the scalar part of polarizability
-    const float* wb_pol[NUM_ELEMENTS]; // weight from the input layer to the hidden layer for polarizability
-    const float* b_pol;                // bias for the output layer for polarizability
+    const float*
+      wb_pol[NUM_ELEMENTS]; // weight from the input layer to the hidden layer for polarizability
+    const float* b_pol;     // bias for the output layer for polarizability
     // for elements in descriptor
     const float* c;
   };
 
-  TNEP(
-    Parameters& para,
-    int N,
-    int version,
-    int deviceCount);
+  TNEP(Parameters& para, int N, int version, int deviceCount);
   void find_force(
     Parameters& para,
     const float* parameters,

@@ -20,13 +20,7 @@
 
 class Parameters;
 
-enum class NEP_Compile_Mode {
-  NEP = 0,
-  CHARGE = 1,
-  VDW = 2,
-  CHARGE_VDW = 3,
-  TNEP = 4
-};
+enum class NEP_Compile_Mode { NEP = 0, CHARGE = 1, VDW = 2, CHARGE_VDW = 3, TNEP = 4 };
 
 struct NEP_Compile_Config {
   NEP_Compile_Mode mode = NEP_Compile_Mode::NEP;
@@ -64,13 +58,13 @@ struct NEP_Compile_Config {
 
   std::vector<float> rc_radial;
   std::vector<float> rc_angular;
+  std::vector<float> rc_radial_pair;
+  std::vector<float> rc_angular_pair;
   std::vector<float> c6_ref_sqrt;
 };
 
 NEP_Compile_Config make_nep_compile_config(
-  const Parameters& para,
-  NEP_Compile_Mode mode,
-  const float* c6_ref_sqrt = nullptr);
+  const Parameters& para, NEP_Compile_Mode mode, const float* c6_ref_sqrt = nullptr);
 
 class NEP_Compile
 {
@@ -172,98 +166,241 @@ public:
     float* Fp);
 
   void launch_bec_radial(
-    int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-    const float* x12, const float* y12, const float* z12,
-    const float* parameters, const float* charge_derivative, float* bec);
+    int N,
+    const int* NN_sum,
+    const int* NN,
+    const int* NL,
+    const int* type,
+    const float* x12,
+    const float* y12,
+    const float* z12,
+    const float* parameters,
+    const float* charge_derivative,
+    float* bec);
   void launch_bec_angular(
-    int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-    const float* x12, const float* y12, const float* z12,
-    const float* parameters, const float* charge_derivative,
-    const float* sum_fxyz, float* bec);
+    int N,
+    const int* NN_sum,
+    const int* NN,
+    const int* NL,
+    const int* type,
+    const float* x12,
+    const float* y12,
+    const float* z12,
+    const float* parameters,
+    const float* charge_derivative,
+    const float* sum_fxyz,
+    float* bec);
 
   // Model-specific public interfaces keep the original training code readable.
   void launch_force_radial(
-    int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-    const float* x12, const float* y12, const float* z12,
-    const float* parameters, const float* Fp,
-    float* fx, float* fy, float* fz, float* virial);
+    int N,
+    const int* NN_sum,
+    const int* NN,
+    const int* NL,
+    const int* type,
+    const float* x12,
+    const float* y12,
+    const float* z12,
+    const float* parameters,
+    const float* Fp,
+    float* fx,
+    float* fy,
+    float* fz,
+    float* virial);
 
   void launch_force_angular(
-    int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-    const float* x12, const float* y12, const float* z12,
-    const float* parameters, const float* Fp, const float* sum_fxyz,
-    float* fx, float* fy, float* fz, float* virial);
+    int N,
+    const int* NN_sum,
+    const int* NN,
+    const int* NL,
+    const int* type,
+    const float* x12,
+    const float* y12,
+    const float* z12,
+    const float* parameters,
+    const float* Fp,
+    const float* sum_fxyz,
+    float* fx,
+    float* fy,
+    float* fz,
+    float* virial);
 
   void launch_force_charge_radial(
-    int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-    const float* x12, const float* y12, const float* z12,
-    const float* parameters, const float* Fp,
-    const float* charge_derivative, const float* D_real,
-    float* fx, float* fy, float* fz, float* virial);
+    int N,
+    const int* NN_sum,
+    const int* NN,
+    const int* NL,
+    const int* type,
+    const float* x12,
+    const float* y12,
+    const float* z12,
+    const float* parameters,
+    const float* Fp,
+    const float* charge_derivative,
+    const float* D_real,
+    float* fx,
+    float* fy,
+    float* fz,
+    float* virial);
 
   void launch_force_charge_angular(
-    int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-    const float* x12, const float* y12, const float* z12,
-    const float* parameters, const float* Fp,
-    const float* charge_derivative, const float* D_real,
+    int N,
+    const int* NN_sum,
+    const int* NN,
+    const int* NL,
+    const int* type,
+    const float* x12,
+    const float* y12,
+    const float* z12,
+    const float* parameters,
+    const float* Fp,
+    const float* charge_derivative,
+    const float* D_real,
     const float* sum_fxyz,
-    float* fx, float* fy, float* fz, float* virial);
+    float* fx,
+    float* fy,
+    float* fz,
+    float* virial);
 
   void launch_force_vdw_radial(
-    int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-    const float* x12, const float* y12, const float* z12,
-    const float* parameters, const float* Fp,
-    const float* C6_derivative, const float* D_C6,
-    float* fx, float* fy, float* fz, float* virial);
+    int N,
+    const int* NN_sum,
+    const int* NN,
+    const int* NL,
+    const int* type,
+    const float* x12,
+    const float* y12,
+    const float* z12,
+    const float* parameters,
+    const float* Fp,
+    const float* C6_derivative,
+    const float* D_C6,
+    float* fx,
+    float* fy,
+    float* fz,
+    float* virial);
 
   void launch_force_vdw_angular(
-    int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-    const float* x12, const float* y12, const float* z12,
-    const float* parameters, const float* Fp,
-    const float* C6_derivative, const float* D_C6,
+    int N,
+    const int* NN_sum,
+    const int* NN,
+    const int* NL,
+    const int* type,
+    const float* x12,
+    const float* y12,
+    const float* z12,
+    const float* parameters,
+    const float* Fp,
+    const float* C6_derivative,
+    const float* D_C6,
     const float* sum_fxyz,
-    float* fx, float* fy, float* fz, float* virial);
+    float* fx,
+    float* fy,
+    float* fz,
+    float* virial);
 
   void launch_force_charge_vdw_radial(
-    int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-    const float* x12, const float* y12, const float* z12,
-    const float* parameters, const float* Fp,
-    const float* charge_derivative, const float* D_real,
-    const float* C6_derivative, const float* D_C6,
-    float* fx, float* fy, float* fz, float* virial);
+    int N,
+    const int* NN_sum,
+    const int* NN,
+    const int* NL,
+    const int* type,
+    const float* x12,
+    const float* y12,
+    const float* z12,
+    const float* parameters,
+    const float* Fp,
+    const float* charge_derivative,
+    const float* D_real,
+    const float* C6_derivative,
+    const float* D_C6,
+    float* fx,
+    float* fy,
+    float* fz,
+    float* virial);
 
   void launch_force_charge_vdw_angular(
-    int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-    const float* x12, const float* y12, const float* z12,
-    const float* parameters, const float* Fp,
-    const float* charge_derivative, const float* D_real,
-    const float* C6_derivative, const float* D_C6,
+    int N,
+    const int* NN_sum,
+    const int* NN,
+    const int* NL,
+    const int* type,
+    const float* x12,
+    const float* y12,
+    const float* z12,
+    const float* parameters,
+    const float* Fp,
+    const float* charge_derivative,
+    const float* D_real,
+    const float* C6_derivative,
+    const float* D_C6,
     const float* sum_fxyz,
-    float* fx, float* fy, float* fz, float* virial);
+    float* fx,
+    float* fy,
+    float* fz,
+    float* virial);
 
   void launch_force_tnep_radial(
     bool is_dipole,
-    int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-    const float* x12, const float* y12, const float* z12,
-    const float* parameters, const float* Fp,
-    float* fx, float* fy, float* fz, float* virial);
+    int N,
+    const int* NN_sum,
+    const int* NN,
+    const int* NL,
+    const int* type,
+    const float* x12,
+    const float* y12,
+    const float* z12,
+    const float* parameters,
+    const float* Fp,
+    float* fx,
+    float* fy,
+    float* fz,
+    float* virial);
 
   void launch_force_tnep_angular(
     bool is_dipole,
-    int N, const int* NN_sum, const int* NN, const int* NL, const int* type,
-    const float* x12, const float* y12, const float* z12,
-    const float* parameters, const float* Fp, const float* sum_fxyz,
-    float* fx, float* fy, float* fz, float* virial);
+    int N,
+    const int* NN_sum,
+    const int* NN,
+    const int* NL,
+    const int* type,
+    const float* x12,
+    const float* y12,
+    const float* z12,
+    const float* parameters,
+    const float* Fp,
+    const float* sum_fxyz,
+    float* fx,
+    float* fy,
+    float* fz,
+    float* virial);
 
 private:
   bool valid_ = false;
   using DescriptorRadialFunction = int (*)(
-    int, const int*, const int*, const int*, const int*,
-    const float*, const float*, const float*, const float*, float*);
+    int,
+    const int*,
+    const int*,
+    const int*,
+    const int*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    float*);
 
   using DescriptorAngularFunction = int (*)(
-    int, const int*, const int*, const int*, const int*,
-    const float*, const float*, const float*, const float*, float*, float*);
+    int,
+    const int*,
+    const int*,
+    const int*,
+    const int*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    float*,
+    float*);
 
   using AnnNepFunction =
     int (*)(int, const int*, const float*, const float*, const float*, float*, float*);
@@ -271,39 +408,93 @@ private:
   using AnnTemperatureFunction =
     int (*)(int, const int*, const float*, float*, const float*, const float*, float*, float*);
 
-  using AnnChargeFunction =
-    int (*)(int, const int*, const float*, const float*, const float*,
-            float*, float*, float*, float*);
+  using AnnChargeFunction = int (*)(
+    int, const int*, const float*, const float*, const float*, float*, float*, float*, float*);
 
-  using AnnChargeVdwFunction =
-    int (*)(int, const int*, const float*, const float*, const float*,
-            float*, float*, float*, float*, float*, float*);
+  using AnnChargeVdwFunction = int (*)(
+    int,
+    const int*,
+    const float*,
+    const float*,
+    const float*,
+    float*,
+    float*,
+    float*,
+    float*,
+    float*,
+    float*);
 
   using AnnTnepPolFunction =
     int (*)(int, const int*, const float*, const float*, const float*, float*, float*);
 
   using BecRadialFunction = int (*)(
-    int, const int*, const int*, const int*, const int*,
-    const float*, const float*, const float*,
-    const float*, const float*, float*);
+    int,
+    const int*,
+    const int*,
+    const int*,
+    const int*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    float*);
   using BecAngularFunction = int (*)(
-    int, const int*, const int*, const int*, const int*,
-    const float*, const float*, const float*,
-    const float*, const float*, const float*, float*);
+    int,
+    const int*,
+    const int*,
+    const int*,
+    const int*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    float*);
 
   using ForceRadialFunction = int (*)(
-    int, const int*, const int*, const int*, const int*,
-    const float*, const float*, const float*,
-    const float*, const float*,
-    const float*, const float*, const float*, const float*,
-    int, float*, float*, float*, float*);
+    int,
+    const int*,
+    const int*,
+    const int*,
+    const int*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    int,
+    float*,
+    float*,
+    float*,
+    float*);
 
   using ForceAngularFunction = int (*)(
-    int, const int*, const int*, const int*, const int*,
-    const float*, const float*, const float*,
-    const float*, const float*,
-    const float*, const float*, const float*, const float*,
-    const float*, int, float*, float*, float*, float*);
+    int,
+    const int*,
+    const int*,
+    const int*,
+    const int*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    const float*,
+    int,
+    float*,
+    float*,
+    float*,
+    float*);
 
   void* library_ = nullptr;
   DescriptorRadialFunction descriptor_radial_ = nullptr;

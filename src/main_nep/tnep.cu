@@ -15,17 +15,17 @@
 
 /*----------------------------------------------------------------------------80
 The tensorial neuroevolution potential (TNEP)
-Ref: Nan Xu, Petter Rosander, Christian Schäfer, Eric Lindgren, 
-Nicklas Österbacka, Mandi Fang, Wei Chen, Yi He, Zheyong Fan, Paul Erhart, 
-Tensorial properties via the neuroevolution potential framework: 
-Fast simulation of infrared and Raman spectra, 
+Ref: Nan Xu, Petter Rosander, Christian Schäfer, Eric Lindgren,
+Nicklas Österbacka, Mandi Fang, Wei Chen, Yi He, Zheyong Fan, Paul Erhart,
+Tensorial properties via the neuroevolution potential framework:
+Fast simulation of infrared and Raman spectra,
 J. Chem. Theory Comput. 20, 3273 (2024).
 ------------------------------------------------------------------------------*/
 
 #include "dataset.cuh"
 #include "mic.cuh"
-#include "tnep.cuh"
 #include "parameters.cuh"
+#include "tnep.cuh"
 #include "utilities/common.cuh"
 #include "utilities/error.cuh"
 #include "utilities/gpu_macro.cuh"
@@ -60,7 +60,7 @@ static __global__ void find_descriptors_radial(
       float d12 = sqrt(x12 * x12 + y12 * y12 + z12 * z12);
       float fc12;
       int t2 = g_type[n2];
-      float rc = (paramb.rc_radial[t1] + paramb.rc_radial[t2]) * 0.5f;
+      float rc = select_cutoff(paramb.rc_radial, paramb.rc_radial_pair, paramb.num_types, t1, t2);
       float rcinv = 1.0f / rc;
       find_fc(rc, rcinv, d12, fc12);
 
@@ -113,7 +113,8 @@ static __global__ void find_descriptors_angular(
         float d12 = sqrt(x12 * x12 + y12 * y12 + z12 * z12);
         float fc12;
         int t2 = g_type[n2];
-        float rc = (paramb.rc_angular[t1] + paramb.rc_angular[t2]) * 0.5f;
+        float rc =
+          select_cutoff(paramb.rc_angular, paramb.rc_angular_pair, paramb.num_types, t1, t2);
         float rcinv = 1.0f / rc;
         find_fc(rc, rcinv, d12, fc12);
         float fn12[MAX_NUM_N];
@@ -131,7 +132,18 @@ static __global__ void find_descriptors_angular(
         }
         accumulate_s(paramb.L_max, d12, x12, y12, z12, gn12, s);
       }
-      find_q(paramb.L_max, paramb.has_q_222, paramb.has_q_1111, paramb.has_q_112, paramb.has_q_123, paramb.has_q_233, paramb.has_q_134, paramb.n_max_angular + 1, n, s, q);
+      find_q(
+        paramb.L_max,
+        paramb.has_q_222,
+        paramb.has_q_1111,
+        paramb.has_q_112,
+        paramb.has_q_123,
+        paramb.has_q_233,
+        paramb.has_q_134,
+        paramb.n_max_angular + 1,
+        n,
+        s,
+        q);
       int num_abc = (paramb.L_max + 1) * (paramb.L_max + 1) - 1;
       for (int abc = 0; abc < num_abc; ++abc) {
         g_sum_fxyz[(n * num_abc + abc) * N + n1] = s[abc];
@@ -147,11 +159,7 @@ static __global__ void find_descriptors_angular(
   }
 }
 
-TNEP::TNEP(
-  Parameters& para,
-  int N,
-  int version,
-  int deviceCount)
+TNEP::TNEP(Parameters& para, int N, int version, int deviceCount)
 {
   paramb.version = version;
   paramb.num_types = para.num_types;
@@ -203,7 +211,8 @@ TNEP::TNEP(
     annmb[device_id].num_hidden_layers = para.num_hidden_layers;
     if (para.num_hidden_layers == 2) {
       annmb[device_id].num_neurons2 = para.num_neurons2;
-      annmb[device_id].one_ann_no_bias = (annmb[device_id].dim + 1) * annmb[device_id].num_neurons1 +
+      annmb[device_id].one_ann_no_bias =
+        (annmb[device_id].dim + 1) * annmb[device_id].num_neurons1 +
         (annmb[device_id].num_neurons1 + 2) * annmb[device_id].num_neurons2;
     } else {
       annmb[device_id].one_ann_no_bias = (annmb[device_id].dim + 2) * annmb[device_id].num_neurons1;
@@ -214,11 +223,14 @@ TNEP::TNEP(
     nep_data[device_id].sum_fxyz.resize(
       N * (paramb.n_max_angular + 1) * ((paramb.L_max + 1) * (paramb.L_max + 1) - 1));
     nep_data[device_id].parameters.resize(annmb[device_id].num_para);
+    nep_data[device_id].rc_radial_pair.resize(para.rc_radial_pair.size());
+    nep_data[device_id].rc_radial_pair.copy_from_host(para.rc_radial_pair.data());
+    nep_data[device_id].rc_angular_pair.resize(para.rc_angular_pair.size());
+    nep_data[device_id].rc_angular_pair.copy_from_host(para.rc_angular_pair.data());
   }
   if (para.nep_compile && para.prediction == 0) {
     CHECK(gpuSetDevice(0));
-    compiled_kernel_.reset(new NEP_Compile(
-      make_nep_compile_config(para, NEP_Compile_Mode::TNEP)));
+    compiled_kernel_.reset(new NEP_Compile(make_nep_compile_config(para, NEP_Compile_Mode::TNEP)));
     if (!compiled_kernel_->is_valid()) {
       compiled_kernel_.reset();
     }
@@ -247,7 +259,8 @@ void TNEP::update_potential(Parameters& para, float* parameters, ANN& ann)
   ann.c = pointer;
 }
 
-static void __global__ find_max_min(const int N, const float* g_q, float* g_q_scaler, float* g_q_scaler_max, float* g_q_scaler_min)
+static void __global__ find_max_min(
+  const int N, const float* g_q, float* g_q_scaler, float* g_q_scaler_max, float* g_q_scaler_min)
 {
   const int tid = threadIdx.x;
   const int bid = blockIdx.x;
@@ -491,7 +504,7 @@ static __global__ void find_force_radial(
       float d12 = sqrt(r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2]);
       float d12inv = 1.0f / d12;
       float fc12, fcp12;
-      float rc = (paramb.rc_radial[t1] + paramb.rc_radial[t2]) * 0.5f;
+      float rc = select_cutoff(paramb.rc_radial, paramb.rc_radial_pair, paramb.num_types, t1, t2);
       float rcinv = 1.0f / rc;
       find_fc_and_fcp(rc, rcinv, d12, fc12, fcp12);
       float fn12[MAX_NUM_N];
@@ -579,8 +592,7 @@ static __global__ void find_force_angular(
     int num_abc = (paramb.L_max + 1) * (paramb.L_max + 1) - 1;
     for (int n = 0; n <= paramb.n_max_angular; ++n) {
       for (int abc = 0; abc < num_abc; ++abc) {
-        sum_fxyz[n * NUM_OF_ABC + abc] =
-          g_sum_fxyz[(n * num_abc + abc) * N + n1];
+        sum_fxyz[n * NUM_OF_ABC + abc] = g_sum_fxyz[(n * num_abc + abc) * N + n1];
       }
     }
     int neighbor_number = g_NN[n1];
@@ -592,7 +604,7 @@ static __global__ void find_force_angular(
       float d12 = sqrt(r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2]);
       float fc12, fcp12;
       int t2 = g_type[n2];
-      float rc = (paramb.rc_angular[t1] + paramb.rc_angular[t2]) * 0.5f;
+      float rc = select_cutoff(paramb.rc_angular, paramb.rc_angular_pair, paramb.num_types, t1, t2);
       float rcinv = 1.0f / rc;
       find_fc_and_fcp(rc, rcinv, d12, fc12, fcp12);
       float f12[3] = {0.0f};
@@ -614,8 +626,24 @@ static __global__ void find_force_angular(
           gn12 += fn12[k] * annmb.c[c_index];
           gnp12 += fnp12[k] * annmb.c[c_index];
         }
-        accumulate_f12(paramb.L_max, paramb.has_q_222, paramb.has_q_1111, paramb.has_q_112, paramb.has_q_123, paramb.has_q_233, paramb.has_q_134, 
-          paramb.num_L, n, paramb.n_max_angular + 1, d12, r12, gn12, gnp12, Fp, sum_fxyz, f12);
+        accumulate_f12(
+          paramb.L_max,
+          paramb.has_q_222,
+          paramb.has_q_1111,
+          paramb.has_q_112,
+          paramb.has_q_123,
+          paramb.has_q_233,
+          paramb.has_q_134,
+          paramb.num_L,
+          n,
+          paramb.n_max_angular + 1,
+          d12,
+          r12,
+          gn12,
+          gnp12,
+          Fp,
+          sum_fxyz,
+          f12);
       }
 
       atomicAdd(&g_fx[n1], f12[0]);
@@ -665,6 +693,8 @@ void TNEP::find_force(
 
   for (int device_id = 0; device_id < device_in_this_iter; ++device_id) {
     CHECK(gpuSetDevice(device_id));
+    paramb.rc_radial_pair = nep_data[device_id].rc_radial_pair.data();
+    paramb.rc_angular_pair = nep_data[device_id].rc_angular_pair.data();
     const int block_size = 32;
     const int grid_size = (dataset[device_id].N - 1) / block_size + 1;
 

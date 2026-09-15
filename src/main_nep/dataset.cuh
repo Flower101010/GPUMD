@@ -47,11 +47,11 @@ public:
   GPU_Vector<float> box_original; // (original) box (9 components)
   GPU_Vector<int> num_cell;       // number of cells in the expanded box (3 components)
 
-  GPU_Vector<int> NN_radial;  // radial neighbor number
-  GPU_Vector<int> NL_radial;  // radial neighbor list
-  GPU_Vector<int> NN_angular; // angular neighbor number
-  GPU_Vector<int> NL_angular; // angular neighbor list
-  GPU_Vector<int> NN_radial_sum; // prefix sum of NN_radial
+  GPU_Vector<int> NN_radial;      // radial neighbor number
+  GPU_Vector<int> NL_radial;      // radial neighbor list
+  GPU_Vector<int> NN_angular;     // angular neighbor number
+  GPU_Vector<int> NL_angular;     // angular neighbor list
+  GPU_Vector<int> NN_radial_sum;  // prefix sum of NN_radial
   GPU_Vector<int> NN_angular_sum; // prefix sum of NN_angular
   GPU_Vector<float> x12_radial;
   GPU_Vector<float> y12_radial;
@@ -60,18 +60,18 @@ public:
   GPU_Vector<float> y12_angular;
   GPU_Vector<float> z12_angular;
 
-  GPU_Vector<float> charge;      // calculated charge in GPU
-  GPU_Vector<float> charge_shifted;      // shifted charge in GPU
-  GPU_Vector<float> bec;         // Born effective charge in GPU
-  GPU_Vector<float> energy;      // calculated energy in GPU
-  GPU_Vector<float> virial;      // calculated virial in GPU
-  GPU_Vector<float> force;       // calculated force in GPU
-  GPU_Vector<float> avirial; // calculated atomic virial in GPU
-  std::vector<float> charge_cpu;  // calculated charge in CPU
-  std::vector<float> bec_cpu;     // calculated BEC in CPU
-  std::vector<float> energy_cpu; // calculated energy in CPU
-  std::vector<float> virial_cpu; // calculated virial in CPU
-  std::vector<float> force_cpu;  // calculated force in CPU
+  GPU_Vector<float> charge;         // calculated charge in GPU
+  GPU_Vector<float> charge_shifted; // shifted charge in GPU
+  GPU_Vector<float> bec;            // Born effective charge in GPU
+  GPU_Vector<float> energy;         // calculated energy in GPU
+  GPU_Vector<float> virial;         // calculated virial in GPU
+  GPU_Vector<float> force;          // calculated force in GPU
+  GPU_Vector<float> avirial;        // calculated atomic virial in GPU
+  std::vector<float> charge_cpu;    // calculated charge in CPU
+  std::vector<float> bec_cpu;       // calculated BEC in CPU
+  std::vector<float> energy_cpu;    // calculated energy in CPU
+  std::vector<float> virial_cpu;    // calculated virial in CPU
+  std::vector<float> force_cpu;     // calculated force in CPU
   std::vector<float> avirial_cpu;   // calculated atomic virial in CPU
 
   GPU_Vector<float> energy_weight_gpu;    // energy weight in GPU
@@ -80,7 +80,7 @@ public:
   GPU_Vector<float> virial_ref_gpu;       // reference virial in GPU
   GPU_Vector<float> force_ref_gpu;        // reference force in GPU
   GPU_Vector<float> bec_ref_gpu;          // reference BEC in GPU
-  GPU_Vector<float> avirial_ref_gpu;     // reference atomic virial in GPU
+  GPU_Vector<float> avirial_ref_gpu;      // reference atomic virial in GPU
   GPU_Vector<float> temperature_ref_gpu;  // reference temperature in GPU
   std::vector<float> energy_weight_cpu;   // energy weight in CPU
   std::vector<float> charge_ref_cpu;      // reference charge in CPU
@@ -88,11 +88,13 @@ public:
   std::vector<float> virial_ref_cpu;      // reference virial in CPU
   std::vector<float> force_ref_cpu;       // reference force in CPU
   std::vector<float> bec_ref_cpu;         // reference BEC in CPU
-  std::vector<float> avirial_ref_cpu;      // reference atomic virial in CPU
+  std::vector<float> avirial_ref_cpu;     // reference atomic virial in CPU
   std::vector<float> weight_cpu;          // configuration weight in CPU
   std::vector<float> temperature_ref_cpu; // reference temeprature in CPU
 
   GPU_Vector<float> type_weight_gpu; // relative force weight for different atom types (GPU)
+  GPU_Vector<float> rc_radial_pair;
+  GPU_Vector<float> rc_angular_pair;
 
   std::vector<float> error_cpu; // error in energy, virial, or force
   GPU_Vector<float> error_gpu;  // error in energy, virial, or force
