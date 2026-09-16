@@ -2,7 +2,7 @@
 \.project
 \.idea
 core
-
+benchmark/
 src/.vscode/*
 src/*/*.obj
 src/*/*.o
