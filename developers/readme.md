@@ -112,6 +112,7 @@ If you use new CUDA and HIP APIs, they should be added to this file.
 
 * [格式版本 1：harmonic bond](molecular_force_input_format_v1_zh.md)
 * [格式版本 2：harmonic bond、harmonic angle、periodic proper dihedral](molecular_force_input_format_v2_zh.md)
+* [分子 bonded force 快速开始：编译、配置和验证](molecular_force_quickstart_zh.md)
 * [高分子拓扑与 bonded interaction 开发路线](polymer_topology_bonded_development_roadmap_zh.md)
 
   
