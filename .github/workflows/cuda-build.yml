@@ -1,25 +1,56 @@
-name: CUDA CI
+name: GPUMD CUDA/CMake build
 
 on:
-  pull_request:
+  push:
     branches:
-      - master  # 你可以根据需要调整分支
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpumd-cuda-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    container: 
-      image: nvidia/cuda:12.2.2-devel-ubuntu22.04  # 使用适合你的CUDA版本的官方NVIDIA容器
-
+    name: Build gpumd and nep
+    runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+      - name: Check out source
+        uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install CUDA toolkit
+        uses: Jimver/cuda-toolkit@v0.2.36
+        with:
+          cuda: '12.6.3'
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install --yes ninja-build
+
+      - name: Show toolchain versions
         run: |
-          apt-get update
-          apt-get install -y build-essential
+          cmake --version
+          ninja --version
+          nvcc --version
 
-      - name: Build with Make
-        run: cd src && make
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CUDA_ARCHITECTURES=75
+
+      - name: Build gpumd and nep
+        run: cmake --build build --parallel 2 --target gpumd nep
+
+      - name: Upload gpumd/nep artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpumd-nep
+          path: |
+            build/gpumd
+            build/nep
+          if-no-files-found: error
+          retention-days: 14
