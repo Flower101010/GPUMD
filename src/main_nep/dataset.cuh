@@ -102,7 +102,14 @@ public:
   std::vector<Structure> structures;
 
   void
-  construct(Parameters& para, std::vector<Structure>& structures, int n1, int n2, int device_id);
+  construct(
+    Parameters& para,
+    std::vector<Structure>& structures,
+    int n1,
+    int n2,
+    int device_id,
+    bool borrow_structures = false);
+  const Structure& get_structure(int index) const;
   std::vector<float> get_rmse_force(Parameters& para, const bool use_weight, int device_id);
   std::vector<float> get_rmse_energy(
     Parameters& para,
@@ -116,6 +123,9 @@ public:
   std::vector<float> get_rmse_bec(Parameters& para, int device_id);
 
 private:
+  const std::vector<Structure>* borrowed_structures = nullptr;
+  int borrowed_begin = 0;
+  bool print_statistics = true;
   void copy_structures(std::vector<Structure>& structures_input, int n1, int n2);
   void find_has_type(Parameters& para);
   void find_Na(Parameters& para);

@@ -109,6 +109,17 @@ std::string get_gpumd_source_dir()
     return std::string();
   }
 
+#ifdef GPUMD_COMPILED_SOURCE_DIR
+  {
+    const std::string source_dir(GPUMD_COMPILED_SOURCE_DIR);
+    if (
+      file_exists(source_dir + "/utilities/nep_utilities.cuh") &&
+      file_exists(source_dir + "/main_nep/nep_specialized.cu")) {
+      return source_dir;
+    }
+  }
+#endif
+
   char path[PATH_MAX];
   const ssize_t size = readlink("/proc/self/exe", path, sizeof(path) - 1);
   if (size <= 0) {

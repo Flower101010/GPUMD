@@ -18,6 +18,7 @@
 #include "utilities/error.cuh"
 #include "utilities/gpu_macro.cuh"
 #include <algorithm>
+#include <cerrno>
 #include <cctype>
 #include <chrono>
 #include <fstream>
@@ -27,8 +28,10 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 #include <cstring>
+#include <cstdlib>
 
 static float get_area(const float* a, const float* b)
 {
@@ -115,63 +118,76 @@ static void read_force(
     }
   }
 
+  std::string atom_line;
+  std::vector<char*> tokens;
+  tokens.reserve(num_columns);
+  auto parse_real = [&](const char* token) {
+    errno = 0;
+    char* end = nullptr;
+    const double value = std::strtod(token, &end);
+    if (errno != 0 || end == token || std::isinf(value) || std::isnan(value)) {
+      std::cout << "Cannot parse a real number.\n"
+                << "    File: " << xyz_filename << '\n'
+                << "    Line: " << line_number << std::endl;
+      exit(1);
+    }
+    return value;
+  };
+
   for (int na = 0; na < structure.num_atom; ++na) {
-    std::vector<std::string> tokens = get_tokens(input);
+    std::getline(input, atom_line);
     line_number++;
+
+    tokens.clear();
+    char* cursor = atom_line.data();
+    while (*cursor != '\0') {
+      while (*cursor != '\0' && std::isspace(static_cast<unsigned char>(*cursor))) {
+        *cursor++ = '\0';
+      }
+      if (*cursor == '\0') break;
+      tokens.push_back(cursor);
+      while (*cursor != '\0' && !std::isspace(static_cast<unsigned char>(*cursor))) {
+        ++cursor;
+      }
+    }
 
     if (tokens.size() != num_columns) {
       PRINT_INPUT_ERROR("Number of items for an atom line mismatches properties.");
     }
-    std::string atom_symbol(tokens[0 + species_offset]);
-    structure.x[na] =
-      get_double_from_token(tokens[0 + pos_offset], xyz_filename.c_str(), line_number);
-    structure.y[na] =
-      get_double_from_token(tokens[1 + pos_offset], xyz_filename.c_str(), line_number);
-    structure.z[na] =
-      get_double_from_token(tokens[2 + pos_offset], xyz_filename.c_str(), line_number);
+    const char* atom_symbol = tokens[species_offset];
+    structure.x[na] = parse_real(tokens[pos_offset]);
+    structure.y[na] = parse_real(tokens[1 + pos_offset]);
+    structure.z[na] = parse_real(tokens[2 + pos_offset]);
     if (num_columns > 4 && (train_mode == 0 || train_mode == 3)) {
-      structure.fx[na] =
-        get_double_from_token(tokens[0 + force_offset], xyz_filename.c_str(), line_number);
-      structure.fy[na] =
-        get_double_from_token(tokens[1 + force_offset], xyz_filename.c_str(), line_number);
-      structure.fz[na] =
-        get_double_from_token(tokens[2 + force_offset], xyz_filename.c_str(), line_number);
+      structure.fx[na] = parse_real(tokens[force_offset]);
+      structure.fy[na] = parse_real(tokens[1 + force_offset]);
+      structure.fz[na] = parse_real(tokens[2 + force_offset]);
     }
 
     if (num_columns > 4 && structure.has_atomic_virial) {
       if (structure.atomic_virial_diag_only) {
-        structure.avirialxx[na] =
-          get_double_from_token(tokens[0 + avirial_offset], xyz_filename.c_str(), line_number);
-        structure.avirialyy[na] =
-          get_double_from_token(tokens[1 + avirial_offset], xyz_filename.c_str(), line_number);
-        structure.avirialzz[na] =
-          get_double_from_token(tokens[2 + avirial_offset], xyz_filename.c_str(), line_number);
+        structure.avirialxx[na] = parse_real(tokens[avirial_offset]);
+        structure.avirialyy[na] = parse_real(tokens[1 + avirial_offset]);
+        structure.avirialzz[na] = parse_real(tokens[2 + avirial_offset]);
       } else {
-        structure.avirialxx[na] =
-          get_double_from_token(tokens[0 + avirial_offset], xyz_filename.c_str(), line_number);
-        structure.avirialyy[na] =
-          get_double_from_token(tokens[4 + avirial_offset], xyz_filename.c_str(), line_number);
-        structure.avirialzz[na] =
-          get_double_from_token(tokens[8 + avirial_offset], xyz_filename.c_str(), line_number);
-        structure.avirialxy[na] =
-          get_double_from_token(tokens[3 + avirial_offset], xyz_filename.c_str(), line_number);
-        structure.avirialyz[na] =
-          get_double_from_token(tokens[7 + avirial_offset], xyz_filename.c_str(), line_number);
-        structure.avirialzx[na] =
-          get_double_from_token(tokens[6 + avirial_offset], xyz_filename.c_str(), line_number);
+        structure.avirialxx[na] = parse_real(tokens[avirial_offset]);
+        structure.avirialyy[na] = parse_real(tokens[4 + avirial_offset]);
+        structure.avirialzz[na] = parse_real(tokens[8 + avirial_offset]);
+        structure.avirialxy[na] = parse_real(tokens[3 + avirial_offset]);
+        structure.avirialyz[na] = parse_real(tokens[7 + avirial_offset]);
+        structure.avirialzx[na] = parse_real(tokens[6 + avirial_offset]);
       }
     }
 
     if (num_columns > 4 && structure.has_bec) {
       for (int d = 0; d < 9; ++d) {
-        structure.bec[na * 9 + d] =
-          get_double_from_token(tokens[d + bec_offset], xyz_filename.c_str(), line_number);
+        structure.bec[na * 9 + d] = parse_real(tokens[d + bec_offset]);
       }
     }
 
     bool is_allowed_element = false;
     for (int n = 0; n < para.elements.size(); ++n) {
-      if (atom_symbol == para.elements[n]) {
+      if (para.elements[n] == atom_symbol) {
         structure.type[na] = n;
         is_allowed_element = true;
       }
@@ -539,7 +555,7 @@ static void read_exyz(
       PRINT_INPUT_ERROR("Number of atoms for each frame should >= 1.");
     }
     read_one_structure(para, input, structure, xyz_filename, line_number);
-    structures.emplace_back(structure);
+    structures.emplace_back(std::move(structure));
     ++Nc;
   }
   printf("Number of configurations = %d.\n", Nc);

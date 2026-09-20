@@ -19,6 +19,7 @@
 #include "utilities/gpu_vector.cuh"
 #include <memory>
 #include <stdio.h>
+#include <chrono>
 #include <vector>
 
 class Parameters;
@@ -54,6 +55,22 @@ protected:
   std::vector<std::vector<Dataset>> train_set;
   std::unique_ptr<std::vector<Dataset>> current_train_set;
   std::vector<Dataset> test_set;
+  bool perf_timing = false;
+  std::chrono::steady_clock::time_point benchmark_start;
+  bool first_report = true;
+  double q_scaler_load_seconds = 0.0;
+  double q_scaler_compute_seconds = 0.0;
+  double train_load_seconds = 0.0;
+  double train_compute_seconds = 0.0;
+  long long train_configurations = 0;
+  int train_generations = 0;
+  double report_train_seconds = 0.0;
+  double validation_compute_seconds = 0.0;
+  double validation_output_seconds = 0.0;
+  double previous_train_load_seconds = 0.0;
+  double previous_train_compute_seconds = 0.0;
+  long long previous_train_configurations = 0;
+  int previous_train_generations = 0;
   std::vector<Dataset>& load_train_batch(Parameters& para, int batch_id, const char* phase);
   void release_train_batch(const char* phase);
   void log_stream_memory(const char* phase, int batch_id, int live_datasets);
