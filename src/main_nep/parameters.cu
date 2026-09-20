@@ -113,7 +113,8 @@ void Parameters::set_default_parameters()
   save_potential = 100000;     // write checkpoint nep.txt files at these intervals
   save_potential_format = 1;   // 1 = include time stamp when writing checkpoint nep.txt files
   save_potential_restart = 0;  // do not write checkpoint restart files by default
-  output_interval = 100;       // write loss.out, nep.txt, nep.restart (and related output) every N generations
+  output_interval =
+    100; // write loss.out, nep.txt, nep.restart (and related output) every N generations
   initial_para = 1.0f;
   sigma0 = 0.1f;
   atomic_v = 0;
@@ -128,6 +129,9 @@ void Parameters::set_default_parameters()
   type_weight_cpu.resize(NUM_ELEMENTS);
   rc_radial.resize(NUM_ELEMENTS);
   rc_angular.resize(NUM_ELEMENTS);
+  rc_radial_pair.clear();
+  rc_angular_pair.clear();
+  has_cross_cutoff_override = false;
   zbl_para.resize(550); // Maximum number of zbl parameters
   for (int n = 0; n < NUM_ELEMENTS; ++n) {
     type_weight_cpu[n] = 1.0f; // uniform weight by default
@@ -140,14 +144,15 @@ void Parameters::set_default_parameters()
   flexible_zbl = false; // default Universal ZBL
 
   // ------------new--------------
-  int deviceCount;  
-  CHECK(gpuGetDeviceCount(&deviceCount));  
-  int fully_used_device = population_size % deviceCount;  
-  if (fully_used_device != 0) {  
-    int population_should_increase = deviceCount - fully_used_device;  
-    population_size += population_should_increase;  
-    printf("Default population size adjusted from 50 to %d for GPU compatibility.\n", population_size);  
-  }  
+  int deviceCount;
+  CHECK(gpuGetDeviceCount(&deviceCount));
+  int fully_used_device = population_size % deviceCount;
+  if (fully_used_device != 0) {
+    int population_should_increase = deviceCount - fully_used_device;
+    population_size += population_should_increase;
+    printf(
+      "Default population size adjusted from 50 to %d for GPU compatibility.\n", population_size);
+  }
 }
 
 void Parameters::read_nep_in()
@@ -195,6 +200,10 @@ void Parameters::calculate_parameters()
 {
   if ((charge_mode > 0) + vdw + charge_vdw > 1) {
     PRINT_INPUT_ERROR("charge_mode, vdw, and charge_vdw cannot be enabled simultaneously.");
+  }
+
+  if (has_cross_cutoff_override && (vdw || charge_vdw)) {
+    PRINT_INPUT_ERROR("cross_cutoff is not supported by vdW or charge-vdW models.");
   }
 
   if (charge_mode || charge_vdw || vdw) {
@@ -267,11 +276,9 @@ void Parameters::calculate_parameters()
     number_of_variables_ann += 2 * num_neurons1 * num_types + 1;
   }
 
-
 #ifdef USE_CJ
-  number_of_variables_descriptor = 
-    num_types *
-    (dim_radial * (basis_size_radial + 1) + (n_max_angular + 1) * (basis_size_angular + 1));
+  number_of_variables_descriptor = num_types * (dim_radial * (basis_size_radial + 1) +
+                                                (n_max_angular + 1) * (basis_size_angular + 1));
 #else
   number_of_variables_descriptor =
     num_types * num_types *
@@ -293,7 +300,7 @@ void Parameters::calculate_parameters()
   // check nep.in against any model files that are already present before reading from them
   check_existing_model();
 
-  q_scaler_cpu.resize(dim,  1.0e10f);
+  q_scaler_cpu.resize(dim, 1.0e10f);
   if (fine_tune) {
     std::ifstream input(fine_tune_nep_txt);
     if (!input.is_open()) {
@@ -487,6 +494,51 @@ bool read_nep_txt_header(const std::string& filename, NepTxtHeader& header, std:
     header.rc_angular[n] = get_double_from_token(tokens[2 + n * 2], __FILE__, __LINE__);
   }
 
+  header.rc_radial_pair.assign(header.num_types * header.num_types, -1.0f);
+  header.rc_angular_pair.assign(header.num_types * header.num_types, -1.0f);
+  while (input.peek() != EOF) {
+    const std::streampos position = input.tellg();
+    tokens = get_tokens(input);
+    if (tokens.empty()) {
+      continue;
+    }
+    if (tokens[0] != "cross_cutoff") {
+      input.clear();
+      input.seekg(position);
+      break;
+    }
+    ++header.number_of_header_lines;
+    if (tokens.size() != 5) {
+      error = "A cross_cutoff line of " + filename + " is malformed.";
+      return false;
+    }
+    const int type_i = get_int_from_token(tokens[1], __FILE__, __LINE__);
+    const int type_j = get_int_from_token(tokens[2], __FILE__, __LINE__);
+    if (
+      type_i < 0 || type_i >= header.num_types || type_j < 0 || type_j >= header.num_types ||
+      type_i == type_j) {
+      error = "A cross_cutoff line of " + filename + " has invalid type indices.";
+      return false;
+    }
+    const int ij = type_i * header.num_types + type_j;
+    const int ji = type_j * header.num_types + type_i;
+    if (header.rc_radial_pair[ij] >= 0.0f) {
+      error = "A type pair has more than one cross_cutoff line in " + filename + ".";
+      return false;
+    }
+    header.rc_radial_pair[ij] = header.rc_radial_pair[ji] =
+      get_double_from_token(tokens[3], __FILE__, __LINE__);
+    header.rc_angular_pair[ij] = header.rc_angular_pair[ji] =
+      get_double_from_token(tokens[4], __FILE__, __LINE__);
+    if (
+      header.rc_angular_pair[ij] > header.rc_radial_pair[ij] ||
+      header.rc_angular_pair[ij] < 3.0f || header.rc_radial_pair[ij] > 100.0f) {
+      error = "A cross_cutoff line of " + filename +
+              " does not satisfy 3 <= angular <= radial <= 100.";
+      return false;
+    }
+  }
+
   tokens = get_tokens(input);
   ++header.number_of_header_lines;
   if (!check_header_line(tokens, "n_max", 3, 3, filename, error)) {
@@ -583,8 +635,9 @@ static void compare_with_nep_txt_fine_tune(
 
   std::vector<std::string> elements_nep89;
   for (int n = 0; n < NUM_ELEMENTS; ++n) {
-    if (ELEMENTS[n] != "Po" && ELEMENTS[n] != "At" && ELEMENTS[n] != "Rn" &&
-        ELEMENTS[n] != "Fr" && ELEMENTS[n] != "Ra") {
+    if (
+      ELEMENTS[n] != "Po" && ELEMENTS[n] != "At" && ELEMENTS[n] != "Rn" && ELEMENTS[n] != "Fr" &&
+      ELEMENTS[n] != "Ra") {
       elements_nep89.push_back(ELEMENTS[n]);
     }
   }
@@ -605,15 +658,9 @@ static void compare_with_nep_txt_fine_tune(
     }
   }
 
+  compare_int("version", para.version, para.is_version_set, header.version, filename, mismatches);
   compare_int(
-    "version", para.version, para.is_version_set, header.version, filename, mismatches);
-  compare_int(
-    "model_type",
-    para.train_mode,
-    para.is_train_mode_set,
-    header.train_mode,
-    filename,
-    mismatches);
+    "model_type", para.train_mode, para.is_train_mode_set, header.train_mode, filename, mismatches);
   compare_int(
     "charge_mode",
     para.charge_mode,
@@ -623,23 +670,18 @@ static void compare_with_nep_txt_fine_tune(
     mismatches);
   compare_int("vdw", para.vdw, para.is_vdw_set, header.vdw, filename, mismatches);
   compare_int(
-    "charge_vdw",
-    para.charge_vdw,
-    para.is_charge_vdw_set,
-    header.charge_vdw,
-    filename,
-    mismatches);
+    "charge_vdw", para.charge_vdw, para.is_charge_vdw_set, header.charge_vdw, filename, mismatches);
 
   if (para.enable_zbl != header.enable_zbl) {
     mismatches.push_back(
-      std::string("zbl: nep.in has ZBL ") + (para.enable_zbl ? "enabled" : "disabled") +
-      ", " + filename + " has it " + (header.enable_zbl ? "enabled" : "disabled") + ".");
+      std::string("zbl: nep.in has ZBL ") + (para.enable_zbl ? "enabled" : "disabled") + ", " +
+      filename + " has it " + (header.enable_zbl ? "enabled" : "disabled") + ".");
   } else if (para.enable_zbl) {
     if (para.flexible_zbl != header.flexible_zbl) {
       mismatches.push_back(
-        std::string("zbl: nep.in requests a ") +
-        (para.flexible_zbl ? "flexible" : "universal") + " ZBL potential, " + filename +
-        " holds a " + (header.flexible_zbl ? "flexible" : "universal") + " one.");
+        std::string("zbl: nep.in requests a ") + (para.flexible_zbl ? "flexible" : "universal") +
+        " ZBL potential, " + filename + " holds a " +
+        (header.flexible_zbl ? "flexible" : "universal") + " one.");
     } else if (!para.flexible_zbl) {
       compare_float(
         "zbl (inner cutoff)",
@@ -687,6 +729,25 @@ static void compare_with_nep_txt_fine_tune(
       mismatches);
   }
 
+  for (int i = 0; i < para.num_types; ++i) {
+    for (int j = i + 1; j < para.num_types; ++j) {
+      if (foundation_type_index[i] < 0 || foundation_type_index[j] < 0) {
+        continue;
+      }
+      const int ij = i * para.num_types + j;
+      const int fi = foundation_type_index[i];
+      const int fj = foundation_type_index[j];
+      const int fij = fi * header.num_types + fj;
+      if (
+        para.rc_radial_pair[ij] != header.rc_radial_pair[fij] ||
+        para.rc_angular_pair[ij] != header.rc_angular_pair[fij]) {
+        mismatches.push_back(
+          "cross_cutoff for " + para.elements[i] + "-" + para.elements[j] +
+          " differs between nep.in and " + filename + ".");
+      }
+    }
+  }
+
   compare_int(
     "n_max_radial",
     para.n_max_radial,
@@ -716,8 +777,7 @@ static void compare_with_nep_txt_fine_tune(
     filename,
     mismatches);
 
-  compare_int(
-    "L_max", para.L_max, para.is_l_max_set, header.L_max, filename, mismatches);
+  compare_int("L_max", para.L_max, para.is_l_max_set, header.L_max, filename, mismatches);
   compare_int(
     "L_max_4body",
     para.has_q_222 ? 2 : 0,
@@ -726,48 +786,18 @@ static void compare_with_nep_txt_fine_tune(
     filename,
     mismatches);
   compare_int(
-    "L_max_5body",
-    para.has_q_1111,
-    para.is_l_max_set,
-    header.has_q_1111,
-    filename,
-    mismatches);
+    "L_max_5body", para.has_q_1111, para.is_l_max_set, header.has_q_1111, filename, mismatches);
   compare_int(
-    "has_q_112",
-    para.has_q_112,
-    para.is_l_max_set,
-    header.has_q_112,
-    filename,
-    mismatches);
+    "has_q_112", para.has_q_112, para.is_l_max_set, header.has_q_112, filename, mismatches);
   compare_int(
-    "has_q_123",
-    para.has_q_123,
-    para.is_l_max_set,
-    header.has_q_123,
-    filename,
-    mismatches);
+    "has_q_123", para.has_q_123, para.is_l_max_set, header.has_q_123, filename, mismatches);
   compare_int(
-    "has_q_233",
-    para.has_q_233,
-    para.is_l_max_set,
-    header.has_q_233,
-    filename,
-    mismatches);
+    "has_q_233", para.has_q_233, para.is_l_max_set, header.has_q_233, filename, mismatches);
   compare_int(
-    "has_q_134",
-    para.has_q_134,
-    para.is_l_max_set,
-    header.has_q_134,
-    filename,
-    mismatches);
+    "has_q_134", para.has_q_134, para.is_l_max_set, header.has_q_134, filename, mismatches);
 
   compare_int(
-    "neuron",
-    para.num_neurons1,
-    para.is_neuron_set,
-    header.num_neurons1,
-    filename,
-    mismatches);
+    "neuron", para.num_neurons1, para.is_neuron_set, header.num_neurons1, filename, mismatches);
   compare_int(
     "neuron (second hidden layer)",
     (para.num_hidden_layers == 2) ? para.num_neurons2 : 0,
@@ -793,8 +823,7 @@ void Parameters::compare_with_nep_txt(
   compare_int(
     "charge_mode", charge_mode, is_charge_mode_set, header.charge_mode, filename, mismatches);
   compare_int("vdw", vdw, is_vdw_set, header.vdw, filename, mismatches);
-  compare_int(
-    "charge_vdw", charge_vdw, is_charge_vdw_set, header.charge_vdw, filename, mismatches);
+  compare_int("charge_vdw", charge_vdw, is_charge_vdw_set, header.charge_vdw, filename, mismatches);
   compare_int(
     "type (number of types)", num_types, is_type_set, header.num_types, filename, mismatches);
   if (num_types == header.num_types && elements != header.elements) {
@@ -851,6 +880,21 @@ void Parameters::compare_with_nep_txt(
       header.rc_angular[m],
       filename,
       mismatches);
+  }
+
+  if (num_types == header.num_types) {
+    for (int i = 0; i < num_types; ++i) {
+      for (int j = i + 1; j < num_types; ++j) {
+        const int ij = i * num_types + j;
+        if (
+          rc_radial_pair[ij] != header.rc_radial_pair[ij] ||
+          rc_angular_pair[ij] != header.rc_angular_pair[ij]) {
+          mismatches.push_back(
+            "cross_cutoff for " + elements[i] + "-" + elements[j] + " differs between nep.in and " +
+            filename + ".");
+        }
+      }
+    }
   }
 
   compare_int(
@@ -962,8 +1006,7 @@ void Parameters::check_existing_model()
         printf("    %s\n", mismatch.c_str());
       }
       printf("Correct nep.in or use the matching fine-tune template.\n");
-      PRINT_INPUT_ERROR(
-        ("nep.in is inconsistent with " + fine_tune_nep_txt + ".").c_str());
+      PRINT_INPUT_ERROR(("nep.in is inconsistent with " + fine_tune_nep_txt + ".").c_str());
     }
     return; // the restart file to fine-tune from is named by the fine_tune keyword
   }
@@ -1036,6 +1079,21 @@ void Parameters::report_inputs()
       rc_radial[n],
       rc_angular[n]);
   }
+  if (has_cross_cutoff_override) {
+    for (int i = 0; i < num_types; ++i) {
+      for (int j = i + 1; j < num_types; ++j) {
+        const int ij = i * num_types + j;
+        if (rc_radial_pair[ij] >= 0.0f) {
+          printf(
+            "        cross cutoff (%d, %d) is (%g A, %g A).\n",
+            i,
+            j,
+            rc_radial_pair[ij],
+            rc_angular_pair[ij]);
+        }
+      }
+    }
+  }
 
   if (is_zbl_set) {
     if (flexible_zbl) {
@@ -1066,7 +1124,7 @@ void Parameters::report_inputs()
     printf("        lambda_q = %g.\n", lambda_q);
     printf("        lambda_z = %g.\n", lambda_z);
 
-    if (has_multiple_cutoffs) {
+    if (has_multiple_cutoffs || has_cross_cutoff_override) {
       PRINT_INPUT_ERROR("Can only use uniform cutoff for qNEP.");
     }
   }
@@ -1212,8 +1270,10 @@ void Parameters::report_inputs()
   }
 
   if (fine_tune) {
-    printf("    (input)   will fine-tune based on %s and %s.\n", 
-      fine_tune_nep_txt.c_str(), fine_tune_nep_restart.c_str());
+    printf(
+      "    (input)   will fine-tune based on %s and %s.\n",
+      fine_tune_nep_txt.c_str(),
+      fine_tune_nep_restart.c_str());
   }
 
   // some calcuated parameters:
@@ -1251,6 +1311,8 @@ void Parameters::parse_one_keyword(std::vector<std::string>& tokens)
     parse_type(param, num_param);
   } else if (strcmp(param[0], "cutoff") == 0) {
     parse_cutoff(param, num_param);
+  } else if (strcmp(param[0], "cross_cutoff") == 0) {
+    parse_cross_cutoff(param, num_param);
   } else if (strcmp(param[0], "n_max") == 0) {
     parse_n_max(param, num_param);
   } else if (strcmp(param[0], "basis_size") == 0) {
@@ -1396,6 +1458,8 @@ void Parameters::parse_type(const char** param, int num_param)
   if (num_param != 2 + num_types) {
     PRINT_INPUT_ERROR("number of types and the number of listed elements do not match.\n");
   }
+  rc_radial_pair.assign(num_types * num_types, -1.0f);
+  rc_angular_pair.assign(num_types * num_types, -1.0f);
   for (int n = 0; n < num_types; ++n) {
     elements.emplace_back(param[2 + n]);
     bool is_valid_element = false;
@@ -1475,6 +1539,9 @@ void Parameters::parse_force_delta(const char** param, int num_param)
 
 void Parameters::parse_cutoff(const char** param, int num_param)
 {
+  if (is_cutoff_set) {
+    PRINT_INPUT_ERROR("cutoff should only be set once.\n");
+  }
   is_cutoff_set = true;
 
   if (!is_type_set) {
@@ -1490,7 +1557,7 @@ void Parameters::parse_cutoff(const char** param, int num_param)
     if (!is_valid_real(param[1], &rc_radial_tmp)) {
       PRINT_INPUT_ERROR("radial cutoff should be a number.\n");
     }
-    for (int n = 0; n < num_types; ++ n) {
+    for (int n = 0; n < num_types; ++n) {
       rc_radial[n] = rc_radial_tmp;
     }
 
@@ -1498,7 +1565,7 @@ void Parameters::parse_cutoff(const char** param, int num_param)
     if (!is_valid_real(param[2], &rc_angular_tmp)) {
       PRINT_INPUT_ERROR("angular cutoff should be a number.\n");
     }
-    for (int n = 0; n < num_types; ++ n) {
+    for (int n = 0; n < num_types; ++n) {
       rc_angular[n] = rc_angular_tmp;
     }
 
@@ -1541,7 +1608,7 @@ void Parameters::parse_cutoff(const char** param, int num_param)
 
   rc_radial_max = 0.0f;
   rc_angular_max = 0.0f;
-  for (int n = 0; n < num_types; ++ n) {
+  for (int n = 0; n < num_types; ++n) {
     if (rc_radial[n] > rc_radial_max) {
       rc_radial_max = rc_radial[n];
     }
@@ -1549,6 +1616,45 @@ void Parameters::parse_cutoff(const char** param, int num_param)
       rc_angular_max = rc_angular[n];
     }
   }
+}
+
+void Parameters::parse_cross_cutoff(const char** param, int num_param)
+{
+  if (!is_type_set || !is_cutoff_set) {
+    PRINT_INPUT_ERROR("Please set type and cutoff before setting cross_cutoff.\n");
+  }
+  if (num_param != 5) {
+    PRINT_INPUT_ERROR("cross_cutoff should have 4 parameters.\n");
+  }
+
+  int type_i = 0;
+  int type_j = 0;
+  if (!is_valid_int(param[1], &type_i) || !is_valid_int(param[2], &type_j)) {
+    PRINT_INPUT_ERROR("cross_cutoff type indices should be integers.\n");
+  }
+  if (type_i < 0 || type_i >= num_types || type_j < 0 || type_j >= num_types || type_i == type_j) {
+    PRINT_INPUT_ERROR("cross_cutoff should specify two different valid type indices.\n");
+  }
+
+  double radial = 0.0;
+  double angular = 0.0;
+  if (!is_valid_real(param[3], &radial) || !is_valid_real(param[4], &angular)) {
+    PRINT_INPUT_ERROR("cross_cutoff values should be numbers.\n");
+  }
+  if (angular > radial || angular < 3.0 || radial > 100.0) {
+    PRINT_INPUT_ERROR("cross_cutoff values should satisfy 3 <= angular <= radial <= 100.\n");
+  }
+
+  const int ij = type_i * num_types + type_j;
+  const int ji = type_j * num_types + type_i;
+  if (rc_radial_pair[ij] >= 0.0f) {
+    PRINT_INPUT_ERROR("cross_cutoff for this type pair has already been set.\n");
+  }
+  rc_radial_pair[ij] = rc_radial_pair[ji] = static_cast<float>(radial);
+  rc_angular_pair[ij] = rc_angular_pair[ji] = static_cast<float>(angular);
+  rc_radial_max = std::max(rc_radial_max, static_cast<float>(radial));
+  rc_angular_max = std::max(rc_angular_max, static_cast<float>(angular));
+  has_cross_cutoff_override = true;
 }
 
 void Parameters::parse_n_max(const char** param, int num_param)
@@ -1653,7 +1759,6 @@ void Parameters::parse_l_max(const char** param, int num_param)
       PRINT_INPUT_ERROR("has_q_134 should be an integer.\n");
     }
   }
-
 }
 
 void Parameters::parse_neuron(const char** param, int num_param)
@@ -1667,7 +1772,7 @@ void Parameters::parse_neuron(const char** param, int num_param)
   if (!is_valid_int(param[1], &num_neurons1)) {
     PRINT_INPUT_ERROR("number of neurons1 should be an integer.\n");
   }
-  
+
   if (num_neurons1 < 1) {
     PRINT_INPUT_ERROR("number of neurons1 should >= 1.");
   } else if (num_neurons1 > 120) {
@@ -2093,7 +2198,7 @@ void Parameters::parse_save_potential(const char** param, int num_param)
   }
   if (save_potential_format != 0 && save_potential_format != 1) {
     PRINT_INPUT_ERROR("save_potential format should be 0 or 1.");
-  }  
+  }
   if (!is_valid_int(param[3], &save_potential_restart)) {
     PRINT_INPUT_ERROR("save_potential save restart should be an integer.\n");
   }

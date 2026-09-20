@@ -33,11 +33,16 @@
 #error "Incompatible NEP specialization interface version."
 #endif
 #include "utilities/nep_utilities.cuh"
-#include <cuda_runtime.h>
 #include <cmath>
+#include <cuda_runtime.h>
 
 __device__ __forceinline__ float get_rc_radial_jit(const int t1, const int t2)
 {
+#if HAS_PAIR_CUTOFF_JIT
+  const float pair_cutoff = RC_RADIAL_PAIR_JIT[t1 * NUM_TYPES_JIT + t2];
+  if (pair_cutoff >= 0.0f)
+    return pair_cutoff;
+#endif
 #if RC_RADIAL_COMMON_JIT
   (void)t1;
   (void)t2;
@@ -49,6 +54,11 @@ __device__ __forceinline__ float get_rc_radial_jit(const int t1, const int t2)
 
 __device__ __forceinline__ float get_rc_angular_jit(const int t1, const int t2)
 {
+#if HAS_PAIR_CUTOFF_JIT
+  const float pair_cutoff = RC_ANGULAR_PAIR_JIT[t1 * NUM_TYPES_JIT + t2];
+  if (pair_cutoff >= 0.0f)
+    return pair_cutoff;
+#endif
 #if RC_ANGULAR_COMMON_JIT
   (void)t1;
   (void)t2;
@@ -86,7 +96,8 @@ __global__ void descriptor_radial_jit(
   float* descriptors)
 {
   const int n1 = threadIdx.x + blockIdx.x * blockDim.x;
-  if (n1 >= N) return;
+  if (n1 >= N)
+    return;
 
   const float* c = get_c_jit(parameters);
   const int t1 = (NUM_TYPES_JIT == 1) ? 0 : type[n1];
@@ -114,8 +125,7 @@ __global__ void descriptor_radial_jit(
       float gn12 = 0.0f;
 #pragma unroll
       for (int k = 0; k <= BASIS_SIZE_RADIAL_JIT; ++k) {
-        const int c_index =
-          get_c_index(type_index, n, k, N_MAX_RADIAL_JIT, BASIS_SIZE_RADIAL_JIT);
+        const int c_index = get_c_index(type_index, n, k, N_MAX_RADIAL_JIT, BASIS_SIZE_RADIAL_JIT);
         gn12 += fn12[k] * c[c_index];
       }
       q[n] += gn12;
@@ -142,7 +152,8 @@ __global__ void descriptor_angular_jit(
   float* sum_fxyz)
 {
   const int n1 = threadIdx.x + blockIdx.x * blockDim.x;
-  if (n1 >= N) return;
+  if (n1 >= N)
+    return;
 
   const float* c = get_c_jit(parameters);
   const int t1 = (NUM_TYPES_JIT == 1) ? 0 : type[n1];
@@ -172,12 +183,7 @@ __global__ void descriptor_angular_jit(
 #pragma unroll
       for (int k = 0; k <= BASIS_SIZE_ANGULAR_JIT; ++k) {
         const int c_index = get_c_index(
-          type_index,
-          n,
-          k,
-          N_MAX_ANGULAR_JIT,
-          BASIS_SIZE_ANGULAR_JIT,
-          NUM_C_RADIAL_JIT);
+          type_index, n, k, N_MAX_ANGULAR_JIT, BASIS_SIZE_ANGULAR_JIT, NUM_C_RADIAL_JIT);
         gn12 += fn12[k] * c[c_index];
       }
       accumulate_s(L_MAX_JIT, d12, x12, y12, z12, gn12, s);
@@ -213,16 +219,10 @@ __global__ void descriptor_angular_jit(
 }
 
 __device__ __forceinline__ void apply_scalar_ann_jit(
-  const float* parameters,
-  const int set_offset,
-  const int type,
-  float* q,
-  float& F,
-  float* Fp)
+  const float* parameters, const int set_offset, const int type, float* q, float& F, float* Fp)
 {
   const float* wb = parameters + set_offset + type * ONE_ANN_NO_BIAS_JIT;
-  const float* b =
-    parameters + set_offset + NUM_TYPES_JIT * ONE_ANN_NO_BIAS_JIT;
+  const float* b = parameters + set_offset + NUM_TYPES_JIT * ONE_ANN_NO_BIAS_JIT;
 
   if (NUM_HIDDEN_LAYERS_JIT == 2) {
     apply_ann_two_layers(
@@ -233,8 +233,7 @@ __device__ __forceinline__ void apply_scalar_ann_jit(
       wb + NUM_NEURONS1_JIT * ANN_DIM_JIT,
       wb + NUM_NEURONS1_JIT * (ANN_DIM_JIT + 1),
       wb + NUM_NEURONS1_JIT * (ANN_DIM_JIT + 1 + NUM_NEURONS2_JIT),
-      wb + NUM_NEURONS1_JIT * (ANN_DIM_JIT + 1 + NUM_NEURONS2_JIT) +
-        NUM_NEURONS2_JIT,
+      wb + NUM_NEURONS1_JIT * (ANN_DIM_JIT + 1 + NUM_NEURONS2_JIT) + NUM_NEURONS2_JIT,
       b,
       q,
       F,
@@ -263,7 +262,8 @@ __global__ void ann_nep_jit(
   float* Fp_out)
 {
   const int n1 = threadIdx.x + blockIdx.x * blockDim.x;
-  if (n1 >= N) return;
+  if (n1 >= N)
+    return;
 
   const int t = (NUM_TYPES_JIT == 1) ? 0 : type[n1];
   float q[ANN_DIM_JIT] = {0.0f};
@@ -294,7 +294,8 @@ __global__ void ann_temperature_jit(
   float* Fp_out)
 {
   const int n1 = threadIdx.x + blockIdx.x * blockDim.x;
-  if (n1 >= N) return;
+  if (n1 >= N)
+    return;
 
   const int t = (NUM_TYPES_JIT == 1) ? 0 : type[n1];
   float q[ANN_DIM_JIT] = {0.0f};
@@ -339,7 +340,8 @@ __global__ void ann_charge_jit(
   float* charge_derivative_out)
 {
   const int n1 = threadIdx.x + blockIdx.x * blockDim.x;
-  if (n1 >= N) return;
+  if (n1 >= N)
+    return;
 
   const int t = (NUM_TYPES_JIT == 1) ? 0 : type[n1];
   float q[ANN_DIM_JIT] = {0.0f};
@@ -360,25 +362,14 @@ __global__ void ann_charge_jit(
   float charge_derivative[ANN_DIM_JIT] = {0.0f};
 
   apply_ann_one_layer_charge(
-    ANN_DIM_JIT,
-    NUM_NEURONS1_JIT,
-    w0,
-    b0,
-    w1,
-    b1,
-    q,
-    F,
-    Fp,
-    charge,
-    charge_derivative);
+    ANN_DIM_JIT, NUM_NEURONS1_JIT, w0, b0, w1, b1, q, F, Fp, charge, charge_derivative);
 
   pe[n1] = F;
   charge_out[n1] = charge;
 #pragma unroll
   for (int d = 0; d < ANN_DIM_JIT; ++d) {
     Fp_out[n1 + d * N] = Fp[d] * q_scaler[d];
-    charge_derivative_out[n1 + d * N] =
-      charge_derivative[d] * q_scaler[d];
+    charge_derivative_out[n1 + d * N] = charge_derivative[d] * q_scaler[d];
   }
 }
 
@@ -394,7 +385,8 @@ __global__ void ann_vdw_jit(
   float* C6_derivative_out)
 {
   const int n1 = threadIdx.x + blockIdx.x * blockDim.x;
-  if (n1 >= N) return;
+  if (n1 >= N)
+    return;
 
   const int t = (NUM_TYPES_JIT == 1) ? 0 : type[n1];
   float q[ANN_DIM_JIT] = {0.0f};
@@ -415,28 +407,16 @@ __global__ void ann_vdw_jit(
   float C6_derivative[ANN_DIM_JIT] = {0.0f};
 
   apply_ann_one_layer_vdw(
-    ANN_DIM_JIT,
-    NUM_NEURONS1_JIT,
-    w0,
-    b0,
-    w1,
-    b1,
-    q,
-    F,
-    Fp,
-    C6,
-    C6_derivative);
+    ANN_DIM_JIT, NUM_NEURONS1_JIT, w0, b0, w1, b1, q, F, Fp, C6, C6_derivative);
 
   pe[n1] = F;
-  const float C6_exp =
-    C6_REF_SQRT_JIT[t] * expf(C6 * C6_SCALING_FACTOR_JIT);
+  const float C6_exp = C6_REF_SQRT_JIT[t] * expf(C6 * C6_SCALING_FACTOR_JIT);
   C6_out[n1] = C6_exp;
 
 #pragma unroll
   for (int d = 0; d < ANN_DIM_JIT; ++d) {
     Fp_out[n1 + d * N] = Fp[d] * q_scaler[d];
-    C6_derivative_out[n1 + d * N] =
-      C6_exp * C6_SCALING_FACTOR_JIT * C6_derivative[d] * q_scaler[d];
+    C6_derivative_out[n1 + d * N] = C6_exp * C6_SCALING_FACTOR_JIT * C6_derivative[d] * q_scaler[d];
   }
 }
 
@@ -454,7 +434,8 @@ __global__ void ann_charge_vdw_jit(
   float* C6_derivative_out)
 {
   const int n1 = threadIdx.x + blockIdx.x * blockDim.x;
-  if (n1 >= N) return;
+  if (n1 >= N)
+    return;
 
   const int t = (NUM_TYPES_JIT == 1) ? 0 : type[n1];
   float q[ANN_DIM_JIT] = {0.0f};
@@ -493,17 +474,14 @@ __global__ void ann_charge_vdw_jit(
 
   pe[n1] = F;
   charge_out[n1] = charge;
-  const float C6_exp =
-    C6_REF_SQRT_JIT[t] * expf(C6 * C6_SCALING_FACTOR_JIT);
+  const float C6_exp = C6_REF_SQRT_JIT[t] * expf(C6 * C6_SCALING_FACTOR_JIT);
   C6_out[n1] = C6_exp;
 
 #pragma unroll
   for (int d = 0; d < ANN_DIM_JIT; ++d) {
     Fp_out[n1 + d * N] = Fp[d] * q_scaler[d];
-    charge_derivative_out[n1 + d * N] =
-      charge_derivative[d] * q_scaler[d];
-    C6_derivative_out[n1 + d * N] =
-      C6_exp * C6_SCALING_FACTOR_JIT * C6_derivative[d] * q_scaler[d];
+    charge_derivative_out[n1 + d * N] = charge_derivative[d] * q_scaler[d];
+    C6_derivative_out[n1 + d * N] = C6_exp * C6_SCALING_FACTOR_JIT * C6_derivative[d] * q_scaler[d];
   }
 }
 
@@ -517,7 +495,8 @@ __global__ void ann_tnep_pol_jit(
   float* Fp_out)
 {
   const int n1 = threadIdx.x + blockIdx.x * blockDim.x;
-  if (n1 >= N) return;
+  if (n1 >= N)
+    return;
 
   const int t = (NUM_TYPES_JIT == 1) ? 0 : type[n1];
   float q[ANN_DIM_JIT] = {0.0f};
@@ -531,8 +510,7 @@ __global__ void ann_tnep_pol_jit(
   // first ANN set -> tensor descriptor derivative.
   float F = 0.0f;
   float Fp_pol[ANN_DIM_JIT] = {0.0f};
-  apply_scalar_ann_jit(
-    parameters, ANN_SET_SIZE_JIT, t, q, F, Fp_pol);
+  apply_scalar_ann_jit(parameters, ANN_SET_SIZE_JIT, t, q, F, Fp_pol);
 
   virial[n1] = F;
   virial[n1 + N] = F;
@@ -561,7 +539,8 @@ __global__ void bec_radial_jit(
   float* bec)
 {
   const int n1 = threadIdx.x + blockIdx.x * blockDim.x;
-  if (n1 >= N) return;
+  if (n1 >= N)
+    return;
 
   const float* c = get_c_jit(parameters);
   const int t1 = (NUM_TYPES_JIT == 1) ? 0 : type[n1];
@@ -572,10 +551,8 @@ __global__ void bec_radial_jit(
     const int n2 = NL[index];
     const int t2 = (NUM_TYPES_JIT == 1) ? 0 : type[n2];
 
-    const float r12[3] = {
-      x12_all[index], y12_all[index], z12_all[index]};
-    const float d12 =
-      sqrt(r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2]);
+    const float r12[3] = {x12_all[index], y12_all[index], z12_all[index]};
+    const float d12 = sqrt(r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2]);
     const float d12inv = 1.0f / d12;
 
     const float rc = get_rc_radial_jit(t1, t2);
@@ -585,14 +562,7 @@ __global__ void bec_radial_jit(
 
     float fn12[BASIS_SIZE_RADIAL_JIT + 1];
     float fnp12[BASIS_SIZE_RADIAL_JIT + 1];
-    find_fn_and_fnp(
-      BASIS_SIZE_RADIAL_JIT,
-      rcinv,
-      d12,
-      fc12,
-      fcp12,
-      fn12,
-      fnp12);
+    find_fn_and_fnp(BASIS_SIZE_RADIAL_JIT, rcinv, d12, fc12, fcp12, fn12, fnp12);
 
     const int type_index = descriptor_type_index_jit(t1, t2);
     float f12[3] = {0.0f};
@@ -602,13 +572,11 @@ __global__ void bec_radial_jit(
       float gnp12 = 0.0f;
 #pragma unroll
       for (int k = 0; k <= BASIS_SIZE_RADIAL_JIT; ++k) {
-        const int c_index =
-          get_c_index(type_index, n, k, N_MAX_RADIAL_JIT, BASIS_SIZE_RADIAL_JIT);
+        const int c_index = get_c_index(type_index, n, k, N_MAX_RADIAL_JIT, BASIS_SIZE_RADIAL_JIT);
         gnp12 += fnp12[k] * c[c_index];
       }
 
-      const float tmp12 =
-        charge_derivative[n1 + n * N] * gnp12 * d12inv;
+      const float tmp12 = charge_derivative[n1 + n * N] * gnp12 * d12inv;
       f12[0] += tmp12 * r12[0];
       f12[1] += tmp12 * r12[1];
       f12[2] += tmp12 * r12[2];
@@ -661,7 +629,8 @@ __global__ void bec_angular_jit(
   float* bec)
 {
   const int n1 = threadIdx.x + blockIdx.x * blockDim.x;
-  if (n1 >= N) return;
+  if (n1 >= N)
+    return;
 
   const float* c = get_c_jit(parameters);
   float Fp[DIM_ANGULAR_JIT] = {0.0f};
@@ -676,8 +645,7 @@ __global__ void bec_angular_jit(
   for (int n = 0; n <= N_MAX_ANGULAR_JIT; ++n) {
 #pragma unroll
     for (int abc = 0; abc < NUM_ABC_JIT; ++abc) {
-      sum_fxyz[n * NUM_ABC_JIT + abc] =
-        sum_fxyz_in[(n * NUM_ABC_JIT + abc) * N + n1];
+      sum_fxyz[n * NUM_ABC_JIT + abc] = sum_fxyz_in[(n * NUM_ABC_JIT + abc) * N + n1];
     }
   }
 
@@ -689,10 +657,8 @@ __global__ void bec_angular_jit(
     const int n2 = NL[index];
     const int t2 = (NUM_TYPES_JIT == 1) ? 0 : type[n2];
 
-    const float r12[3] = {
-      x12_all[index], y12_all[index], z12_all[index]};
-    const float d12 =
-      sqrt(r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2]);
+    const float r12[3] = {x12_all[index], y12_all[index], z12_all[index]};
+    const float d12 = sqrt(r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2]);
 
     const float rc = get_rc_angular_jit(t1, t2);
     const float rcinv = 1.0f / rc;
@@ -701,14 +667,7 @@ __global__ void bec_angular_jit(
 
     float fn12[BASIS_SIZE_ANGULAR_JIT + 1];
     float fnp12[BASIS_SIZE_ANGULAR_JIT + 1];
-    find_fn_and_fnp(
-      BASIS_SIZE_ANGULAR_JIT,
-      rcinv,
-      d12,
-      fc12,
-      fcp12,
-      fn12,
-      fnp12);
+    find_fn_and_fnp(BASIS_SIZE_ANGULAR_JIT, rcinv, d12, fc12, fcp12, fn12, fnp12);
 
     const int type_index = descriptor_type_index_jit(t1, t2);
     float f12[3] = {0.0f};
@@ -720,12 +679,7 @@ __global__ void bec_angular_jit(
 #pragma unroll
       for (int k = 0; k <= BASIS_SIZE_ANGULAR_JIT; ++k) {
         const int c_index = get_c_index(
-          type_index,
-          n,
-          k,
-          N_MAX_ANGULAR_JIT,
-          BASIS_SIZE_ANGULAR_JIT,
-          NUM_C_RADIAL_JIT);
+          type_index, n, k, N_MAX_ANGULAR_JIT, BASIS_SIZE_ANGULAR_JIT, NUM_C_RADIAL_JIT);
         const float c_value = c[c_index];
         gn12 += fn12[k] * c_value;
         gnp12 += fnp12[k] * c_value;
@@ -794,16 +748,14 @@ __device__ __forceinline__ float effective_fp_jit(
 {
   float value = Fp[index];
 
-#if NEP_MODEL_MODE_JIT == NEP_MODEL_CHARGE || \
-    NEP_MODEL_MODE_JIT == NEP_MODEL_CHARGE_VDW
+#if NEP_MODEL_MODE_JIT == NEP_MODEL_CHARGE || NEP_MODEL_MODE_JIT == NEP_MODEL_CHARGE_VDW
   value += charge_derivative[index] * D_real[atom];
 #else
   (void)charge_derivative;
   (void)D_real;
 #endif
 
-#if NEP_MODEL_MODE_JIT == NEP_MODEL_VDW || \
-    NEP_MODEL_MODE_JIT == NEP_MODEL_CHARGE_VDW
+#if NEP_MODEL_MODE_JIT == NEP_MODEL_VDW || NEP_MODEL_MODE_JIT == NEP_MODEL_CHARGE_VDW
   value += C6_derivative[index] * D_C6[atom];
 #else
   (void)C6_derivative;
@@ -835,7 +787,8 @@ __global__ void force_radial_jit(
   float* virial)
 {
   const int n1 = threadIdx.x + blockIdx.x * blockDim.x;
-  if (n1 >= N) return;
+  if (n1 >= N)
+    return;
 
   const float* c = get_c_jit(parameters);
   const int t1 = (NUM_TYPES_JIT == 1) ? 0 : type[n1];
@@ -852,10 +805,8 @@ __global__ void force_radial_jit(
     const int index = NN_sum[n1] + i1;
     const int n2 = NL[index];
     const int t2 = (NUM_TYPES_JIT == 1) ? 0 : type[n2];
-    const float r12[3] = {
-      x12_all[index], y12_all[index], z12_all[index]};
-    const float d12 =
-      sqrt(r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2]);
+    const float r12[3] = {x12_all[index], y12_all[index], z12_all[index]};
+    const float d12 = sqrt(r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2]);
     const float d12inv = 1.0f / d12;
 
     const float rc = get_rc_radial_jit(t1, t2);
@@ -865,14 +816,7 @@ __global__ void force_radial_jit(
 
     float fn12[BASIS_SIZE_RADIAL_JIT + 1];
     float fnp12[BASIS_SIZE_RADIAL_JIT + 1];
-    find_fn_and_fnp(
-      BASIS_SIZE_RADIAL_JIT,
-      rcinv,
-      d12,
-      fc12,
-      fcp12,
-      fn12,
-      fnp12);
+    find_fn_and_fnp(BASIS_SIZE_RADIAL_JIT, rcinv, d12, fc12, fcp12, fn12, fnp12);
 
     const int type_index = descriptor_type_index_jit(t1, t2);
     float f12[3] = {0.0f};
@@ -882,20 +826,13 @@ __global__ void force_radial_jit(
       float gnp12 = 0.0f;
 #pragma unroll
       for (int k = 0; k <= BASIS_SIZE_RADIAL_JIT; ++k) {
-        const int c_index =
-          get_c_index(type_index, n, k, N_MAX_RADIAL_JIT, BASIS_SIZE_RADIAL_JIT);
+        const int c_index = get_c_index(type_index, n, k, N_MAX_RADIAL_JIT, BASIS_SIZE_RADIAL_JIT);
         gnp12 += fnp12[k] * c[c_index];
       }
 
       const int fp_index = n1 + n * N;
-      float tmp12 = effective_fp_jit(
-        fp_index,
-        n1,
-        Fp,
-        charge_derivative,
-        D_real,
-        C6_derivative,
-        D_C6);
+      float tmp12 =
+        effective_fp_jit(fp_index, n1, Fp, charge_derivative, D_real, C6_derivative, D_C6);
       tmp12 *= gnp12 * d12inv;
 
       f12[0] += tmp12 * r12[0];
@@ -912,8 +849,7 @@ __global__ void force_radial_jit(
 
 #if NEP_MODEL_MODE_JIT == NEP_MODEL_TNEP
     if (is_dipole) {
-      const float r2 =
-        r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2];
+      const float r2 = r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2];
       sxx -= r2 * f12[0];
       syy -= r2 * f12[1];
       szz -= r2 * f12[2];
@@ -937,8 +873,7 @@ __global__ void force_radial_jit(
   virial[n1 + N] += syy;
   virial[n1 + 2 * N] += szz;
 
-#if NEP_MODEL_MODE_JIT == NEP_MODEL_NEP || \
-    NEP_MODEL_MODE_JIT == NEP_MODEL_TNEP
+#if NEP_MODEL_MODE_JIT == NEP_MODEL_NEP || NEP_MODEL_MODE_JIT == NEP_MODEL_TNEP
   // These paths zero only the diagonal virial before radial force,
   // so radial force initializes the shear components.
   virial[n1 + 3 * N] = sxy;
@@ -975,7 +910,8 @@ __global__ void force_angular_jit(
   float* virial)
 {
   const int n1 = threadIdx.x + blockIdx.x * blockDim.x;
-  if (n1 >= N) return;
+  if (n1 >= N)
+    return;
 
   const float* c = get_c_jit(parameters);
   float Fp[DIM_ANGULAR_JIT] = {0.0f};
@@ -984,22 +920,14 @@ __global__ void force_angular_jit(
 #pragma unroll
   for (int d = 0; d < DIM_ANGULAR_JIT; ++d) {
     const int index = (DIM_RADIAL_JIT + d) * N + n1;
-    Fp[d] = effective_fp_jit(
-      index,
-      n1,
-      Fp_in,
-      charge_derivative,
-      D_real,
-      C6_derivative,
-      D_C6);
+    Fp[d] = effective_fp_jit(index, n1, Fp_in, charge_derivative, D_real, C6_derivative, D_C6);
   }
 
 #pragma unroll
   for (int n = 0; n <= N_MAX_ANGULAR_JIT; ++n) {
 #pragma unroll
     for (int abc = 0; abc < NUM_ABC_JIT; ++abc) {
-      sum_fxyz[n * NUM_ABC_JIT + abc] =
-        sum_fxyz_in[(n * NUM_ABC_JIT + abc) * N + n1];
+      sum_fxyz[n * NUM_ABC_JIT + abc] = sum_fxyz_in[(n * NUM_ABC_JIT + abc) * N + n1];
     }
   }
 
@@ -1017,10 +945,8 @@ __global__ void force_angular_jit(
     const int index = NN_sum[n1] + i1;
     const int n2 = NL[index];
     const int t2 = (NUM_TYPES_JIT == 1) ? 0 : type[n2];
-    const float r12[3] = {
-      x12_all[index], y12_all[index], z12_all[index]};
-    const float d12 =
-      sqrt(r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2]);
+    const float r12[3] = {x12_all[index], y12_all[index], z12_all[index]};
+    const float d12 = sqrt(r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2]);
 
     const float rc = get_rc_angular_jit(t1, t2);
     const float rcinv = 1.0f / rc;
@@ -1029,14 +955,7 @@ __global__ void force_angular_jit(
 
     float fn12[BASIS_SIZE_ANGULAR_JIT + 1];
     float fnp12[BASIS_SIZE_ANGULAR_JIT + 1];
-    find_fn_and_fnp(
-      BASIS_SIZE_ANGULAR_JIT,
-      rcinv,
-      d12,
-      fc12,
-      fcp12,
-      fn12,
-      fnp12);
+    find_fn_and_fnp(BASIS_SIZE_ANGULAR_JIT, rcinv, d12, fc12, fcp12, fn12, fnp12);
 
     const int type_index = descriptor_type_index_jit(t1, t2);
     float f12[3] = {0.0f};
@@ -1049,12 +968,7 @@ __global__ void force_angular_jit(
 #pragma unroll
       for (int k = 0; k <= BASIS_SIZE_ANGULAR_JIT; ++k) {
         const int c_index = get_c_index(
-          type_index,
-          n,
-          k,
-          N_MAX_ANGULAR_JIT,
-          BASIS_SIZE_ANGULAR_JIT,
-          NUM_C_RADIAL_JIT);
+          type_index, n, k, N_MAX_ANGULAR_JIT, BASIS_SIZE_ANGULAR_JIT, NUM_C_RADIAL_JIT);
         const float c_value = c[c_index];
         gn12 += fn12[k] * c_value;
         gnp12 += fnp12[k] * c_value;
@@ -1089,8 +1003,7 @@ __global__ void force_angular_jit(
 
 #if NEP_MODEL_MODE_JIT == NEP_MODEL_TNEP
     if (is_dipole) {
-      const float r2 =
-        r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2];
+      const float r2 = r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2];
       sxx -= r2 * f12[0];
       syy -= r2 * f12[1];
       szz -= r2 * f12[2];
@@ -1158,17 +1071,7 @@ extern "C" int nep_train_launch_descriptor_angular(
   const int block_size = 32;
   const int grid_size = (N - 1) / block_size + 1;
   descriptor_angular_jit<<<grid_size, block_size>>>(
-    N,
-    NN_sum,
-    NN,
-    NL,
-    type,
-    x12,
-    y12,
-    z12,
-    parameters,
-    descriptors,
-    sum_fxyz);
+    N, NN_sum, NN, NL, type, x12, y12, z12, parameters, descriptors, sum_fxyz);
   return static_cast<int>(cudaGetLastError());
 }
 
@@ -1183,8 +1086,7 @@ extern "C" int nep_train_launch_ann_nep(
 {
   const int block_size = 32;
   const int grid_size = (N - 1) / block_size + 1;
-  ann_nep_jit<<<grid_size, block_size>>>(
-    N, type, descriptors, q_scaler, parameters, pe, Fp);
+  ann_nep_jit<<<grid_size, block_size>>>(N, type, descriptors, q_scaler, parameters, pe, Fp);
   return static_cast<int>(cudaGetLastError());
 }
 
@@ -1201,14 +1103,7 @@ extern "C" int nep_train_launch_ann_temperature(
   const int block_size = 32;
   const int grid_size = (N - 1) / block_size + 1;
   ann_temperature_jit<<<grid_size, block_size>>>(
-    N,
-    type,
-    descriptors,
-    q_scaler,
-    temperature,
-    parameters,
-    pe,
-    Fp);
+    N, type, descriptors, q_scaler, temperature, parameters, pe, Fp);
   return static_cast<int>(cudaGetLastError());
 }
 
@@ -1226,15 +1121,7 @@ extern "C" int nep_train_launch_ann_charge(
   const int block_size = 32;
   const int grid_size = (N - 1) / block_size + 1;
   ann_charge_jit<<<grid_size, block_size>>>(
-    N,
-    type,
-    descriptors,
-    q_scaler,
-    parameters,
-    pe,
-    Fp,
-    charge,
-    charge_derivative);
+    N, type, descriptors, q_scaler, parameters, pe, Fp, charge, charge_derivative);
   return static_cast<int>(cudaGetLastError());
 }
 
@@ -1252,15 +1139,7 @@ extern "C" int nep_train_launch_ann_vdw(
   const int block_size = 32;
   const int grid_size = (N - 1) / block_size + 1;
   ann_vdw_jit<<<grid_size, block_size>>>(
-    N,
-    type,
-    descriptors,
-    q_scaler,
-    parameters,
-    pe,
-    Fp,
-    C6,
-    C6_derivative);
+    N, type, descriptors, q_scaler, parameters, pe, Fp, C6, C6_derivative);
   return static_cast<int>(cudaGetLastError());
 }
 
@@ -1326,8 +1205,7 @@ extern "C" int nep_train_launch_bec_radial(
   const int block_size = 32;
   const int grid_size = (N - 1) / block_size + 1;
   bec_radial_jit<<<grid_size, block_size>>>(
-    N, NN_sum, NN, NL, type, x12, y12, z12,
-    parameters, charge_derivative, bec);
+    N, NN_sum, NN, NL, type, x12, y12, z12, parameters, charge_derivative, bec);
   return static_cast<int>(cudaGetLastError());
 }
 
@@ -1348,8 +1226,7 @@ extern "C" int nep_train_launch_bec_angular(
   const int block_size = 32;
   const int grid_size = (N - 1) / block_size + 1;
   bec_angular_jit<<<grid_size, block_size>>>(
-    N, NN_sum, NN, NL, type, x12, y12, z12,
-    parameters, charge_derivative, sum_fxyz, bec);
+    N, NN_sum, NN, NL, type, x12, y12, z12, parameters, charge_derivative, sum_fxyz, bec);
   return static_cast<int>(cudaGetLastError());
 }
 

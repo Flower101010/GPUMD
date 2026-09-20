@@ -14,8 +14,8 @@
 */
 
 #pragma once
-#include "potential.cuh"
 #include "nep_compile.cuh"
+#include "potential.cuh"
 #include "utilities/common.cuh"
 #include "utilities/gpu_vector.cuh"
 #include <memory>
@@ -27,6 +27,8 @@ struct NEP_Data {
   GPU_Vector<float> Fp;          // gradient of descriptors
   GPU_Vector<float> sum_fxyz;
   GPU_Vector<float> parameters; // parameters to be optimized
+  GPU_Vector<float> rc_radial_pair;
+  GPU_Vector<float> rc_angular_pair;
 };
 
 class NEP : public Potential
@@ -37,6 +39,8 @@ public:
     float typewise_cutoff_zbl_factor = 0.65f;
     float rc_radial[NUM_ELEMENTS];  // radial cutoff
     float rc_angular[NUM_ELEMENTS]; // angular cutoff
+    const float* rc_radial_pair = nullptr;
+    const float* rc_angular_pair = nullptr;
     int basis_size_radial = 0;
     int basis_size_angular = 0;
     int n_max_radial = 0;  // n_radial = 0, 1, 2, ..., n_max_radial
@@ -57,15 +61,15 @@ public:
   };
 
   struct ANN {
-    int dim = 0;                    // dimension of the descriptor
-    int num_neurons1 = 0;           // number of neurons in the hidden layer
-    int num_neurons2 = 0;           // number of neurons in the output layer
-    int num_hidden_layers = 0;      // number of hidden layers
-    int one_ann_no_bias = 0;        // number of parameters in the ANN without bias
-    int num_para = 0;               // number of parameters
-    const float* wb[NUM_ELEMENTS];  // weigths and biases for the hidden layer
-    const float* b;                 // bias for the output layer
-    const float* c;                 // for elements in descriptor
+    int dim = 0;                   // dimension of the descriptor
+    int num_neurons1 = 0;          // number of neurons in the hidden layer
+    int num_neurons2 = 0;          // number of neurons in the output layer
+    int num_hidden_layers = 0;     // number of hidden layers
+    int one_ann_no_bias = 0;       // number of parameters in the ANN without bias
+    int num_para = 0;              // number of parameters
+    const float* wb[NUM_ELEMENTS]; // weigths and biases for the hidden layer
+    const float* b;                // bias for the output layer
+    const float* c;                // for elements in descriptor
     const float* rc;
   };
 
@@ -79,11 +83,7 @@ public:
     int atomic_numbers[NUM_ELEMENTS];
   };
 
-  NEP(
-    Parameters& para,
-    int N,
-    int version,
-    int deviceCount);
+  NEP(Parameters& para, int N, int version, int deviceCount);
   void find_force(
     Parameters& para,
     const float* parameters,

@@ -261,7 +261,7 @@ void Dataset::initialize_gpu_data(Parameters& para)
   }
 
   type_weight_gpu.resize(NUM_ELEMENTS);
-  
+
   energy_ref_gpu.resize(Nc);
   energy_weight_gpu.resize(Nc);
   virial_ref_gpu.resize(Nc * 6);
@@ -304,6 +304,9 @@ static __global__ void gpu_find_neighbor_number(
   const int* g_atomic_numbers,
   const float* g_rc_radial,
   const float* g_rc_angular,
+  const float* g_rc_radial_pair,
+  const float* g_rc_angular_pair,
+  const int num_types,
   const float* __restrict__ g_box,
   const float* __restrict__ g_box_original,
   const int* __restrict__ g_num_cell,
@@ -341,8 +344,8 @@ static __global__ void gpu_find_neighbor_number(
             dev_apply_mic(box, x12, y12, z12);
             float distance_square = x12 * x12 + y12 * y12 + z12 * z12;
             int t2 = g_type[n2];
-            float rc_radial = (g_rc_radial[t1] + g_rc_radial[t2]) * 0.5f;
-            float rc_angular = (g_rc_angular[t1] + g_rc_angular[t2]) * 0.5f;
+            float rc_radial = select_cutoff(g_rc_radial, g_rc_radial_pair, num_types, t1, t2);
+            float rc_angular = select_cutoff(g_rc_angular, g_rc_angular_pair, num_types, t1, t2);
             if (distance_square < rc_radial * rc_radial) {
               count_radial++;
             }
@@ -366,6 +369,9 @@ static __global__ void gpu_find_neighbor_list(
   const int* g_atomic_numbers,
   const float* g_rc_radial,
   const float* g_rc_angular,
+  const float* g_rc_radial_pair,
+  const float* g_rc_angular_pair,
+  const int num_types,
   const float* __restrict__ g_box,
   const float* __restrict__ g_box_original,
   const int* __restrict__ g_num_cell,
@@ -413,8 +419,8 @@ static __global__ void gpu_find_neighbor_list(
             dev_apply_mic(box, x12, y12, z12);
             float distance_square = x12 * x12 + y12 * y12 + z12 * z12;
             int t2 = g_type[n2];
-            float rc_radial = (g_rc_radial[t1] + g_rc_radial[t2]) * 0.5f;
-            float rc_angular = (g_rc_angular[t1] + g_rc_angular[t2]) * 0.5f;
+            float rc_radial = select_cutoff(g_rc_radial, g_rc_radial_pair, num_types, t1, t2);
+            float rc_angular = select_cutoff(g_rc_angular, g_rc_angular_pair, num_types, t1, t2);
             if (distance_square < rc_radial * rc_radial) {
               int index = NN_radial_sum[n1] + count_radial;
               NL_radial[index] = n2;
@@ -458,6 +464,10 @@ void Dataset::find_neighbor(Parameters& para)
   rc_radial.copy_from_host(para.rc_radial.data());
   GPU_Vector<float> rc_angular(para.rc_angular.size());
   rc_angular.copy_from_host(para.rc_angular.data());
+  rc_radial_pair.resize(para.rc_radial_pair.size());
+  rc_radial_pair.copy_from_host(para.rc_radial_pair.data());
+  rc_angular_pair.resize(para.rc_angular_pair.size());
+  rc_angular_pair.copy_from_host(para.rc_angular_pair.data());
 
   gpu_find_neighbor_number<<<Nc, 256>>>(
     N,
@@ -467,6 +477,9 @@ void Dataset::find_neighbor(Parameters& para)
     atomic_numbers.data(),
     rc_radial.data(),
     rc_angular.data(),
+    rc_radial_pair.data(),
+    rc_angular_pair.data(),
+    para.num_types,
     box.data(),
     box_original.data(),
     num_cell.data(),
@@ -535,6 +548,9 @@ void Dataset::find_neighbor(Parameters& para)
     atomic_numbers.data(),
     rc_radial.data(),
     rc_angular.data(),
+    rc_radial_pair.data(),
+    rc_angular_pair.data(),
+    para.num_types,
     box.data(),
     box_original.data(),
     num_cell.data(),
@@ -858,14 +874,8 @@ std::vector<float> Dataset::get_rmse_avirial(Parameters& para, const bool use_we
   return rmse_array;
 }
 
-static __global__ void
-gpu_get_energy_shift(
-  int* g_Na, 
-  int* g_Na_sum, 
-  float* g_pe, 
-  float* g_pe_ref, 
-  float* g_pe_weight, 
-  float* g_energy_shift)
+static __global__ void gpu_get_energy_shift(
+  int* g_Na, int* g_Na_sum, float* g_pe, float* g_pe_ref, float* g_pe_weight, float* g_energy_shift)
 {
   int tid = threadIdx.x;
   int bid = blockIdx.x;
@@ -894,12 +904,12 @@ gpu_get_energy_shift(
 }
 
 static __global__ void gpu_sum_pe_error(
-  float energy_shift, 
-  int* g_Na, 
-  int* g_Na_sum, 
-  float* g_pe, 
-  float* g_pe_ref, 
-  float* g_pe_weight, 
+  float energy_shift,
+  int* g_Na,
+  int* g_Na_sum,
+  float* g_pe,
+  float* g_pe_ref,
+  float* g_pe_weight,
   float* error_gpu)
 {
   int tid = threadIdx.x;
@@ -943,11 +953,11 @@ std::vector<float> Dataset::get_rmse_energy(
 
   if (do_shift) {
     gpu_get_energy_shift<<<Nc, block_size, sizeof(float) * block_size>>>(
-      Na.data(), 
-      Na_sum.data(), 
-      energy.data(), 
-      energy_ref_gpu.data(), 
-      energy_weight_gpu.data(), 
+      Na.data(),
+      Na_sum.data(),
+      energy.data(),
+      energy_ref_gpu.data(),
+      energy_weight_gpu.data(),
       error_gpu.data());
     CHECK(gpuMemcpy(error_cpu.data(), error_gpu.data(), mem, gpuMemcpyDeviceToHost));
     float Nc_with_weight = 0.0f;
@@ -966,7 +976,7 @@ std::vector<float> Dataset::get_rmse_energy(
     Na_sum.data(),
     energy.data(),
     energy_ref_gpu.data(),
-    energy_weight_gpu.data(), 
+    energy_weight_gpu.data(),
     error_gpu.data());
   CHECK(gpuMemcpy(error_cpu.data(), error_gpu.data(), mem, gpuMemcpyDeviceToHost));
 
@@ -1079,11 +1089,7 @@ std::vector<float> Dataset::get_rmse_virial(Parameters& para, const bool use_wei
 }
 
 static __global__ void gpu_sum_charge_error(
-  int* g_Na, 
-  int* g_Na_sum, 
-  float* g_charge, 
-  float* g_charge_ref,  
-  float* error_gpu)
+  int* g_Na, int* g_Na_sum, float* g_charge, float* g_charge_ref, float* error_gpu)
 {
   int tid = threadIdx.x;
   int bid = blockIdx.x;
@@ -1112,12 +1118,7 @@ static __global__ void gpu_sum_charge_error(
 }
 
 static __global__ void gpu_sum_bec_error(
-  const int N,
-  int* g_Na,
-  int* g_Na_sum,
-  float* g_bec,
-  float* g_bec_ref,
-  float* error_gpu)
+  const int N, int* g_Na, int* g_Na_sum, float* g_bec, float* g_bec_ref, float* error_gpu)
 {
   int tid = threadIdx.x;
   int bid = blockIdx.x;
@@ -1163,11 +1164,7 @@ std::vector<float> Dataset::get_rmse_charge(Parameters& para, int device_id)
   const int block_size = 256;
 
   gpu_sum_charge_error<<<Nc, block_size, sizeof(float) * block_size>>>(
-    Na.data(),
-    Na_sum.data(),
-    charge.data(),
-    charge_ref_gpu.data(),
-    error_gpu.data());
+    Na.data(), Na_sum.data(), charge.data(), charge_ref_gpu.data(), error_gpu.data());
   CHECK(gpuMemcpy(error_cpu.data(), error_gpu.data(), mem, gpuMemcpyDeviceToHost));
   for (int n = 0; n < Nc; ++n) {
     float rmse_temp = error_cpu[n];
@@ -1202,12 +1199,7 @@ std::vector<float> Dataset::get_rmse_bec(Parameters& para, int device_id)
   const int block_size = 256;
 
   gpu_sum_bec_error<<<Nc, block_size, sizeof(float) * block_size>>>(
-    N,
-    Na.data(),
-    Na_sum.data(),
-    bec.data(),
-    bec_ref_gpu.data(),
-    error_gpu.data());
+    N, Na.data(), Na_sum.data(), bec.data(), bec_ref_gpu.data(), error_gpu.data());
   CHECK(gpuMemcpy(error_cpu.data(), error_gpu.data(), mem, gpuMemcpyDeviceToHost));
   for (int n = 0; n < Nc; ++n) {
     if (get_structure(n).has_bec) {

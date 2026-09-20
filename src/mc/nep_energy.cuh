@@ -24,10 +24,12 @@ public:
   struct ParaMB {
     bool use_typewise_cutoff_zbl = false;
     float typewise_cutoff_zbl_factor = 0.0f;
-    float rc_radial_max = 0.0f; 
+    float rc_radial_max = 0.0f;
     float rc_angular_max = 0.0f;
-    float rc_radial[NUM_ELEMENTS];     // radial cutoff
-    float rc_angular[NUM_ELEMENTS];    // angular cutoff
+    float rc_radial[NUM_ELEMENTS];  // radial cutoff
+    float rc_angular[NUM_ELEMENTS]; // angular cutoff
+    const float* rc_radial_pair = nullptr;
+    const float* rc_angular_pair = nullptr;
     int MN_radial = 200;
     int MN_angular = 100;
     int n_max_radial = 0;  // n_radial = 0, 1, 2, ..., n_max_radial
@@ -94,5 +96,7 @@ public:
 
 private:
   GPU_Vector<float> nep_parameters; // parameters to be optimized
+  GPU_Vector<float> rc_radial_pair;
+  GPU_Vector<float> rc_angular_pair;
   void update_potential(float* parameters, ANN& ann);
 };

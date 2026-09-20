@@ -37,6 +37,8 @@ struct NepTxtHeader {
   bool has_multiple_cutoffs;
   std::vector<float> rc_radial;
   std::vector<float> rc_angular;
+  std::vector<float> rc_radial_pair;
+  std::vector<float> rc_angular_pair;
   int n_max_radial;
   int n_max_angular;
   int basis_size_radial;
@@ -62,43 +64,44 @@ public:
   Parameters();
 
   // parameters to be read in
-  int version;            // NEP version; only NEP4 is supported
-  int batch_size;         // number of configurations in one batch
-  int stream_train;       // keep only the current training batch on GPU
-  int num_types;          // number of atom types
-  int population_size;    // population size for SNES
-  int maximum_generation; // maximum number of generations for SNES;
-  int save_potential;     // number of generations between writing a checkpoint nep.txt file.
-  int save_potential_format;   // format of checkpoint nep.txt file name
-  int save_potential_restart;  // if restart files should be written or not. 0=no, 1=yes
-  int output_interval;    // number of generations between writing loss.out, nep.txt, nep.restart and related output
-  int num_neurons1;       // number of nuerons in the 1st hidden layer (only one hidden layer)
-  int num_neurons2;       // number of nuerons in the 2nd hidden layer (only two hidden layers)
-  int num_hidden_layers;  // number of hidden layers
+  int version;                // NEP version; only NEP4 is supported
+  int batch_size;             // number of configurations in one batch
+  int stream_train;           // keep only the current training batch on GPU
+  int num_types;              // number of atom types
+  int population_size;        // population size for SNES
+  int maximum_generation;     // maximum number of generations for SNES;
+  int save_potential;         // number of generations between writing a checkpoint nep.txt file.
+  int save_potential_format;  // format of checkpoint nep.txt file name
+  int save_potential_restart; // if restart files should be written or not. 0=no, 1=yes
+  int output_interval;   // number of generations between writing loss.out, nep.txt, nep.restart and
+                         // related output
+  int num_neurons1;      // number of nuerons in the 1st hidden layer (only one hidden layer)
+  int num_neurons2;      // number of nuerons in the 2nd hidden layer (only two hidden layers)
+  int num_hidden_layers; // number of hidden layers
   int basis_size_radial;
   int basis_size_angular;
-  int n_max_radial;       // maximum order of the radial Chebyshev polynomials
-  int n_max_angular;      // maximum order of the angular Chebyshev polynomials
-  int L_max;              // maximum order of the 3body spherical harmonics
-  int has_q_222;          // has q_222
-  int has_q_1111;         // has q_1111
-  int has_q_112;          // has q_112
-  int has_q_123;          // has q_123
-  int has_q_233;          // has q_233
-  int has_q_134;          // has q_134
-  float lambda_1;         // weight parameter for L1 regularization loss
-  float lambda_2;         // weight parameter for L2 regularization loss
-  float lambda_e;         // weight parameter for energy RMSE loss
-  float lambda_f;         // weight parameter for force RMSE loss
-  float lambda_v;         // weight parameter for virial RMSE loss
-  float lambda_shear;     // extra weight parameter for shear virial
-  float lambda_q;         // weight for global charge
-  float lambda_z;         // weight for BEC
-  float force_delta;      // a parameters used to modify the force loss
-  bool enable_zbl;        // true for inlcuding the universal ZBL potential
-  bool flexible_zbl;      // true for inlcuding the flexible ZBL potential
-  float zbl_rc_inner;     // inner cutoff for the universal ZBL potential
-  float zbl_rc_outer;     // outer cutoff for the universal ZBL potential
+  int n_max_radial;   // maximum order of the radial Chebyshev polynomials
+  int n_max_angular;  // maximum order of the angular Chebyshev polynomials
+  int L_max;          // maximum order of the 3body spherical harmonics
+  int has_q_222;      // has q_222
+  int has_q_1111;     // has q_1111
+  int has_q_112;      // has q_112
+  int has_q_123;      // has q_123
+  int has_q_233;      // has q_233
+  int has_q_134;      // has q_134
+  float lambda_1;     // weight parameter for L1 regularization loss
+  float lambda_2;     // weight parameter for L2 regularization loss
+  float lambda_e;     // weight parameter for energy RMSE loss
+  float lambda_f;     // weight parameter for force RMSE loss
+  float lambda_v;     // weight parameter for virial RMSE loss
+  float lambda_shear; // extra weight parameter for shear virial
+  float lambda_q;     // weight for global charge
+  float lambda_z;     // weight for BEC
+  float force_delta;  // a parameters used to modify the force loss
+  bool enable_zbl;    // true for inlcuding the universal ZBL potential
+  bool flexible_zbl;  // true for inlcuding the flexible ZBL potential
+  float zbl_rc_inner; // inner cutoff for the universal ZBL potential
+  float zbl_rc_outer; // outer cutoff for the universal ZBL potential
   int train_mode; // 0=potential, 1=dipole, 2=polarizability, 3=temperature-dependent free energy
   int prediction; // 0=no, 1=yes
   float initial_para;
@@ -107,17 +110,17 @@ public:
   bool use_typewise_cutoff_zbl;
   float typewise_cutoff_zbl_factor;
   int output_descriptor;
-  int charge_mode; // add dynamic charge to NEP potential model
-  int vdw;         // add environment-dependent vdW to ordinary NEP
-  int charge_vdw;  // combined charge-vdW model
-  bool has_bec = false; // check if there are target BEC values
-  int flip_charge = 0; // 1 for flipping charges upon restarting
-  int fine_tune = 0; // fine_tune option; 0=no, 1=yes
+  int charge_mode;              // add dynamic charge to NEP potential model
+  int vdw;                      // add environment-dependent vdW to ordinary NEP
+  int charge_vdw;               // combined charge-vdW model
+  bool has_bec = false;         // check if there are target BEC values
+  int flip_charge = 0;          // 1 for flipping charges upon restarting
+  int fine_tune = 0;            // fine_tune option; 0=no, 1=yes
   int fine_tune_descriptor = 1; // fine-tune descriptor; 0=no, 1=yes
   std::string fine_tune_nep_txt = "";
   std::string fine_tune_nep_restart = "";
   bool import_q_scaler = false; // read q_scaler from the local nep.txt instead of recomputing it
-  bool nep_compile = true; // runtime-specialize NEP-family training kernels
+  bool nep_compile = true;      // runtime-specialize NEP-family training kernels
 
   // check if a parameter has been set:
   bool is_train_mode_set;
@@ -150,13 +153,13 @@ public:
   bool is_charge_vdw_set;
 
   // other parameters
-  int dim;                            // dimension of the descriptor vector
-  int dim_radial;                     // number of radial descriptor components
-  int dim_angular;                    // number of angular descriptor components
-  int number_of_variables;            // total number of parameters (NN and descriptor)
-  int number_of_variables_ann;        // number of parameters in the ANN only
-  int number_of_variables_ann_1;      // number of parameters in the ANN for one element
-  int number_of_variables_descriptor; // number of parameters in the descriptor only
+  int dim;                                // dimension of the descriptor vector
+  int dim_radial;                         // number of radial descriptor components
+  int dim_angular;                        // number of angular descriptor components
+  int number_of_variables;                // total number of parameters (NN and descriptor)
+  int number_of_variables_ann;            // number of parameters in the ANN only
+  int number_of_variables_ann_1;          // number of parameters in the ANN for one element
+  int number_of_variables_descriptor;     // number of parameters in the descriptor only
   int number_of_nep_txt_header_lines = 0; // header length of the nep.txt file that has been checked
 
   // some arrays
@@ -168,9 +171,12 @@ public:
   std::vector<float> zbl_para;        // parameters of zbl potential
   std::vector<float> rc_radial;       // radial cutoff distance
   std::vector<float> rc_angular;      // angular cutoff distance
+  std::vector<float> rc_radial_pair;  // explicit radial cutoff by ordered type pair
+  std::vector<float> rc_angular_pair; // explicit angular cutoff by ordered type pair
   float rc_radial_max = 0.0f;         // maximal radial cutoff
   float rc_angular_max = 0.0f;        // maximal angular cutoff
   bool has_multiple_cutoffs = false;
+  bool has_cross_cutoff_override = false;
 
   GPU_Vector<float> q_scaler_gpu[16]; // used to scale some descriptor components (GPU)
   GPU_Vector<float> q_scaler_max[16]; // used to scale some descriptor components (GPU)
@@ -196,6 +202,7 @@ private:
   void parse_type_weight(const char** param, int num_param);
   void parse_zbl(const char** param, int num_param);
   void parse_cutoff(const char** param, int num_param);
+  void parse_cross_cutoff(const char** param, int num_param);
   void parse_n_max(const char** param, int num_param);
   void parse_basis_size(const char** param, int num_param);
   void parse_l_max(const char** param, int num_param);
