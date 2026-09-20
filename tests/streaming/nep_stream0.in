@@ -1,0 +1,12 @@
+type 3 Ba Ti O
+type_weight 1.0 1.25 0.75
+batch 2
+population 10
+generation 4
+output_interval 1
+save_potential 100 0 0
+lambda_e 1.0
+lambda_f 1.0
+lambda_v 0.3
+nep_compile 0
+stream_train 0

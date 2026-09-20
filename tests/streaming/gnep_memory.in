@@ -1,0 +1,8 @@
+type 3 Ba Ti O
+batch 5
+epoch 1
+seed 24680
+lambda_e 1.0
+lambda_f 1.0
+lambda_v 0.3
+stream_train 1

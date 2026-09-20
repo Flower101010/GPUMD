@@ -46,8 +46,17 @@ protected:
   int max_NN_angular; // angular neighbor list size
   FILE* fid_loss_out = NULL;
   std::unique_ptr<Potential> potential;
+  bool stream_train = false;
+  int current_batch_id = -1;
+  std::vector<Structure> structures_train;
+  std::vector<int> batch_begin;
+  std::vector<int> batch_end;
   std::vector<std::vector<Dataset>> train_set;
+  std::unique_ptr<std::vector<Dataset>> current_train_set;
   std::vector<Dataset> test_set;
+  std::vector<Dataset>& load_train_batch(Parameters& para, int batch_id, const char* phase);
+  void release_train_batch(const char* phase);
+  void log_stream_memory(const char* phase, int batch_id, int live_datasets);
   void output(
     bool is_stress,
     int num_components,

@@ -1,0 +1,15 @@
+type 2 O C
+version 4
+cutoff 8 4
+n_max 6 6
+basis_size 6 6
+l_max 4 1
+neuron 30
+lambda_e 0
+lambda_f 1
+lambda_v 0.3
+population 10
+generation 4
+output_interval 1
+save_potential 100 0 0
+nep_compile 0

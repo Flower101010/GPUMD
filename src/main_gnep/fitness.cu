@@ -91,7 +91,7 @@ Fitness::Fitness(Parameters& para, Adam* adam)
   std::remove("gnep_diagnostic_shards.tsv");
 #endif
 
-  std::vector<Structure> structures_train;
+  stream_train = para.stream_train == 1;
   read_structures(true, para, structures_train);
   num_batches = (structures_train.size() - 1) / para.batch_size + 1;
   maximum_steps = num_batches * maximum_epochs;
@@ -119,12 +119,16 @@ Fitness::Fitness(Parameters& para, Adam* adam)
     const int active_devices = std::min(deviceCount, batch_size);
     GNEPTrainingBatch& batch = train_set[batch_id];
     batch.num_configurations = batch_size;
-    batch.shards.resize(active_devices);
+    batch.begin = batch_begin;
+    batch.end = count;
+    if (!stream_train) batch.shards.resize(active_devices);
     batch.configuration_indices.resize(active_devices);
-    batch.output_structures.insert(
-      batch.output_structures.end(),
-      structures_train.begin() + batch_begin,
-      structures_train.begin() + count);
+    if (!stream_train) {
+      batch.output_structures.insert(
+        batch.output_structures.end(),
+        structures_train.begin() + batch_begin,
+        structures_train.begin() + count);
+    }
 
     std::vector<int> ranked_indices(batch_size);
     for (int i = 0; i < batch_size; ++i) {
@@ -172,32 +176,34 @@ Fitness::Fitness(Parameters& para, Adam* adam)
       "Number of configurations = %d; active devices = %d.\n",
       batch_size,
       active_devices);
-    for (int device_id = 0; device_id < active_devices; ++device_id) {
-      print_line_1();
-      printf(
-        "Constructing shard on device %d: %zu configurations, %d atoms.\n",
-        device_id,
-        batch.configuration_indices[device_id].size(),
-        atom_load[device_id]);
-      CHECK(cudaSetDevice(device_id));
-      std::vector<Structure> shard_structures;
-      shard_structures.reserve(batch.configuration_indices[device_id].size());
-      for (const int configuration_index : batch.configuration_indices[device_id]) {
-        shard_structures.push_back(structures_train[configuration_index]);
+    if (!stream_train) {
+      for (int device_id = 0; device_id < active_devices; ++device_id) {
+        print_line_1();
+        printf(
+          "Constructing shard on device %d: %zu configurations, %d atoms.\n",
+          device_id,
+          batch.configuration_indices[device_id].size(),
+          atom_load[device_id]);
+        CHECK(cudaSetDevice(device_id));
+        std::vector<Structure> shard_structures;
+        shard_structures.reserve(batch.configuration_indices[device_id].size());
+        for (const int configuration_index : batch.configuration_indices[device_id]) {
+          shard_structures.push_back(structures_train[configuration_index]);
+        }
+        batch.shards[device_id].construct(
+          para, shard_structures, true, 0, shard_structures.size(), device_id);
+        const Dataset& shard = batch.shards[device_id];
+        capacities[device_id].max_atoms = std::max(capacities[device_id].max_atoms, shard.N);
+        capacities[device_id].max_training_atoms =
+          std::max(capacities[device_id].max_training_atoms, shard.N);
+        capacities[device_id].max_configurations =
+          std::max(capacities[device_id].max_configurations, shard.Nc);
+        capacities[device_id].max_radial_pairs =
+          std::max(capacities[device_id].max_radial_pairs, shard.N * shard.max_NN_radial);
+        capacities[device_id].max_angular_pairs =
+          std::max(capacities[device_id].max_angular_pairs, shard.N * shard.max_NN_angular);
+        print_line_2();
       }
-      batch.shards[device_id].construct(
-        para, shard_structures, true, 0, shard_structures.size(), device_id);
-      const Dataset& shard = batch.shards[device_id];
-      capacities[device_id].max_atoms = std::max(capacities[device_id].max_atoms, shard.N);
-      capacities[device_id].max_training_atoms =
-        std::max(capacities[device_id].max_training_atoms, shard.N);
-      capacities[device_id].max_configurations =
-        std::max(capacities[device_id].max_configurations, shard.Nc);
-      capacities[device_id].max_radial_pairs =
-        std::max(capacities[device_id].max_radial_pairs, shard.N * shard.max_NN_radial);
-      capacities[device_id].max_angular_pairs =
-        std::max(capacities[device_id].max_angular_pairs, shard.N * shard.max_NN_angular);
-      print_line_2();
     }
 
     batch_type_sums[batch_id].assign(para.num_types, 0);
@@ -210,20 +216,40 @@ Fitness::Fitness(Parameters& para, Adam* adam)
         ++batch_type_sums[batch_id][type];
       }
     }
+    GNEPTrainingBatch& capacity_batch = stream_train
+      ? load_train_batch(para, batch_id, "capacity-load")
+      : batch;
+    if (stream_train) {
+      for (int device_id = 0; device_id < static_cast<int>(capacity_batch.shards.size()); ++device_id) {
+        const Dataset& shard = capacity_batch.shards[device_id];
+        capacities[device_id].max_atoms = std::max(capacities[device_id].max_atoms, shard.N);
+        capacities[device_id].max_training_atoms =
+          std::max(capacities[device_id].max_training_atoms, shard.N);
+        capacities[device_id].max_configurations =
+          std::max(capacities[device_id].max_configurations, shard.Nc);
+        capacities[device_id].max_radial_pairs =
+          std::max(capacities[device_id].max_radial_pairs, shard.N * shard.max_NN_radial);
+        capacities[device_id].max_angular_pairs =
+          std::max(capacities[device_id].max_angular_pairs, shard.N * shard.max_NN_angular);
+      }
+    }
     int batch_max_radial_neighbors = 0;
     int batch_max_angular_neighbors = 0;
-    for (const Dataset& shard : batch.shards) {
+    for (const Dataset& shard : capacity_batch.shards) {
       batch_max_radial_neighbors =
         std::max(batch_max_radial_neighbors, shard.max_NN_radial);
       batch_max_angular_neighbors =
         std::max(batch_max_angular_neighbors, shard.max_NN_angular);
     }
+    batch.max_NN_radial = batch_max_radial_neighbors;
+    batch.max_NN_angular = batch_max_angular_neighbors;
     capacities[0].max_atoms = std::max(capacities[0].max_atoms, batch.num_atoms);
     capacities[0].max_radial_pairs = std::max(
       capacities[0].max_radial_pairs, batch.num_atoms * batch_max_radial_neighbors);
     capacities[0].max_angular_pairs = std::max(
       capacities[0].max_angular_pairs, batch.num_atoms * batch_max_angular_neighbors);
     batch_indices[batch_id] = batch_id;
+    if (stream_train) release_train_batch("capacity-destroy");
   }
 
   std::vector<Structure> structures_test;
@@ -257,14 +283,8 @@ Fitness::Fitness(Parameters& para, Adam* adam)
   }
   for (int n = 0; n < num_batches; ++n) {
     GNEPTrainingBatch& batch = train_set[n];
-    int batch_max_radial_neighbors = 0;
-    int batch_max_angular_neighbors = 0;
-    for (const Dataset& shard : batch.shards) {
-      batch_max_radial_neighbors =
-        std::max(batch_max_radial_neighbors, shard.max_NN_radial);
-      batch_max_angular_neighbors =
-        std::max(batch_max_angular_neighbors, shard.max_NN_angular);
-    }
+    const int batch_max_radial_neighbors = batch.max_NN_radial;
+    const int batch_max_angular_neighbors = batch.max_NN_angular;
     if (batch.num_atoms > N) {
       N = batch.num_atoms;
     };
@@ -288,13 +308,83 @@ Fitness::Fitness(Parameters& para, Adam* adam)
   if (para.prediction == 0) {
     fid_loss_out = my_fopen("loss.out", "a");
   }
+  if (!stream_train) {
+    structures_train.clear();
+    structures_train.shrink_to_fit();
+  }
 }
 
 Fitness::~Fitness()
 {
+  release_train_batch("fitness-destroy");
   if (fid_loss_out != NULL) {
     fclose(fid_loss_out);
   }
+}
+
+void Fitness::log_stream_memory(const char* phase, int batch_id, int live_datasets)
+{
+  int device_count = 0;
+  CHECK(cudaGetDeviceCount(&device_count));
+  for (int device_id = 0; device_id < device_count; ++device_id) {
+    CHECK(cudaSetDevice(device_id));
+    CHECK(cudaDeviceSynchronize());
+    size_t free_bytes = 0;
+    size_t total_bytes = 0;
+    CHECK(cudaMemGetInfo(&free_bytes, &total_bytes));
+    printf(
+      "STREAM_MEMORY component=GNEP phase=%s batch=%d device=%d live_training_datasets=%d used_bytes=%zu free_bytes=%zu total_bytes=%zu\n",
+      phase, batch_id, device_id, live_datasets, total_bytes - free_bytes, free_bytes, total_bytes);
+  }
+}
+
+void Fitness::release_train_batch(const char* phase)
+{
+  if (!stream_train || !current_train_batch) return;
+  const int released_batch = current_batch_id;
+  int device_count = 0;
+  CHECK(cudaGetDeviceCount(&device_count));
+  for (int device_id = 0; device_id < device_count; ++device_id) {
+    CHECK(cudaSetDevice(device_id));
+    CHECK(cudaDeviceSynchronize());
+  }
+  current_train_batch.reset();
+  current_batch_id = -1;
+  log_stream_memory(phase, released_batch, 0);
+}
+
+GNEPTrainingBatch& Fitness::load_train_batch(
+  Parameters& para, int batch_id, const char* phase)
+{
+  if (!stream_train) return train_set[batch_id];
+  if (current_train_batch && current_batch_id == batch_id) return *current_train_batch;
+  release_train_batch("switch-destroy");
+  log_stream_memory("before-load", batch_id, 0);
+  const GNEPTrainingBatch& metadata = train_set[batch_id];
+  current_train_batch.reset(new GNEPTrainingBatch);
+  GNEPTrainingBatch& batch = *current_train_batch;
+  batch.num_configurations = metadata.num_configurations;
+  batch.num_atoms = metadata.num_atoms;
+  batch.virial_components = metadata.virial_components;
+  batch.max_NN_radial = metadata.max_NN_radial;
+  batch.max_NN_angular = metadata.max_NN_angular;
+  batch.begin = metadata.begin;
+  batch.end = metadata.end;
+  batch.configuration_indices = metadata.configuration_indices;
+  batch.shards.resize(batch.configuration_indices.size());
+  for (int device_id = 0; device_id < static_cast<int>(batch.shards.size()); ++device_id) {
+    CHECK(cudaSetDevice(device_id));
+    std::vector<Structure> shard_structures;
+    shard_structures.reserve(batch.configuration_indices[device_id].size());
+    for (const int configuration_index : batch.configuration_indices[device_id]) {
+      shard_structures.push_back(structures_train[configuration_index]);
+    }
+    batch.shards[device_id].construct(
+      para, shard_structures, true, 0, shard_structures.size(), device_id);
+  }
+  current_batch_id = batch_id;
+  log_stream_memory(phase, batch_id, static_cast<int>(batch.shards.size()));
+  return batch;
 }
 
 void Fitness::compute(Parameters& para)
@@ -349,7 +439,7 @@ void Fitness::compute(Parameters& para)
       "gnep_diagnostic_initial_parameters.txt", parameters, number_of_variables);
 #endif
     for (int n = 0; n < num_batches; ++n) {
-      GNEPTrainingBatch& batch = train_set[n];
+      GNEPTrainingBatch& batch = load_train_batch(para, n, "q-scaler-load");
       std::vector<std::thread> workers;
       for (int device_id = 0; device_id < static_cast<int>(batch.shards.size()); ++device_id) {
         workers.emplace_back([&, device_id]() {
@@ -373,6 +463,10 @@ void Fitness::compute(Parameters& para)
       }
       for (std::thread& worker : workers) {
         worker.join();
+      }
+      if (stream_train) {
+        log_stream_memory("q-scaler-compute", n, static_cast<int>(batch.shards.size()));
+        release_train_batch("q-scaler-destroy");
       }
     }
     para.reduce_and_broadcast_scaler();
@@ -408,7 +502,7 @@ void Fitness::compute(Parameters& para)
         count_virial = 0;
       }
       batch_id = batch_indices[batch_id];
-      GNEPTrainingBatch& batch = train_set[batch_id];
+      GNEPTrainingBatch& batch = load_train_batch(para, batch_id, "train-load");
       int Nc = batch.num_configurations;
       if (para.lr_restart_enable) {
         update_learning_rate_cos_restart(lr, step, num_batches, para);
@@ -529,6 +623,22 @@ void Fitness::compute(Parameters& para)
       count_virial += batch.virial_components;
       optimizer->update(lr, global_gradient);
 #ifdef GNEP_TEST_DIAGNOSTICS
+      {
+        const std::string suffix = "_step" + std::to_string(step) + ".txt";
+        write_diagnostic_values(
+          ("gnep_diagnostic_global_gradient" + suffix).c_str(), global_gradient);
+        write_diagnostic_values(
+          ("gnep_diagnostic_updated_parameters" + suffix).c_str(),
+          parameters,
+          number_of_variables);
+        std::vector<float> step_first_moment;
+        std::vector<float> step_second_moment;
+        optimizer->copy_moments_to_host(step_first_moment, step_second_moment);
+        write_diagnostic_values(
+          ("gnep_diagnostic_first_moment" + suffix).c_str(), step_first_moment);
+        write_diagnostic_values(
+          ("gnep_diagnostic_second_moment" + suffix).c_str(), step_second_moment);
+      }
       if (step == 0) {
         write_diagnostic_values(
           "gnep_diagnostic_updated_parameters.txt", parameters, number_of_variables);
@@ -549,6 +659,10 @@ void Fitness::compute(Parameters& para)
         batch.num_configurations,
         batch.num_atoms,
         step_seconds);
+      if (stream_train) {
+        log_stream_memory("train-compute", batch_id, static_cast<int>(batch.shards.size()));
+        release_train_batch("train-destroy");
+      }
 
       if ((step + 1) % num_batches == 0) {
         float time_used = std::chrono::duration<float>(
@@ -906,8 +1020,13 @@ void Fitness::predict(Parameters& para, float* parameters)
   for (int batch_id = 0; batch_id < num_batches; ++batch_id) {
     GNEPTrainingBatch& batch = train_set[batch_id];
     std::vector<Dataset> output_dataset(1);
-    output_dataset[0].construct(
-      para, batch.output_structures, false, 0, batch.output_structures.size(), 0);
+    if (stream_train) {
+      output_dataset[0].construct(
+        para, structures_train, false, batch.begin, batch.end, 0);
+    } else {
+      output_dataset[0].construct(
+        para, batch.output_structures, false, 0, batch.output_structures.size(), 0);
+    }
     potential->find_force(
       para,
       parameters,

@@ -32,6 +32,10 @@ struct GNEPTrainingBatch
   int num_configurations = 0;
   int num_atoms = 0;
   int virial_components = 0;
+  int max_NN_radial = 0;
+  int max_NN_angular = 0;
+  int begin = 0;
+  int end = 0;
 };
 
 class Fitness
@@ -70,11 +74,18 @@ protected:
   Adam* optimizer;
   FILE* fid_loss_out = NULL;
   std::unique_ptr<Potential> potential;
+  bool stream_train = false;
+  int current_batch_id = -1;
+  std::vector<Structure> structures_train;
   std::vector<GNEPTrainingBatch> train_set;
+  std::unique_ptr<GNEPTrainingBatch> current_train_batch;
   std::vector<Dataset> test_set;
   std::vector<int> batch_indices;
   std::vector<std::vector<int>> batch_type_sums;
   std::vector<float> batch_energies;
+  GNEPTrainingBatch& load_train_batch(Parameters& para, int batch_id, const char* phase);
+  void release_train_batch(const char* phase);
+  void log_stream_memory(const char* phase, int batch_id, int live_datasets);
   void output(
     bool is_stress,
     int num_components,
