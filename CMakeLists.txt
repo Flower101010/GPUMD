@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 
-set(CMAKE_CUDA_ARCHITECTURES "native" CACHE STRING "CUDA compute capability (e.g. native, 75, 80, 90)")
+set(
+    CMAKE_CUDA_ARCHITECTURES "native"
+    CACHE STRING "CUDA compute capability (e.g. native, 70, 80, 90; use 70;80 on the cluster)"
+)
 project(GPUMD LANGUAGES CXX CUDA)
 
 include(CTest)

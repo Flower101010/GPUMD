@@ -40,17 +40,28 @@ jobs:
         run: >
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_CUDA_ARCHITECTURES=75
+          -DCMAKE_CUDA_ARCHITECTURES='70;80'
 
       - name: Build gpumd and nep
         run: cmake --build build --parallel 2 --target gpumd nep
 
-      - name: Upload gpumd/nep artifact
+      - name: Write build metadata
+        run: |
+          {
+            echo "git_sha=$GITHUB_SHA"
+            echo "runner_os=ubuntu-24.04"
+            echo "cuda_architectures=70;80"
+            cmake --version | head -1 | sed 's/^/cmake=/'
+            nvcc --version | tail -1 | sed 's/^/nvcc=/'
+          } > build/build-info.txt
+
+      - name: Upload gpumd/nep CI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gpumd-nep
+          name: gpumd-nep-ci-ubuntu24.04
           path: |
             build/gpumd
             build/nep
+            build/build-info.txt
           if-no-files-found: error
           retention-days: 14

@@ -1,5 +1,23 @@
 # Cluster installation
 
+## Build a cluster-compatible package
+
+The GitHub-hosted Ubuntu build is a CI artifact only; it is linked against a newer glibc
+than the CentOS 7 cluster provides. Build on the cluster with its native toolchain instead:
+
+    module load gcc/11.2.0
+    export CUDA_HOME=/home/m9n0o/opt/cuda-12.6.0
+    export GPUMD_CUDA_ARCHITECTURES='70;80'
+    scripts/build_cluster.sh
+    source build/gpumd-cluster/env.sh
+
+The default package contains both sm_70 (V100) and sm_80 (A100) code in one gpumd
+and one nep executable. To produce a smaller single-architecture package, use
+GPUMD_CUDA_ARCHITECTURES=70 or GPUMD_CUDA_ARCHITECTURES=80.
+
+The package includes a matching src/ tree so runtime nep_compile 1 can specialize kernels
+on either GPU generation.
+
 Production-tested installation:
 
 ```text
