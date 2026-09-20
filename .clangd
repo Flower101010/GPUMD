@@ -1,0 +1,8 @@
+CompileFlags:
+  Add:
+    - --cuda-path=/opt/cuda
+    - -I/home/flos/GPUMD/src
+  Remove:
+    - -forward-unknown-to-host-compiler
+    - --options-file
+    - -arch=native

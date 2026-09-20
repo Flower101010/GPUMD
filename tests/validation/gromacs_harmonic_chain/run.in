@@ -1,0 +1,9 @@
+potential zero_lj.txt
+molecular_force molecular_force.in
+
+time_step 0.05
+ensemble nve
+
+dump_thermo 20
+dump_position 20 precision double
+run 2000

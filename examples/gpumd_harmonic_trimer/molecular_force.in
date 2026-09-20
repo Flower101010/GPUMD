@@ -1,0 +1,10 @@
+# Three-particle chain with two harmonic bonds.
+gpumd_molecular_force 1
+number_of_atoms 3
+
+harmonic_bond_parameters 1
+1.5 5.0
+
+bonds 2
+0 1 0
+1 2 0

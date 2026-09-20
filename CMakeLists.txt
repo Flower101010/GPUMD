@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.24)
 set(CMAKE_CUDA_ARCHITECTURES "native" CACHE STRING "CUDA compute capability (e.g. native, 75, 80, 90)")
 project(GPUMD LANGUAGES CXX CUDA)
 
+include(CTest)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -74,4 +76,8 @@ if(PKG_NNAP)
 
     string(REPLACE "\\" "/" JSE_JAR_PATH_DEF "$ENV{JSE_JAR_PATH}")
     target_compile_definitions(gpumd PRIVATE JVM_CLASS_PATH="-Djava.class.path=${JSE_JAR_PATH_DEF}")
+endif()
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
 endif()

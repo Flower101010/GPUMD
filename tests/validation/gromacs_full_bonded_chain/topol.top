@@ -1,0 +1,55 @@
+[ defaults ]
+; nbfunc  comb-rule  gen-pairs  fudgeLJ  fudgeQQ
+1         1          no         1.0      1.0
+
+[ atomtypes ]
+; name  mass    charge  ptype  C6   C12
+AR      39.948  0.0     A      0.0  0.0
+
+[ moleculetype ]
+; name   nrexcl
+CHAIN    3
+
+[ atoms ]
+; nr  type  resnr  residue  atom  cgnr  charge  mass
+1     AR    1      POL      B01   1     0.0     39.948
+2     AR    1      POL      B02   2     0.0     39.948
+3     AR    1      POL      B03   3     0.0     39.948
+4     AR    1      POL      B04   4     0.0     39.948
+5     AR    1      POL      B05   5     0.0     39.948
+6     AR    1      POL      B06   6     0.0     39.948
+7     AR    1      POL      B07   7     0.0     39.948
+8     AR    1      POL      B08   8     0.0     39.948
+
+[ bonds ]
+; i  j  funct  b0 (nm)  k (kJ mol^-1 nm^-2)
+1    2  1      0.15     48242.66606165
+2    3  1      0.15     48242.66606165
+3    4  1      0.15     48242.66606165
+4    5  1      0.15     48242.66606165
+5    6  1      0.15     48242.66606165
+6    7  1      0.15     48242.66606165
+7    8  1      0.15     48242.66606165
+
+[ angles ]
+; i  j  k  funct  theta0 (deg)  k (kJ mol^-1 rad^-2)
+1    2  3  1      110.0         192.9706642466
+2    3  4  1      110.0         192.9706642466
+3    4  5  1      110.0         192.9706642466
+4    5  6  1      110.0         192.9706642466
+5    6  7  1      110.0         192.9706642466
+6    7  8  1      110.0         192.9706642466
+
+[ dihedrals ]
+; i  j  k  l  funct  phase (deg)      k (kJ/mol)      multiplicity
+1    2  3  4  1      22.9183118052    19.29706642466  3
+2    3  4  5  1      22.9183118052    19.29706642466  3
+3    4  5  6  1      22.9183118052    19.29706642466  3
+4    5  6  7  1      22.9183118052    19.29706642466  3
+5    6  7  8  1      22.9183118052    19.29706642466  3
+
+[ system ]
+Full bonded eight-bead chain
+
+[ molecules ]
+CHAIN  1
