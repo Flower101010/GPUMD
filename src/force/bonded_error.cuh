@@ -35,4 +35,3 @@ public:
 private:
   GPU_Vector<int> indices_;
 };
-

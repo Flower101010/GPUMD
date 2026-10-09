@@ -14,7 +14,8 @@ cmake -S "${task_repo_root}" -B "${task_build_dir}" \
 cmake --build "${task_build_dir}" --parallel 2 --target gpumd \
   test_topology test_force_field_parameters test_read_molecular_force test_gpu_vector \
   test_bonded_geometry test_harmonic_bond_data test_harmonic_bond test_harmonic_angle_data \
-  test_harmonic_angle test_periodic_dihedral_data test_periodic_dihedral test_molecular_force
+  test_harmonic_angle test_periodic_dihedral_data test_periodic_dihedral test_molecular_force \
+  test_bonded_core
 task_ctest_status=0
 ctest --test-dir "${task_build_dir}" --output-on-failure \
   --output-junit "${task_repo_root}/developers/cg_stage_a/gpu_tests.xml" || task_ctest_status=$?

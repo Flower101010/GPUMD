@@ -6,10 +6,10 @@
 
 - [输入草案说明](README.md)：新参数/拓扑文件、训练/MD 接口建议、总量标签、编号与单位约定。
 - `input_draft/`：共享参数、4/6 bead 两帧 XYZ、分离拓扑草案、兼容当前 v2 的完整拓扑文件及 model.xyz。
-- [host 基线](baseline.json)：本仓库 4 项现有 host 测试、对方 CPU 测试、fixture 检查均 PASS；含源文件 SHA256。
-- [CTest 原始结果](gpu_tests.xml)：10 项通过、3 项失败，无跳过。
-- [GPU fixture 对照](fixture_md_baseline.json)：两帧均通过，保留日志、输出和 binary SHA256。
-- [当前工具链与源版本记录](gpu_baseline.json)：构建参数、失败分类、未运行项目、补充源文件 SHA256。
+- [host 基线](evidence/stage_a_host.json)：本仓库 4 项现有 host 测试、对方 CPU 测试、fixture 检查均 PASS；含源文件 SHA256。
+- CTest 原始结果：10 项通过、3 项失败，无跳过；逐项状态冻结在下述 GPU 记录中。
+- [GPU fixture 对照](evidence/stage_a_fixture_md.json)：两帧均通过，保留日志、输出和 binary SHA256。
+- [阶段 A 工具链与源版本记录](evidence/stage_a_gpu.json)：构建参数、失败分类、未运行项目、补充源文件 SHA256。
 
 ## 环境与构建
 

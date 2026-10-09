@@ -1,0 +1,163 @@
+{
+  "date_client_timezone": "2026-10-09 Asia/Shanghai",
+  "recorded_at_utc": "2026-10-09T08:51:41.645606+00:00",
+  "core_commit": "7fc93dac90743f52cbe57b1a5842b453b7d7c28e",
+  "toolchain": "CUDA 13.4.92, GCC 16.2.1, Release, architecture 86",
+  "build_directory": "/tmp/gpumd-stage-a-build",
+  "ctest": [
+    {
+      "name": "unit.test_topology",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_force_field_parameters",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_read_molecular_force",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_gpu_vector",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_bonded_geometry",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_harmonic_bond_data",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_harmonic_bond",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_harmonic_angle_data",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_harmonic_angle",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_periodic_dihedral_data",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_periodic_dihedral",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_molecular_force",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_bonded_core",
+      "status": "PASS"
+    },
+    {
+      "name": "integration.molecular_force_run_in",
+      "status": "PASS"
+    }
+  ],
+  "host": "PASS",
+  "fixture_md": [
+    {
+      "frame": "frame4",
+      "energy_error": 8.881784197001252e-16,
+      "max_force_error": 3.9968028886505635e-15,
+      "max_virial_error": 2.220446049250313e-15,
+      "status": "PASS"
+    },
+    {
+      "frame": "frame6",
+      "energy_error": 6.938893903907228e-16,
+      "max_force_error": 2.55351295663786e-15,
+      "max_virial_error": 2.6853519408120974e-15,
+      "status": "PASS"
+    }
+  ],
+  "nve": {
+    "scope": "Bonded-only, zero initial velocities, 50 fs per case; not physical CG validation",
+    "binary_sha256": "a8934843dc97a56119f3b79506292a6047135520c02f4586d67107b29f9742bf",
+    "results": [
+      {
+        "frame": "frame4",
+        "time_step_fs": 0.05,
+        "duration_fs": 50,
+        "steps": 1000,
+        "exit_code": 0,
+        "status": "PASS",
+        "initial_total_energy_eV": 0.8225995485284616,
+        "max_energy_deviation_eV": 1.2677584615428117e-06,
+        "relative_energy_deviation": 1.5411611443389307e-06
+      },
+      {
+        "frame": "frame4",
+        "time_step_fs": 0.025,
+        "duration_fs": 50,
+        "steps": 2000,
+        "exit_code": 0,
+        "status": "PASS",
+        "initial_total_energy_eV": 0.8225995485474211,
+        "max_energy_deviation_eV": 3.169474211972556e-07,
+        "relative_energy_deviation": 3.85299775275751e-07
+      },
+      {
+        "frame": "frame4",
+        "check": "time_step_convergence",
+        "status": "PASS"
+      },
+      {
+        "frame": "frame6",
+        "time_step_fs": 0.05,
+        "duration_fs": 50,
+        "steps": 1000,
+        "exit_code": 0,
+        "status": "PASS",
+        "initial_total_energy_eV": 0.1986375438016619,
+        "max_energy_deviation_eV": 7.397123618912982e-07,
+        "relative_energy_deviation": 3.7239302688412995e-06
+      },
+      {
+        "frame": "frame6",
+        "time_step_fs": 0.025,
+        "duration_fs": 50,
+        "steps": 2000,
+        "exit_code": 0,
+        "status": "PASS",
+        "initial_total_energy_eV": 0.19863754381012758,
+        "max_energy_deviation_eV": 1.8492732759001207e-07,
+        "relative_energy_deviation": 9.309787265934946e-07
+      },
+      {
+        "frame": "frame6",
+        "check": "time_step_convergence",
+        "status": "PASS"
+      }
+    ],
+    "status": "PASS"
+  },
+  "compute_sanitizer": {
+    "command": "/usr/local/cuda/bin/compute-sanitizer --tool memcheck --error-exitcode 1 /tmp/gpumd-stage-a-build/tests/test_bonded_core",
+    "status": "PASS",
+    "errors": 0
+  },
+  "source_sha256": {
+    "src/force/harmonic_angle.cu": "75cd6a9c9d531558bc4d22f2409193d8448ecdef0f22bda369cfff4a1196bec5",
+    "src/force/harmonic_bond.cu": "748c1ebfe09d05b447ef901f1983d9a3100849ee7b303b33a2299deb6389a6ba",
+    "src/force/molecular_force.cu": "9d2618c0bba287d57c90aa64285d0caf646300862315415765dbae87decf5192",
+    "src/force/periodic_dihedral.cu": "a3b429e3a60ef6368f042f5e123c06070ef0bcea4bee2f9078faf199e64e635f",
+    "src/force/bonded_geometry.cuh": "dee6d7d607a6c8c2f1fe932cabc4a78e9e61abfed532d5f23ba986f7d970c0b9",
+    "src/force/bonded_accumulation.cuh": "bbc2d1b32083f0cfd67804103e2f753a11beec10ede4322511c17df9d0a3e3db",
+    "src/force/bonded_error.cuh": "a92687177566bd6c5e1f692bfd2c58cc63bd3b5917ffb96b3fe09fb2d7151fbd"
+  },
+  "limits": [
+    "GROMACS comparison not run",
+    "NEP training/per-frame parser not implemented",
+    "No large-system performance or long-time physical validation",
+    "Error check adds one synchronized GPU readback per MolecularForce call"
+  ]
+}
