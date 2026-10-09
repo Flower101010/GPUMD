@@ -135,6 +135,55 @@ int read_non_negative_count(
   }
   return count;
 }
+ForceFieldParameters read_parameters(InputReader& reader, bool include_angles_and_dihedrals)
+{
+  ForceFieldParameters parameters;
+  std::vector<std::string> tokens;
+  const int number_of_parameters = read_non_negative_count(
+    reader, "harmonic_bond_parameters", "number of harmonic bond parameters");
+  parameters.harmonic_bond_parameters.reserve(number_of_parameters);
+  for (int i = 0; i < number_of_parameters; ++i) {
+    tokens = reader.next_tokens("harmonic bond parameter");
+    if (tokens.size() != 2) {
+      reader.fail("each harmonic bond parameter requires equilibrium_distance and force_constant");
+    }
+    parameters.harmonic_bond_parameters.push_back(
+      {reader.parse_double(tokens[0], "equilibrium_distance"),
+       reader.parse_double(tokens[1], "force_constant")});
+  }
+
+  if (include_angles_and_dihedrals) {
+    const int number_of_angle_parameters = read_non_negative_count(
+      reader, "harmonic_angle_parameters", "number of harmonic angle parameters");
+    parameters.harmonic_angle_parameters.reserve(number_of_angle_parameters);
+    for (int i = 0; i < number_of_angle_parameters; ++i) {
+      tokens = reader.next_tokens("harmonic angle parameter");
+      if (tokens.size() != 2) {
+        reader.fail("each harmonic angle parameter requires equilibrium_angle and angle_constant");
+      }
+      parameters.harmonic_angle_parameters.push_back(
+        {reader.parse_double(tokens[0], "equilibrium_angle"),
+         reader.parse_double(tokens[1], "angle_constant")});
+    }
+
+    const int number_of_dihedral_parameters = read_non_negative_count(
+      reader, "periodic_dihedral_parameters", "number of periodic dihedral parameters");
+    parameters.periodic_dihedral_parameters.reserve(number_of_dihedral_parameters);
+    for (int i = 0; i < number_of_dihedral_parameters; ++i) {
+      tokens = reader.next_tokens("periodic dihedral parameter");
+      if (tokens.size() != 3) {
+        reader.fail(
+          "each periodic dihedral parameter requires force_constant, multiplicity, and phase");
+      }
+      parameters.periodic_dihedral_parameters.push_back(
+        {reader.parse_double(tokens[0], "dihedral force_constant"),
+         reader.parse_int(tokens[1], "dihedral multiplicity"),
+         reader.parse_double(tokens[2], "dihedral phase")});
+    }
+  }
+
+  return parameters;
+}
 } // namespace
 
 MolecularForceDefinition read_molecular_force(const std::string& filename)
@@ -156,48 +205,7 @@ MolecularForceDefinition read_molecular_force(const std::string& filename)
     reader.fail("number_of_atoms must be positive");
   }
 
-  const int number_of_parameters = read_non_negative_count(
-    reader, "harmonic_bond_parameters", "number of harmonic bond parameters");
-  definition.parameters.harmonic_bond_parameters.reserve(number_of_parameters);
-  for (int i = 0; i < number_of_parameters; ++i) {
-    tokens = reader.next_tokens("harmonic bond parameter");
-    if (tokens.size() != 2) {
-      reader.fail("each harmonic bond parameter requires equilibrium_distance and force_constant");
-    }
-    definition.parameters.harmonic_bond_parameters.push_back(
-      {reader.parse_double(tokens[0], "equilibrium_distance"),
-       reader.parse_double(tokens[1], "force_constant")});
-  }
-
-  if (version == 2) {
-    const int number_of_angle_parameters = read_non_negative_count(
-      reader, "harmonic_angle_parameters", "number of harmonic angle parameters");
-    definition.parameters.harmonic_angle_parameters.reserve(number_of_angle_parameters);
-    for (int i = 0; i < number_of_angle_parameters; ++i) {
-      tokens = reader.next_tokens("harmonic angle parameter");
-      if (tokens.size() != 2) {
-        reader.fail("each harmonic angle parameter requires equilibrium_angle and angle_constant");
-      }
-      definition.parameters.harmonic_angle_parameters.push_back(
-        {reader.parse_double(tokens[0], "equilibrium_angle"),
-         reader.parse_double(tokens[1], "angle_constant")});
-    }
-
-    const int number_of_dihedral_parameters = read_non_negative_count(
-      reader, "periodic_dihedral_parameters", "number of periodic dihedral parameters");
-    definition.parameters.periodic_dihedral_parameters.reserve(number_of_dihedral_parameters);
-    for (int i = 0; i < number_of_dihedral_parameters; ++i) {
-      tokens = reader.next_tokens("periodic dihedral parameter");
-      if (tokens.size() != 3) {
-        reader.fail(
-          "each periodic dihedral parameter requires force_constant, multiplicity, and phase");
-      }
-      definition.parameters.periodic_dihedral_parameters.push_back(
-        {reader.parse_double(tokens[0], "dihedral force_constant"),
-         reader.parse_int(tokens[1], "dihedral multiplicity"),
-         reader.parse_double(tokens[2], "dihedral phase")});
-    }
-  }
+  definition.parameters = read_parameters(reader, version == 2);
 
   const int number_of_bonds = read_non_negative_count(reader, "bonds", "number of bonds");
   definition.topology.bonds.reserve(number_of_bonds);
@@ -254,4 +262,24 @@ MolecularForceDefinition read_molecular_force(const std::string& filename)
   }
 
   return definition;
+}
+
+ForceFieldParameters read_bonded_parameters(const std::string& filename)
+{
+  InputReader reader(filename);
+  const auto tokens = reader.next_tokens("gpumd_bonded_parameters header");
+  reader.require_line(tokens, "gpumd_bonded_parameters", 2);
+  if (reader.parse_int(tokens[1], "format version") != 1) {
+    reader.fail("unsupported bonded parameters format version: " + tokens[1]);
+  }
+  auto parameters = read_parameters(reader, true);
+  reader.require_end("periodic_dihedral_parameters");
+  Topology empty;
+  empty.number_of_atoms = 1;
+  try {
+    parameters.validate_or_throw(empty);
+  } catch (const std::runtime_error& error) {
+    throw std::runtime_error(filename + ": semantic validation failed:\n" + error.what());
+  }
+  return parameters;
 }

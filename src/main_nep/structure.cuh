@@ -14,11 +14,15 @@
 */
 
 #pragma once
+#include "bonded_baseline.cuh"
 #include <vector>
 
 class Parameters;
 
 struct Structure {
+  bool has_bonded_baseline = false;
+  Topology topology;
+  BondedBaseline bonded_baseline;
   int num_cell[3];
   int num_atom;
   int has_virial;
@@ -51,4 +55,6 @@ struct Structure {
   std::vector<float> bec;
 };
 
-bool read_structures(bool is_train, Parameters& para, std::vector<Structure>& structures);
+// Internal stage-C opt-in. The production training entry is enabled only after loss integration.
+bool read_structures(bool is_train, Parameters& para, std::vector<Structure>& structures,
+                     const ForceFieldParameters* bonded_parameters = nullptr);

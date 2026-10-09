@@ -74,6 +74,11 @@ public:
   std::vector<float> force_cpu;     // calculated force in CPU
   std::vector<float> avirial_cpu;   // calculated atomic virial in CPU
 
+  // Fixed per-atom baseline, packed in the same SoA layout as predictions; labels remain total.
+  bool has_bonded_baseline = false;
+  GPU_Vector<float> bonded_energy, bonded_force, bonded_virial;
+  std::vector<float> bonded_energy_cpu, bonded_force_cpu, bonded_virial_cpu;
+
   GPU_Vector<float> energy_weight_gpu;    // energy weight in GPU
   GPU_Vector<float> charge_ref_gpu;       // reference charge in GPU
   GPU_Vector<float> energy_ref_gpu;       // reference energy in GPU

@@ -41,6 +41,9 @@ void Dataset::copy_structures(std::vector<Structure>& structures_input, int n1, 
 
   for (int n = 0; n < Nc; ++n) {
     int n_input = n + n1;
+    structures[n].has_bonded_baseline = structures_input[n_input].has_bonded_baseline;
+    structures[n].topology = structures_input[n_input].topology;
+    structures[n].bonded_baseline = structures_input[n_input].bonded_baseline;
     structures[n].num_atom = structures_input[n_input].num_atom;
     structures[n].weight = structures_input[n_input].weight;
     structures[n].has_virial = structures_input[n_input].has_virial;
@@ -208,6 +211,13 @@ void Dataset::initialize_gpu_data(Parameters& para)
   virial_ref_cpu.resize(Nc * 6);
   force_ref_cpu.resize(N * 3);
   const Structure& first_structure = get_structure(0);
+  has_bonded_baseline = first_structure.has_bonded_baseline;
+  if (has_bonded_baseline) {
+    bonded_energy_cpu.resize(N); bonded_force_cpu.resize(3 * N); bonded_virial_cpu.resize(6 * N);
+  } else {
+    bonded_energy_cpu.clear(); bonded_force_cpu.clear(); bonded_virial_cpu.clear();
+    bonded_energy.clear(); bonded_force.clear(); bonded_virial.clear();
+  }
   if (first_structure.has_atomic_virial) {
     avirial_ref_cpu.resize(N * (first_structure.atomic_virial_diag_only ? 3 : 6));
   }
@@ -215,6 +225,14 @@ void Dataset::initialize_gpu_data(Parameters& para)
 
   for (int n = 0; n < Nc; ++n) {
     const Structure& structure = get_structure(n);
+    if (structure.has_bonded_baseline != has_bonded_baseline)
+      throw std::runtime_error("A dataset cannot mix frames with and without bonded baseline");
+    if (has_bonded_baseline &&
+        (structure.topology.number_of_atoms != structure.num_atom ||
+         structure.bonded_baseline.energy.size() != size_t(structure.num_atom) ||
+         structure.bonded_baseline.force.size() != size_t(3 * structure.num_atom) ||
+         structure.bonded_baseline.virial.size() != size_t(6 * structure.num_atom)))
+      throw std::runtime_error("Bonded baseline size does not match frame");
     weight_cpu[n] = structure.weight;
     if ((para.charge_mode || para.charge_vdw)) {
       charge_ref_cpu[n] = structure.charge;
@@ -234,6 +252,14 @@ void Dataset::initialize_gpu_data(Parameters& para)
       num_cell_cpu[k + n * 3] = structure.num_cell[k];
     }
     for (int na = 0; na < structure.num_atom; ++na) {
+      if (has_bonded_baseline) {
+        const int destination = Na_sum_cpu[n] + na;
+        bonded_energy_cpu[destination] = structure.bonded_baseline.energy[na];
+        for (int k = 0; k < 3; ++k)
+          bonded_force_cpu[k * N + destination] = structure.bonded_baseline.force[k * structure.num_atom + na];
+        for (int k = 0; k < 6; ++k)
+          bonded_virial_cpu[k * N + destination] = structure.bonded_baseline.virial[k * structure.num_atom + na];
+      }
       type_cpu[Na_sum_cpu[n] + na] = structure.type[na];
       r_cpu[Na_sum_cpu[n] + na] = structure.x[na];
       r_cpu[Na_sum_cpu[n] + na + N] = structure.y[na];
@@ -258,6 +284,13 @@ void Dataset::initialize_gpu_data(Parameters& para)
         }
       }
     }
+  }
+
+  if (has_bonded_baseline) {
+    bonded_energy.resize(N); bonded_force.resize(3 * N); bonded_virial.resize(6 * N);
+    bonded_energy.copy_from_host(bonded_energy_cpu.data());
+    bonded_force.copy_from_host(bonded_force_cpu.data());
+    bonded_virial.copy_from_host(bonded_virial_cpu.data());
   }
 
   type_weight_gpu.resize(NUM_ELEMENTS);

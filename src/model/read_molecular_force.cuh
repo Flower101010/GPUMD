@@ -39,3 +39,6 @@ struct MolecularForceDefinition {
 //
 // Blank lines and comments beginning with # are ignored.
 MolecularForceDefinition read_molecular_force(const std::string& filename);
+
+// Version 1 shared coefficient file: all three parameter sections, without atom count or topology.
+ForceFieldParameters read_bonded_parameters(const std::string& filename);

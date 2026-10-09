@@ -25,6 +25,8 @@
 #include <iostream>
 #include <iterator>
 #include <numeric>
+#include <limits>
+#include <stdexcept>
 #include <random>
 #include <sstream>
 #include <string>
@@ -203,9 +205,12 @@ static void read_one_structure(
   std::ifstream& input,
   Structure& structure,
   std::string& xyz_filename,
-  int& line_number)
+  int& line_number,
+  const ForceFieldParameters* bonded_parameters)
 {
-  std::vector<std::string> tokens = get_tokens_without_unwanted_spaces(input);
+  std::string header;
+  std::getline(input, header);
+  std::vector<std::string> tokens = get_tokens_without_unwanted_spaces(header);
   line_number++;
 
   for (auto& token : tokens) {
@@ -215,6 +220,16 @@ static void read_one_structure(
 
   if (tokens.size() == 0) {
     PRINT_INPUT_ERROR("The second line for each frame should not be empty.");
+  }
+
+  const std::string bonded_context = xyz_filename + ":" + std::to_string(line_number);
+  if (bonded_parameters) {
+    if (para.train_mode != 0 || para.charge_mode || para.vdw || para.charge_vdw) {
+      throw std::runtime_error(bonded_context + ": bonded baseline supports plain potential NEP only");
+    }
+    structure.topology = read_frame_topology(header, structure.num_atom, *bonded_parameters, bonded_context);
+  } else if (has_frame_topology(header)) {
+    throw std::runtime_error(bonded_context + ": CG topology requires explicit bonded parameters; training loss integration is not enabled yet");
   }
 
   // get energy_weight (optional)
@@ -292,6 +307,24 @@ static void read_one_structure(
             (m == 8) ? (tokens[n + m].length() - 1) : tokens[n + m].length()),
           xyz_filename.c_str(),
           line_number);
+      }
+      if (bonded_parameters) {
+        // Reject invalid float training cells before change_box divides by their volume.
+        const float determinant = get_det(structure.box_original);
+        if (!std::isfinite(determinant) || determinant <= 0.0f)
+          throw std::runtime_error(bonded_context + ": invalid training cell volume");
+        for (int d = 0; d < 3; ++d) {
+          float a[3], b[3];
+          for (int k = 0; k < 3; ++k) {
+            a[k] = structure.box_original[3*k+(d+1)%3];
+            b[k] = structure.box_original[3*k+(d+2)%3];
+          }
+          const float area = get_area(a, b);
+          const double cells = std::ceil(2.0 * para.rc_radial_max * area / determinant);
+          if (!std::isfinite(area) || area <= 0 || !std::isfinite(cells) ||
+              cells < 1 || cells > std::numeric_limits<int>::max())
+            throw std::runtime_error(bonded_context + ": invalid training cell dimensions");
+        }
       }
       change_box(para, structure);
     }
@@ -530,13 +563,22 @@ static void read_one_structure(
     xyz_filename,
     line_number,
     para.train_mode);
+  if (bonded_parameters) {
+    if (structure.has_atomic_virial)
+      throw std::runtime_error(bonded_context + ": bonded training does not support atomic virial labels");
+    structure.bonded_baseline = evaluate_bonded_baseline(
+      structure.topology, *bonded_parameters, structure.box_original,
+      structure.x, structure.y, structure.z, bonded_context);
+    structure.has_bonded_baseline = true;
+  }
 }
 
 static void read_exyz(
   Parameters& para,
   std::ifstream& input,
   std::vector<Structure>& structures,
-  std::string& xyz_filename)
+  std::string& xyz_filename,
+  const ForceFieldParameters* bonded_parameters)
 {
   int line_number = 0;
   int Nc = 0;
@@ -554,7 +596,7 @@ static void read_exyz(
     if (structure.num_atom < 1) {
       PRINT_INPUT_ERROR("Number of atoms for each frame should >= 1.");
     }
-    read_one_structure(para, input, structure, xyz_filename, line_number);
+    read_one_structure(para, input, structure, xyz_filename, line_number, bonded_parameters);
     structures.emplace_back(std::move(structure));
     ++Nc;
   }
@@ -607,99 +649,14 @@ static void reorder(const int num_batches, std::vector<Structure>& structures)
 {
   std::vector<int> configuration_id(structures.size());
   find_permuted_indices(num_batches, structures, configuration_id);
-
-  std::vector<Structure> structures_copy(structures.size());
-
-  for (int nc = 0; nc < structures.size(); ++nc) {
-    structures_copy[nc].num_atom = structures[nc].num_atom;
-    structures_copy[nc].weight = structures[nc].weight;
-    structures_copy[nc].has_virial = structures[nc].has_virial;
-    structures_copy[nc].has_bec = structures[nc].has_bec;
-    structures_copy[nc].energy = structures[nc].energy;
-    structures_copy[nc].energy_weight = structures[nc].energy_weight;
-    structures_copy[nc].has_temperature = structures[nc].has_temperature;
-    structures_copy[nc].temperature = structures[nc].temperature;
-    structures_copy[nc].volume = structures[nc].volume;
-    for (int k = 0; k < 6; ++k) {
-      structures_copy[nc].virial[k] = structures[nc].virial[k];
-    }
-    for (int k = 0; k < 18; ++k) {
-      structures_copy[nc].box[k] = structures[nc].box[k];
-    }
-    for (int k = 0; k < 9; ++k) {
-      structures_copy[nc].box_original[k] = structures[nc].box_original[k];
-    }
-    for (int k = 0; k < 3; ++k) {
-      structures_copy[nc].num_cell[k] = structures[nc].num_cell[k];
-    }
-    structures_copy[nc].type.resize(structures[nc].num_atom);
-    structures_copy[nc].x.resize(structures[nc].num_atom);
-    structures_copy[nc].y.resize(structures[nc].num_atom);
-    structures_copy[nc].z.resize(structures[nc].num_atom);
-    structures_copy[nc].fx.resize(structures[nc].num_atom);
-    structures_copy[nc].fy.resize(structures[nc].num_atom);
-    structures_copy[nc].fz.resize(structures[nc].num_atom);
-    structures_copy[nc].bec.resize(structures[nc].num_atom * 9);
-    for (int na = 0; na < structures[nc].num_atom; ++na) {
-      structures_copy[nc].type[na] = structures[nc].type[na];
-      structures_copy[nc].x[na] = structures[nc].x[na];
-      structures_copy[nc].y[na] = structures[nc].y[na];
-      structures_copy[nc].z[na] = structures[nc].z[na];
-      structures_copy[nc].fx[na] = structures[nc].fx[na];
-      structures_copy[nc].fy[na] = structures[nc].fy[na];
-      structures_copy[nc].fz[na] = structures[nc].fz[na];
-      for (int d = 0; d < 9; ++d) {
-        structures_copy[nc].bec[na * 9 + d] = structures[nc].bec[na * 9 + d];
-      }
-    }
-  }
-
-  for (int nc = 0; nc < structures.size(); ++nc) {
-    structures[nc].num_atom = structures_copy[configuration_id[nc]].num_atom;
-    structures[nc].weight = structures_copy[configuration_id[nc]].weight;
-    structures[nc].has_virial = structures_copy[configuration_id[nc]].has_virial;
-    structures[nc].has_bec = structures_copy[configuration_id[nc]].has_bec;
-    structures[nc].energy = structures_copy[configuration_id[nc]].energy;
-    structures[nc].energy_weight = structures_copy[configuration_id[nc]].energy_weight;
-    structures[nc].has_temperature = structures_copy[configuration_id[nc]].has_temperature;
-    structures[nc].temperature = structures_copy[configuration_id[nc]].temperature;
-    structures[nc].volume = structures_copy[configuration_id[nc]].volume;
-    for (int k = 0; k < 6; ++k) {
-      structures[nc].virial[k] = structures_copy[configuration_id[nc]].virial[k];
-    }
-    for (int k = 0; k < 18; ++k) {
-      structures[nc].box[k] = structures_copy[configuration_id[nc]].box[k];
-    }
-    for (int k = 0; k < 9; ++k) {
-      structures[nc].box_original[k] = structures_copy[configuration_id[nc]].box_original[k];
-    }
-    for (int k = 0; k < 3; ++k) {
-      structures[nc].num_cell[k] = structures_copy[configuration_id[nc]].num_cell[k];
-    }
-    structures[nc].type.resize(structures[nc].num_atom);
-    structures[nc].x.resize(structures[nc].num_atom);
-    structures[nc].y.resize(structures[nc].num_atom);
-    structures[nc].z.resize(structures[nc].num_atom);
-    structures[nc].fx.resize(structures[nc].num_atom);
-    structures[nc].fy.resize(structures[nc].num_atom);
-    structures[nc].fz.resize(structures[nc].num_atom);
-    structures[nc].bec.resize(structures[nc].num_atom * 9);
-    for (int na = 0; na < structures[nc].num_atom; ++na) {
-      structures[nc].type[na] = structures_copy[configuration_id[nc]].type[na];
-      structures[nc].x[na] = structures_copy[configuration_id[nc]].x[na];
-      structures[nc].y[na] = structures_copy[configuration_id[nc]].y[na];
-      structures[nc].z[na] = structures_copy[configuration_id[nc]].z[na];
-      structures[nc].fx[na] = structures_copy[configuration_id[nc]].fx[na];
-      structures[nc].fy[na] = structures_copy[configuration_id[nc]].fy[na];
-      structures[nc].fz[na] = structures_copy[configuration_id[nc]].fz[na];
-      for (int d = 0; d < 9; ++d) {
-        structures[nc].bec[na * 9 + d] = structures_copy[configuration_id[nc]].bec[na * 9 + d];
-      }
-    }
-  }
+  std::vector<Structure> reordered;
+  reordered.reserve(structures.size());
+  for (const int index : configuration_id) reordered.emplace_back(std::move(structures[index]));
+  structures = std::move(reordered);
 }
 
-bool read_structures(bool is_train, Parameters& para, std::vector<Structure>& structures)
+bool read_structures(bool is_train, Parameters& para, std::vector<Structure>& structures,
+                     const ForceFieldParameters* bonded_parameters)
 {
   std::ifstream input(is_train ? "train.xyz" : "test.xyz");
   bool has_test_set = true;
@@ -714,7 +671,7 @@ bool read_structures(bool is_train, Parameters& para, std::vector<Structure>& st
     std::string xyz_filename = is_train ? "train.xyz" : "test.xyz";
     std::cout << "Started reading " << xyz_filename << std::endl;
     print_line_2();
-    read_exyz(para, input, structures, xyz_filename);
+    read_exyz(para, input, structures, xyz_filename, bonded_parameters);
     input.close();
   }
 

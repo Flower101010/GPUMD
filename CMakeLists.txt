@@ -40,7 +40,10 @@ target_link_libraries(gpumd PRIVATE CUDA::cublas CUDA::cusolver CUDA::cufft)
 file(GLOB NEP_SOURCES
     src/main_nep/*.cu
     src/utilities/*.cu)
-add_executable(nep ${NEP_SOURCES})
+set(NEP_BONDED_MODEL_SOURCES
+    src/model/box.cu src/model/topology.cu src/model/force_field_parameters.cu
+    src/model/read_molecular_force.cu)
+add_executable(nep ${NEP_SOURCES} ${NEP_BONDED_MODEL_SOURCES})
 target_include_directories(nep PRIVATE src)
 target_link_libraries(nep PRIVATE CUDA::cublas CUDA::cusolver CUDA::cufft)
 target_compile_definitions(

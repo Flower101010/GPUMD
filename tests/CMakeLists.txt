@@ -49,6 +49,19 @@ gpumd_add_unit_test(test_periodic_dihedral test_periodic_dihedral.cu)
 gpumd_add_unit_test(test_molecular_force test_molecular_force.cu)
 gpumd_add_unit_test(test_bonded_core test_bonded_core.cu)
 
+gpumd_add_unit_test(test_bonded_dataset test_bonded_dataset.cu)
+target_sources(test_bonded_dataset PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/main_nep/bonded_baseline.cu
+    ${PROJECT_SOURCE_DIR}/src/main_nep/structure.cu
+    ${PROJECT_SOURCE_DIR}/src/main_nep/dataset.cu
+    ${PROJECT_SOURCE_DIR}/src/main_nep/parameters.cu
+    ${PROJECT_SOURCE_DIR}/src/model/box.cu
+    ${PROJECT_SOURCE_DIR}/src/utilities/error.cu
+    ${PROJECT_SOURCE_DIR}/src/utilities/read_file.cu)
+target_compile_definitions(test_bonded_dataset PRIVATE GPUMD_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+add_test(NAME unit.test_bonded_dataset_host COMMAND test_bonded_dataset --host)
+set_tests_properties(unit.test_bonded_dataset_host PROPERTIES LABELS "unit;host")
+
 set(GPUMD_GPU_UNIT_TESTS
     unit.test_gpu_vector
     unit.test_harmonic_bond_data
@@ -58,7 +71,8 @@ set(GPUMD_GPU_UNIT_TESTS
     unit.test_periodic_dihedral_data
     unit.test_periodic_dihedral
     unit.test_molecular_force
-    unit.test_bonded_core)
+    unit.test_bonded_core
+    unit.test_bonded_dataset)
 set_tests_properties(${GPUMD_GPU_UNIT_TESTS} PROPERTIES
     LABELS "unit;gpu"
     RESOURCE_LOCK gpu

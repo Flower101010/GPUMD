@@ -44,3 +44,6 @@ push-to-both.sh
 /developers/cg_stage_b/*baseline.json
 /developers/cg_stage_b/gpu_tests.xml
 compile_commands.json
+/developers/cg_stage_c/gpu_tests.xml
+/developers/cg_stage_c/*baseline.json
+/developers/cg_stage_c/*.log
