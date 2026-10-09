@@ -117,6 +117,8 @@ public:
     int device_id,
     bool borrow_structures = false);
   const Structure& get_structure(int index) const;
+  // Call once after fresh residual E/F/W computation, before loss or output.
+  void add_bonded_baseline();
   std::vector<float> get_rmse_force(Parameters& para, const bool use_weight, int device_id);
   std::vector<float> get_rmse_energy(
     Parameters& para,

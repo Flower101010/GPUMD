@@ -50,7 +50,7 @@ gpumd_add_unit_test(test_molecular_force test_molecular_force.cu)
 gpumd_add_unit_test(test_bonded_core test_bonded_core.cu)
 
 gpumd_add_unit_test(test_bonded_dataset test_bonded_dataset.cu)
-target_sources(test_bonded_dataset PRIVATE
+add_library(gpumd_nep_bonded_test_support STATIC
     ${PROJECT_SOURCE_DIR}/src/main_nep/bonded_baseline.cu
     ${PROJECT_SOURCE_DIR}/src/main_nep/structure.cu
     ${PROJECT_SOURCE_DIR}/src/main_nep/dataset.cu
@@ -58,9 +58,27 @@ target_sources(test_bonded_dataset PRIVATE
     ${PROJECT_SOURCE_DIR}/src/model/box.cu
     ${PROJECT_SOURCE_DIR}/src/utilities/error.cu
     ${PROJECT_SOURCE_DIR}/src/utilities/read_file.cu)
+target_include_directories(gpumd_nep_bonded_test_support PUBLIC ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(gpumd_nep_bonded_test_support PUBLIC gpumd_molecular_force_test_support)
+target_link_libraries(test_bonded_dataset PRIVATE gpumd_nep_bonded_test_support)
+
 target_compile_definitions(test_bonded_dataset PRIVATE GPUMD_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 add_test(NAME unit.test_bonded_dataset_host COMMAND test_bonded_dataset --host)
 set_tests_properties(unit.test_bonded_dataset_host PROPERTIES LABELS "unit;host")
+
+gpumd_add_unit_test(test_bonded_nep test_bonded_nep.cu)
+target_sources(test_bonded_nep PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/main_nep/nep.cu
+    ${PROJECT_SOURCE_DIR}/src/main_nep/nep_compile.cu)
+target_link_libraries(test_bonded_nep PRIVATE gpumd_nep_bonded_test_support ${CMAKE_DL_LIBS})
+target_compile_definitions(test_bonded_nep PRIVATE
+    GPUMD_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+    GPUMD_COMPILED_SOURCE_DIR="${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.test_bonded_nep_compiled COMMAND test_bonded_nep --compiled)
+set_tests_properties(unit.test_bonded_nep_compiled PROPERTIES
+    LABELS "unit;gpu;compiled" RESOURCE_LOCK gpu TIMEOUT 120
+    ENVIRONMENT "CUDACXX=${CMAKE_CUDA_COMPILER}"
+    SKIP_REGULAR_EXPRESSION "^SKIP: no accessible GPU")
 
 set(GPUMD_GPU_UNIT_TESTS
     unit.test_gpu_vector
@@ -72,7 +90,8 @@ set(GPUMD_GPU_UNIT_TESTS
     unit.test_periodic_dihedral
     unit.test_molecular_force
     unit.test_bonded_core
-    unit.test_bonded_dataset)
+    unit.test_bonded_dataset
+    unit.test_bonded_nep)
 set_tests_properties(${GPUMD_GPU_UNIT_TESTS} PROPERTIES
     LABELS "unit;gpu"
     RESOURCE_LOCK gpu

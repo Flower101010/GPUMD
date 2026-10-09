@@ -55,6 +55,6 @@ struct Structure {
   std::vector<float> bec;
 };
 
-// Internal stage-C opt-in. The production training entry is enabled only after loss integration.
+// Explicit opt-in; production passes the shared parameter table when molecular_force is enabled.
 bool read_structures(bool is_train, Parameters& para, std::vector<Structure>& structures,
                      const ForceFieldParameters* bonded_parameters = nullptr);

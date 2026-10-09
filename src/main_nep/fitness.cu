@@ -50,7 +50,7 @@ Fitness::Fitness(Parameters& para)
 
   stream_train = para.stream_train == 1;
   const auto train_read_begin = Clock::now();
-  read_structures(true, para, structures_train);
+  read_structures(true, para, structures_train, para.molecular_force ? &para.bonded_parameters : nullptr);
   const auto train_read_end = Clock::now();
   num_batches = (structures_train.size() - 1) / para.batch_size + 1;
   printf("Number of devices = %d\n", deviceCount);
@@ -94,7 +94,7 @@ Fitness::Fitness(Parameters& para)
 
   const auto test_begin = Clock::now();
   std::vector<Structure> structures_test;
-  has_test_set = read_structures(false, para, structures_test);
+  has_test_set = read_structures(false, para, structures_test, para.molecular_force ? &para.bonded_parameters : nullptr);
   if (has_test_set) {
     test_set.resize(deviceCount);
     for (int device_id = 0; device_id < deviceCount; ++device_id) {
@@ -882,6 +882,25 @@ void Fitness::predict(Parameters& para, float* elite)
       fclose(fid_charge);
       if (para.has_bec) {
         fclose(fid_bec);
+      }
+    }
+    if (has_test_set) {
+      FILE* test_force = my_fopen("force_test.out", "w");
+      FILE* test_energy = my_fopen("energy_test.out", "w");
+      FILE* test_virial = my_fopen("virial_test.out", "w");
+      FILE* test_stress = my_fopen("stress_test.out", "w");
+      potential->find_force(para, elite, test_set, false, 1);
+      update_energy_force_virial(test_energy, test_force, test_virial, test_stress, test_set[0]);
+      fclose(test_force); fclose(test_energy); fclose(test_virial); fclose(test_stress);
+      if (para.charge_mode || para.charge_vdw) {
+        FILE* test_charge = my_fopen("charge_test.out", "w");
+        update_charge(test_charge, test_set[0]);
+        fclose(test_charge);
+        if (para.has_bec) {
+          FILE* test_bec = my_fopen("bec_test.out", "w");
+          update_bec(test_bec, test_set[0]);
+          fclose(test_bec);
+        }
       }
     }
   } else if (para.train_mode == 1) {

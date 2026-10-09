@@ -84,6 +84,7 @@ public:
   };
 
   NEP(Parameters& para, int N, int version, int deviceCount);
+  bool uses_compiled_kernel() const { return static_cast<bool>(compiled_kernel_); }
   void find_force(
     Parameters& para,
     const float* parameters,

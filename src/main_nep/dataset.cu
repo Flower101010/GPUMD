@@ -329,6 +329,26 @@ void Dataset::initialize_gpu_data(Parameters& para)
   type.copy_from_host(type_cpu.data());
 }
 
+static __global__ void gpu_add_bonded_baseline(
+  int N, const float* bonded_energy, const float* bonded_force, const float* bonded_virial,
+  float* energy, float* force, float* virial)
+{
+  const int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= N) return;
+  energy[i] += bonded_energy[i];
+  for (int k = 0; k < 3; ++k) force[k * N + i] += bonded_force[k * N + i];
+  for (int k = 0; k < 6; ++k) virial[k * N + i] += bonded_virial[k * N + i];
+}
+
+void Dataset::add_bonded_baseline()
+{
+  if (!has_bonded_baseline) return;
+  gpu_add_bonded_baseline<<<(N + 127) / 128, 128>>>(
+    N, bonded_energy.data(), bonded_force.data(), bonded_virial.data(),
+    energy.data(), force.data(), virial.data());
+  GPU_CHECK_KERNEL
+}
+
 static __global__ void gpu_find_neighbor_number(
   const int N,
   const int* Na,

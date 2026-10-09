@@ -23,6 +23,7 @@ heat transport, Phys. Rev. B. 104, 104309 (2021).
 #include "dataset.cuh"
 #include "mic.cuh"
 #include "nep.cuh"
+#include <stdexcept>
 #include "parameters.cuh"
 #include "utilities/common.cuh"
 #include "utilities/error.cuh"
@@ -742,6 +743,8 @@ void NEP::find_force(
     CHECK(gpuSetDevice(device_id));
     paramb.rc_radial_pair = nep_data[device_id].rc_radial_pair.data();
     paramb.rc_angular_pair = nep_data[device_id].rc_angular_pair.data();
+    if (dataset[device_id].has_bonded_baseline != para.molecular_force)
+      throw std::runtime_error("NEP molecular_force configuration does not match Dataset baseline");
     const int block_size = 32;
     const int grid_size = (dataset[device_id].N - 1) / block_size + 1;
 
@@ -993,5 +996,7 @@ void NEP::find_force(
         dataset[device_id].energy.data());
       GPU_CHECK_KERNEL
     }
+    // Common completion point for generic, specialized and optional ZBL contributions.
+    dataset[device_id].add_bonded_baseline();
   }
 }

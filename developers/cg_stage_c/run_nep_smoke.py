@@ -49,6 +49,8 @@ def main():
                                        "loss_rows": numeric_file(work / "loss.out")}
         if not (work / "nep.txt").is_file():
             raise RuntimeError("Training did not write nep.txt")
+        for old_output in work.glob("*.out"):
+            old_output.unlink()
         (work / "nep.in").write_text(configuration + "prediction 1\n")
         result = run(executable, work)
         if result.returncode or "Finished running nep." not in result.stdout:

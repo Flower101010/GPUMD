@@ -14,6 +14,7 @@
 */
 
 #include "parameters.cuh"
+#include "model/read_molecular_force.cuh"
 #include "utilities/common.cuh"
 #include "utilities/error.cuh"
 #include "utilities/gpu_macro.cuh"
@@ -44,7 +45,16 @@ Parameters::Parameters()
     read_zbl_in();
   }
   calculate_parameters();
+  if (molecular_force) {
+    if (train_mode != 0 || charge_mode || charge_vdw || vdw)
+      PRINT_INPUT_ERROR("molecular_force supports plain potential NEP only.");
+    bonded_parameters = read_bonded_parameters(molecular_force_file);
+  }
   report_inputs();
+  if (molecular_force) {
+    printf("    Fixed bonded baseline: %s, per-frame topology.\n", molecular_force_file.c_str());
+    printf("    Labels and predictions are total E/F/virial; nep.txt stores the NEP residual.\n");
+  }
 
   print_line_1();
   printf("Finished reading nep.in.\n");
@@ -1327,6 +1337,8 @@ void Parameters::parse_one_keyword(std::vector<std::string>& tokens)
     parse_stream_train(param, num_param);
   } else if (strcmp(param[0], "population") == 0) {
     parse_population(param, num_param);
+  } else if (strcmp(param[0], "molecular_force") == 0) {
+    parse_molecular_force(param, num_param);
   } else if (strcmp(param[0], "nep_compile") == 0) {
     parse_nep_compile(param, num_param);
   } else if (strcmp(param[0], "generation") == 0) {
@@ -1380,6 +1392,16 @@ void Parameters::parse_one_keyword(std::vector<std::string>& tokens)
   } else {
     PRINT_KEYWORD_ERROR(param[0]);
   }
+}
+
+void Parameters::parse_molecular_force(const char** param, int num_param)
+{
+  if (molecular_force)
+    PRINT_INPUT_ERROR("molecular_force must not be specified more than once.");
+  if (num_param != 3 || std::string(param[2]) != "per_frame")
+    PRINT_INPUT_ERROR("molecular_force requires: parameter_file per_frame.");
+  molecular_force = true;
+  molecular_force_file = param[1];
 }
 
 void Parameters::parse_nep_compile(const char** param, int num_param)

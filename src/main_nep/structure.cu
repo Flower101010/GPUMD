@@ -229,7 +229,7 @@ static void read_one_structure(
     }
     structure.topology = read_frame_topology(header, structure.num_atom, *bonded_parameters, bonded_context);
   } else if (has_frame_topology(header)) {
-    throw std::runtime_error(bonded_context + ": CG topology requires explicit bonded parameters; training loss integration is not enabled yet");
+    throw std::runtime_error(bonded_context + ": CG topology requires explicit bonded parameters via molecular_force parameter_file per_frame");
   }
 
   // get energy_weight (optional)

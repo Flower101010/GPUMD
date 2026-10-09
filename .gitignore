@@ -47,3 +47,6 @@ compile_commands.json
 /developers/cg_stage_c/gpu_tests.xml
 /developers/cg_stage_c/*baseline.json
 /developers/cg_stage_c/*.log
+/developers/cg_stage_d/gpu_tests.xml
+/developers/cg_stage_d/*baseline.json
+/developers/cg_stage_d/*.log
