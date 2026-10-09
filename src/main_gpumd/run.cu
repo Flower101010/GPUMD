@@ -65,6 +65,7 @@ Run simulation according to the inputs in the run.in file.
 #include "minimize/minimize.cuh"
 #include "model/box.cuh"
 #include "model/read_molecular_force.cuh"
+#include "model/cg_model.cuh"
 #include "model/read_xyz.cuh"
 #include "phonon/hessian.cuh"
 #include "replicate.cuh"
@@ -322,6 +323,10 @@ void Run::perform_a_run()
 
 void Run::parse_one_keyword(std::vector<std::string>& tokens)
 {
+  if (
+    cg_model_loaded && !tokens.empty() &&
+    (tokens[0] == "potential" || tokens[0] == "molecular_force"))
+    PRINT_INPUT_ERROR("cg_model cannot be combined with potential or molecular_force.");
   if (tokens.size() >= 2 && tokens[0] == "potential") {
     tokens[1] = get_compact_nep_filename(tokens[1]);
   }
@@ -336,6 +341,8 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
 
   if (strcmp(param[0], "potential") == 0) {
     force.parse_potential(param, num_param, box, atom.type.size());
+  } else if (strcmp(param[0], "cg_model") == 0) {
+    parse_cg_model(param, num_param);
   } else if (strcmp(param[0], "molecular_force") == 0) {
     parse_molecular_force(param, num_param);
   } else if (strcmp(param[0], "replicate") == 0) {
@@ -585,18 +592,24 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
 
 void Run::parse_molecular_force(const char** param, int num_param)
 {
-  if (num_param != 2) {
-    PRINT_INPUT_ERROR("molecular_force should have 1 parameter.\n");
+  if (num_param != 2 && num_param != 3) {
+    PRINT_INPUT_ERROR("molecular_force requires combined_file or parameter_file topology_file.\n");
   }
   if (force.has_molecular_force()) {
     PRINT_INPUT_ERROR("molecular_force cannot be used more than once in run.in.\n");
   }
 
   try {
-    const MolecularForceDefinition definition = read_molecular_force(param[1]);
+    MolecularForceDefinition definition;
+    if (num_param == 2)
+      definition = read_molecular_force(param[1]);
+    else {
+      definition.parameters = read_bonded_parameters(param[1]);
+      definition.topology = read_topology(param[2], definition.parameters);
+    }
     if (definition.topology.number_of_atoms != atom.number_of_atoms) {
       std::ostringstream message;
-      message << "number_of_atoms in " << param[1] << " is "
+      message << "number_of_atoms in " << (num_param == 2 ? param[1] : param[2]) << " is "
               << definition.topology.number_of_atoms << ", but the current model contains "
               << atom.number_of_atoms << " atoms.\n";
       PRINT_INPUT_ERROR(message.str().c_str());
@@ -605,8 +618,9 @@ void Run::parse_molecular_force(const char** param, int num_param)
     force.initialize_molecular_force(definition.topology, definition.parameters);
     printf("Initialized molecular force from %s.\n", param[1]);
     printf("    number of atoms = %d.\n", definition.topology.number_of_atoms);
-    printf("    number of harmonic bond parameter types = %zu.\n",
-           definition.parameters.harmonic_bond_parameters.size());
+    printf(
+      "    number of harmonic bond parameter types = %zu.\n",
+      definition.parameters.harmonic_bond_parameters.size());
     printf("    number of harmonic bonds = %zu.\n", definition.topology.bonds.size());
     printf("    number of harmonic angles = %zu.\n", definition.topology.angles.size());
     printf("    number of periodic dihedrals = %zu.\n", definition.topology.dihedrals.size());
@@ -858,5 +872,34 @@ void Run::parse_change_box(const char** param, int num_param)
       printf("%g ", box.cpu_h[d1 * 3 + d2]);
     }
     printf("\n");
+  }
+}
+
+void Run::parse_cg_model(const char** param, int num_param)
+{
+  if (num_param != 3)
+    PRINT_INPUT_ERROR("cg_model requires manifest_file topology_file.");
+  if (cg_model_loaded || !force.potentials.empty() || force.has_molecular_force())
+    PRINT_INPUT_ERROR("cg_model must be the only potential/bonded model declaration.");
+  try {
+    const auto model = read_cg_model(param[1]);
+    const auto parameters = read_bonded_parameters(model.parameters_file);
+    const auto topology = read_topology(param[2], parameters);
+    if (topology.number_of_atoms != atom.number_of_atoms)
+      throw std::runtime_error("CG topology number_of_atoms differs from model.xyz");
+    if (!box.pbc_x || !box.pbc_y || !box.pbc_z)
+      throw std::runtime_error("CG model requires three-dimensional periodic boundaries");
+    for (int i = 0; i < atom.number_of_atoms; ++i)
+      if (
+        atom.cpu_type[i] < 0 || atom.cpu_type[i] >= int(model.bead_types.size()) ||
+        atom.cpu_atom_symbol[i] != model.bead_types[atom.cpu_type[i]])
+        throw std::runtime_error("CG bead type mapping differs from model.xyz");
+    const char* potential[] = {"potential", model.nep_file.c_str()};
+    force.parse_potential(potential, 2, box, atom.number_of_atoms);
+    force.initialize_molecular_force(topology, parameters);
+    cg_model_loaded = true;
+    printf("Loaded complete CG model from %s with topology %s.\n", param[1], param[2]);
+  } catch (const std::exception& e) {
+    PRINT_INPUT_ERROR(e.what());
   }
 }

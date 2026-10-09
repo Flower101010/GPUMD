@@ -61,7 +61,7 @@ SOURCES_GPUMD =                   \
 SOURCES_NEP =                     \
 	$(wildcard main_nep/*.cu)     \
 	$(wildcard utilities/*.cu)    \
-	model/box.cu model/topology.cu model/force_field_parameters.cu model/read_molecular_force.cu
+	model/box.cu model/topology.cu model/force_field_parameters.cu model/read_molecular_force.cu model/cg_model.cu
 SOURCES_GNEP =                     \
 	$(wildcard main_gnep/*.cu)     \
 	$(wildcard utilities/*.cu)

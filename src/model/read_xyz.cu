@@ -17,6 +17,7 @@
 The class defining the simulation model.
 ------------------------------------------------------------------------------*/
 
+#include "cg_model.cuh"
 #include "atom.cuh"
 #include "box.cuh"
 #include "group.cuh"
@@ -438,13 +439,26 @@ std::string get_filename_potential()
     std::vector<std::string> tokens = get_tokens(line);
     if (tokens.size() >= 2) {
       if (tokens[0] == "potential") {
+        try {
+          check_cg_companion(tokens[1]);
+        } catch (const std::exception& e) {
+          PRINT_INPUT_ERROR(e.what());
+        }
         filename_potential = tokens[1];
+      } else if (tokens[0] == "cg_model") {
+        if (tokens.size() != 3)
+          PRINT_INPUT_ERROR("cg_model requires manifest_file topology_file.");
+        try {
+          filename_potential = read_cg_model(tokens[1]).nep_file;
+        } catch (const std::exception& e) {
+          PRINT_INPUT_ERROR(e.what());
+        }
       }
     }
   }
   input_run.close();
   if (filename_potential.size() == 0) {
-    PRINT_INPUT_ERROR("There is no 'potential' keyword in run.in.");
+    PRINT_INPUT_ERROR("There is no 'potential' or 'cg_model' keyword in run.in.");
   } else {
     return filename_potential;
   }

@@ -11,7 +11,8 @@ add_library(gpumd_molecular_force_test_support STATIC
     ${PROJECT_SOURCE_DIR}/src/model/harmonic_bond_data.cu
     ${PROJECT_SOURCE_DIR}/src/model/periodic_dihedral_data.cu
     ${PROJECT_SOURCE_DIR}/src/model/read_molecular_force.cu
-    ${PROJECT_SOURCE_DIR}/src/model/topology.cu)
+    ${PROJECT_SOURCE_DIR}/src/model/topology.cu
+    ${PROJECT_SOURCE_DIR}/src/model/cg_model.cu)
 target_include_directories(gpumd_molecular_force_test_support PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(gpumd_molecular_force_test_support PUBLIC CUDA::cudart)
 
@@ -38,6 +39,8 @@ endfunction()
 gpumd_add_unit_test(test_topology test_topology.cpp)
 gpumd_add_unit_test(test_force_field_parameters test_force_field_parameters.cpp)
 gpumd_add_unit_test(test_read_molecular_force test_read_molecular_force.cpp)
+gpumd_add_unit_test(test_cg_model test_cg_model.cpp)
+target_compile_definitions(test_cg_model PRIVATE GPUMD_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 gpumd_add_unit_test(test_gpu_vector test_gpu_vector.cu)
 gpumd_add_unit_test(test_bonded_geometry test_bonded_geometry.cu)
 gpumd_add_unit_test(test_harmonic_bond_data test_harmonic_bond_data.cu)

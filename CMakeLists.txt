@@ -42,7 +42,7 @@ file(GLOB NEP_SOURCES
     src/utilities/*.cu)
 set(NEP_BONDED_MODEL_SOURCES
     src/model/box.cu src/model/topology.cu src/model/force_field_parameters.cu
-    src/model/read_molecular_force.cu)
+    src/model/read_molecular_force.cu src/model/cg_model.cu)
 add_executable(nep ${NEP_SOURCES} ${NEP_BONDED_MODEL_SOURCES})
 target_include_directories(nep PRIVATE src)
 target_link_libraries(nep PRIVATE CUDA::cublas CUDA::cusolver CUDA::cufft)

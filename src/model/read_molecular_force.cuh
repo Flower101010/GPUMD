@@ -42,3 +42,6 @@ MolecularForceDefinition read_molecular_force(const std::string& filename);
 
 // Version 1 shared coefficient file: all three parameter sections, without atom count or topology.
 ForceFieldParameters read_bonded_parameters(const std::string& filename);
+
+// Version 1 topology file: atom count, bonds, angles, dihedrals; no coefficients.
+Topology read_topology(const std::string& filename, const ForceFieldParameters& parameters);

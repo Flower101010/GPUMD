@@ -391,6 +391,16 @@ void prepare_compact_nep_files(const std::vector<std::string>& atom_symbols)
   remove_compact_nep_files();
   compact_species.clear();
 
+  // CG packages keep the full shared bead-type order, including types absent in this system.
+  // The manifest loader validates and loads the original residual file atomically with bonded.
+  std::ifstream cg_input("run.in");
+  std::string cg_line;
+  while (std::getline(cg_input, cg_line)) {
+    auto cg_tokens = get_tokens(cg_line);
+    if (!cg_tokens.empty() && cg_tokens[0] == "cg_model")
+      return;
+  }
+
   std::vector<std::string> potential_files = get_potential_files();
   if (potential_files.size() == 0) {
     PRINT_INPUT_ERROR("There is no 'potential' keyword in run.in.");

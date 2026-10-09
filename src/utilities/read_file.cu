@@ -57,7 +57,7 @@ int is_valid_real(const char* s, double* result)
   }
 }
 
-static std::string get_potential_file_name()
+static std::string get_potential_file_name(bool& is_cg_model)
 {
   std::ifstream input_run("run.in");
   if (!input_run.is_open()) {
@@ -68,7 +68,15 @@ static std::string get_potential_file_name()
   while (std::getline(input_run, line)) {
     std::vector<std::string> tokens = get_tokens(line);
     if (tokens.size() != 0) {
+      if (tokens[0] == "cg_model") {
+        // The validated CG manifest permits only ordinary NEP4/NEP4-ZBL.
+        is_cg_model = true;
+        break;
+      }
       if (tokens[0] == "potential") {
+        if (tokens.size() < 2) {
+          PRINT_INPUT_ERROR("potential requires a filename.");
+        }
         potential_file_name = tokens[1];
         break;
       }
@@ -82,7 +90,11 @@ static std::string get_potential_file_name()
 bool check_is_nep_charge()
 {
   bool is_nep_charge = false;
-  std::string potential_file_name = get_potential_file_name();
+  bool is_cg_model = false;
+  std::string potential_file_name = get_potential_file_name(is_cg_model);
+  if (is_cg_model) {
+    return false;
+  }
 
   std::ifstream input_potential(potential_file_name);
   if (!input_potential.is_open()) {

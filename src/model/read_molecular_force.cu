@@ -184,6 +184,57 @@ ForceFieldParameters read_parameters(InputReader& reader, bool include_angles_an
 
   return parameters;
 }
+void read_interactions(InputReader& reader, Topology& topology, bool include_angles_and_dihedrals)
+{
+  std::vector<std::string> tokens;
+  const int number_of_bonds = read_non_negative_count(reader, "bonds", "number of bonds");
+  topology.bonds.reserve(number_of_bonds);
+  for (int i = 0; i < number_of_bonds; ++i) {
+    tokens = reader.next_tokens("bond");
+    if (tokens.size() != 3) {
+      reader.fail("each bond requires atom_i, atom_j, and type");
+    }
+    topology.bonds.push_back(
+      {reader.parse_int(tokens[0], "bond atom_i"),
+       reader.parse_int(tokens[1], "bond atom_j"),
+       reader.parse_int(tokens[2], "bond type")});
+  }
+
+  if (include_angles_and_dihedrals) {
+    const int number_of_angles = read_non_negative_count(reader, "angles", "number of angles");
+    topology.angles.reserve(number_of_angles);
+    for (int i = 0; i < number_of_angles; ++i) {
+      tokens = reader.next_tokens("angle");
+      if (tokens.size() != 4) {
+        reader.fail("each angle requires atom_i, atom_j, atom_k, and type");
+      }
+      topology.angles.push_back(
+        {reader.parse_int(tokens[0], "angle atom_i"),
+         reader.parse_int(tokens[1], "angle atom_j"),
+         reader.parse_int(tokens[2], "angle atom_k"),
+         reader.parse_int(tokens[3], "angle type")});
+    }
+
+    const int number_of_dihedrals =
+      read_non_negative_count(reader, "dihedrals", "number of dihedrals");
+    topology.dihedrals.reserve(number_of_dihedrals);
+    for (int i = 0; i < number_of_dihedrals; ++i) {
+      tokens = reader.next_tokens("dihedral");
+      if (tokens.size() != 5) {
+        reader.fail("each dihedral requires atom_i, atom_j, atom_k, atom_l, and type");
+      }
+      topology.dihedrals.push_back(
+        {reader.parse_int(tokens[0], "dihedral atom_i"),
+         reader.parse_int(tokens[1], "dihedral atom_j"),
+         reader.parse_int(tokens[2], "dihedral atom_k"),
+         reader.parse_int(tokens[3], "dihedral atom_l"),
+         reader.parse_int(tokens[4], "dihedral type")});
+    }
+    reader.require_end("dihedrals");
+  } else {
+    reader.require_end("bonds");
+  }
+}
 } // namespace
 
 MolecularForceDefinition read_molecular_force(const std::string& filename)
@@ -207,53 +258,7 @@ MolecularForceDefinition read_molecular_force(const std::string& filename)
 
   definition.parameters = read_parameters(reader, version == 2);
 
-  const int number_of_bonds = read_non_negative_count(reader, "bonds", "number of bonds");
-  definition.topology.bonds.reserve(number_of_bonds);
-  for (int i = 0; i < number_of_bonds; ++i) {
-    tokens = reader.next_tokens("bond");
-    if (tokens.size() != 3) {
-      reader.fail("each bond requires atom_i, atom_j, and type");
-    }
-    definition.topology.bonds.push_back(
-      {reader.parse_int(tokens[0], "bond atom_i"),
-       reader.parse_int(tokens[1], "bond atom_j"),
-       reader.parse_int(tokens[2], "bond type")});
-  }
-
-  if (version == 2) {
-    const int number_of_angles = read_non_negative_count(reader, "angles", "number of angles");
-    definition.topology.angles.reserve(number_of_angles);
-    for (int i = 0; i < number_of_angles; ++i) {
-      tokens = reader.next_tokens("angle");
-      if (tokens.size() != 4) {
-        reader.fail("each angle requires atom_i, atom_j, atom_k, and type");
-      }
-      definition.topology.angles.push_back(
-        {reader.parse_int(tokens[0], "angle atom_i"),
-         reader.parse_int(tokens[1], "angle atom_j"),
-         reader.parse_int(tokens[2], "angle atom_k"),
-         reader.parse_int(tokens[3], "angle type")});
-    }
-
-    const int number_of_dihedrals =
-      read_non_negative_count(reader, "dihedrals", "number of dihedrals");
-    definition.topology.dihedrals.reserve(number_of_dihedrals);
-    for (int i = 0; i < number_of_dihedrals; ++i) {
-      tokens = reader.next_tokens("dihedral");
-      if (tokens.size() != 5) {
-        reader.fail("each dihedral requires atom_i, atom_j, atom_k, atom_l, and type");
-      }
-      definition.topology.dihedrals.push_back(
-        {reader.parse_int(tokens[0], "dihedral atom_i"),
-         reader.parse_int(tokens[1], "dihedral atom_j"),
-         reader.parse_int(tokens[2], "dihedral atom_k"),
-         reader.parse_int(tokens[3], "dihedral atom_l"),
-         reader.parse_int(tokens[4], "dihedral type")});
-    }
-    reader.require_end("dihedrals");
-  } else {
-    reader.require_end("bonds");
-  }
+  read_interactions(reader, definition.topology, version == 2);
 
   try {
     definition.parameters.validate_or_throw(definition.topology);
@@ -282,4 +287,26 @@ ForceFieldParameters read_bonded_parameters(const std::string& filename)
     throw std::runtime_error(filename + ": semantic validation failed:\n" + error.what());
   }
   return parameters;
+}
+
+Topology read_topology(const std::string& filename, const ForceFieldParameters& parameters)
+{
+  InputReader reader(filename);
+  auto tokens = reader.next_tokens("gpumd_topology header");
+  reader.require_line(tokens, "gpumd_topology", 2);
+  if (reader.parse_int(tokens[1], "format version") != 1)
+    reader.fail("unsupported topology version");
+  Topology topology;
+  tokens = reader.next_tokens("number_of_atoms");
+  reader.require_line(tokens, "number_of_atoms", 2);
+  topology.number_of_atoms = reader.parse_int(tokens[1], "number_of_atoms");
+  if (topology.number_of_atoms <= 0)
+    reader.fail("number_of_atoms must be positive");
+  read_interactions(reader, topology, true);
+  try {
+    parameters.validate_or_throw(topology);
+  } catch (const std::exception& e) {
+    throw std::runtime_error(filename + ": " + e.what());
+  }
+  return topology;
 }

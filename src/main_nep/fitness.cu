@@ -23,6 +23,7 @@ Get the fitness
 #include "nep_charge_vdw.cuh"
 #include "nep_vdw.cuh"
 #include "parameters.cuh"
+#include "model/cg_model.cuh"
 #include "structure.cuh"
 #include "tnep.cuh"
 #include "utilities/error.cuh"
@@ -600,6 +601,8 @@ void Fitness::report_error(
     FILE* fid_nep = my_fopen("nep.txt", "w");
     write_nep_txt(fid_nep, para, elite);
     fclose(fid_nep);
+    if (para.molecular_force)
+      write_cg_model("cg_model.json", "nep.txt", para.bonded_parameters, para.elements);
 
     if (0 == (generation + 1) % para.save_potential) {
       std::string filename;
@@ -609,6 +612,8 @@ void Fitness::report_error(
       FILE* fid_nep = my_fopen(filename.c_str(), "w");
       write_nep_txt(fid_nep, para, elite);
       fclose(fid_nep);
+      if (para.molecular_force)
+        write_cg_model(filename + ".cg_model.json", filename, para.bonded_parameters, para.elements);
     }
 
     if (para.train_mode == 0 || para.train_mode == 3) {

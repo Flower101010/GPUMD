@@ -43,6 +43,8 @@ private:
 
   // keyword parsing functions
   void parse_neighbor(const char** param, int num_param);
+  bool cg_model_loaded = false;
+  void parse_cg_model(const char** param, int num_param);
   void parse_molecular_force(const char** param, int num_param);
   void parse_velocity(const char** param, int num_param);
   void parse_change_box(const char** param, int num_param);
