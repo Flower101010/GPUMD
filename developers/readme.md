@@ -10,6 +10,7 @@
 
 * [Training, model delivery and MD guide (Chinese)](multibead_cg_guide_zh.md)
 * [Stage E handoff and continuation boundary (Chinese)](HANDOFF_20261009_CG_STAGE_E.md)
+* [Stage F public-data and independent-reference validation plan (Chinese)](cg_stage_f/VALIDATION_PLAN_20261010_zh.md)
 * [Stage E validation](cg_stage_e/STATUS.md) and [runnable examples](cg_stage_e/example/README.md)
 
 ## Using git to manage pull request (PR) contributions

@@ -57,3 +57,10 @@ CUDA：`/usr/local/cuda/`；GPU RTX 3060（sm_86）。工具目录可能被清�
 
 同步后可用 `git fetch origin` 与 `git rev-parse HEAD origin/codex/multibead-cg-stage-b`
 核对当前分支是否一致；不能把本交接中的历史通过记录视为以后新改动已通过。
+
+## 2026-10-09 验证规划补充
+
+阶段 F 的来源调查与明日执行方案已写入
+[独立参考与公开数据验证计划](cg_stage_f/VALIDATION_PLAN_20261010_zh.md)。
+首选 GROMACS 独立 bonded 核对与 CGnet alanine 公开坐标—力数据；该计划尚未执行，
+没有新增测试通过结论。明天先完成来源/单位、force-only 及参考单点检查。
