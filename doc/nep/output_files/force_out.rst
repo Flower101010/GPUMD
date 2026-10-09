@@ -12,3 +12,5 @@ There are 6 columns.
 The first three columns are the :math:`x`, :math:`y`, and :math:`z` force components in units of eV/Å computed using the :term:`NEP` model.
 The last three columns are the corresponding target forces.
 Each row corresponds to one atom.
+
+With :ref:`molecular_force <kw_nep_molecular_force>`, predictions include the fixed bonded baseline and targets remain the supplied total labels.

@@ -61,3 +61,7 @@ CTest 创建独立临时输入并在成功后删除；未完成测试可能留�
 3. 用冻结 NEP 验证有/无 baseline 的 E/F/W 差恰好等于独立 baseline，包含重排、batch 与 train/test 输出；重复预测不得累计两次。
 4. 纯 bonded 与已知 residual + bonded 合成集小规模训练；定义符合 float 精度的阈值，并量化强 bonded、小 residual 的精度问题。不要把普通训练 smoke 当作 CG 训练验收。
 5. MD 完整模型加载、伴随模型清单及参数/拓扑分离接口留到阶段 E。
+
+## 2026-10-09 阶段 D 后的证据补注
+
+阶段 C smoke 没有删除训练阶段留下的 test 输出，因此不能独立证明 prediction 当时重新计算了 test 数据。阶段 D 已补齐 potential-model test prediction，并修改 smoke 在预测前清空输出；更新验收和当前入口见 `../cg_stage_d/STATUS.md`。上述“阶段 C 尚未开放”仅描述当时的提交状态；当前已由阶段 D 接通。冻结 evidence 保留原始历史快照。

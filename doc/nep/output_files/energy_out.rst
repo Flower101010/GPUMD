@@ -11,3 +11,5 @@ Each file contains 2 columns.
 The first column gives the energy in units of eV/atom calculated using the :term:`NEP` model.
 The second column gives the corresponding target energies.
 Each row corresponds to the configuration at the same position in the :ref:`train.xyz (if using the full-batch) and test.xyz files <train_test_xyz>`, respectively.
+
+With :ref:`molecular_force <kw_nep_molecular_force>`, predictions include the fixed bonded baseline and targets remain the supplied total labels.

@@ -17,3 +17,5 @@ The last 6 columns give the corresponding target virials.
 For a structure without target virial or stress, a target value of -1e6 will be output to remind the user about this.
 
 The virial values are in units of eV/atom.
+
+With :ref:`molecular_force <kw_nep_molecular_force>`, predictions include the fixed bonded baseline and targets remain the supplied total labels.

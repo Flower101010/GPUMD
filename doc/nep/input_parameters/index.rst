@@ -35,6 +35,7 @@ Below you can find a listing of keywords for the ``nep.in`` input file.
    force_delta
    batch
    stream_train
+   molecular_force
    population
    generation
    save_potential

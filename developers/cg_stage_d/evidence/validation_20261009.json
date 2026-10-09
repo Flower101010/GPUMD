@@ -1,0 +1,306 @@
+{
+  "date": "2026-10-09",
+  "implementation_commit": "743ea5ab",
+  "toolchain": {
+    "cuda": "13.4.92",
+    "gpu": "RTX 3060",
+    "cuda_arch": 86,
+    "gcc": "16.2.1",
+    "build": "Release",
+    "validated_devices": [
+      0
+    ]
+  },
+  "ctest": {
+    "passed": 18,
+    "failed": 0,
+    "skipped": 0,
+    "names": [
+      "unit.test_topology",
+      "unit.test_force_field_parameters",
+      "unit.test_read_molecular_force",
+      "unit.test_gpu_vector",
+      "unit.test_bonded_geometry",
+      "unit.test_harmonic_bond_data",
+      "unit.test_harmonic_bond",
+      "unit.test_harmonic_angle_data",
+      "unit.test_harmonic_angle",
+      "unit.test_periodic_dihedral_data",
+      "unit.test_periodic_dihedral",
+      "unit.test_molecular_force",
+      "unit.test_bonded_core",
+      "unit.test_bonded_dataset",
+      "unit.test_bonded_dataset_host",
+      "unit.test_bonded_nep",
+      "unit.test_bonded_nep_compiled",
+      "integration.molecular_force_run_in"
+    ],
+    "last_test_log_sha256": "5815a12d4d7a75adc2f5ab5093c9d82ff81c72e1ba44b5d1a86a8b2417b1aa61"
+  },
+  "compute_sanitizer": {
+    "tool": "memcheck",
+    "target": "test_bonded_nep --compiled",
+    "actual_specialized_kernel_required": true,
+    "errors": 0
+  },
+  "production_validation": {
+    "checks": {
+      "strong_baseline_precision": {
+        "baseline_scale": 10000000.0,
+        "force_residual_recovery_max_abs": 0.00113261,
+        "interpretation": "float total cannot preserve this small residual; not a strong-baseline training success"
+      },
+      "frozen_model": {
+        "max_identity_output_error": 7.390000000162544e-06,
+        "batch_stream_max_differences": {
+          "batch1_stream0": 0.0,
+          "batch1_stream1": 0.0,
+          "batch2_stream1": 0.0
+        },
+        "teacher_total_rmse": {
+          "energy_train": 0.0,
+          "force_train": 0.0,
+          "virial_train": 2.886751345930985e-09,
+          "energy_test": 0.0,
+          "force_test": 0.0,
+          "virial_test": 2.886751345930985e-09
+        },
+        "output_row_counts": {
+          "energy_train": 2,
+          "force_train": 10,
+          "virial_train": 2,
+          "energy_test": 2,
+          "force_test": 10,
+          "virial_test": 2
+        }
+      },
+      "pure_bonded_training": {
+        "generations": 10,
+        "rmse": {
+          "energy_train": 0.0,
+          "force_train": 4.586211217823213e-07,
+          "virial_train": 2.9355578686203883e-07,
+          "energy_test": 0.0,
+          "force_test": 4.586211217823213e-07,
+          "virial_test": 2.9355578686203883e-07
+        },
+        "initialization": "zero residual, sigma=1e-4; validates retaining zero residual, not learning topology from scratch"
+      },
+      "automatic_scaler_smoke": {
+        "loss_rows": 1,
+        "finite_prediction_rmse": {
+          "energy_train": 1.9798989873223505e-05,
+          "force_train": 0.00020717817693955364,
+          "virial_train": 5.90272064390649e-05,
+          "energy_test": 1.9798989873223505e-05,
+          "force_test": 0.00020717817693955364,
+          "virial_test": 5.90272064390649e-05
+        }
+      },
+      "known_residual_training": {
+        "known_stream0_compiled0": {
+          "generations": 200,
+          "population": 30,
+          "before_rmse": {
+            "energy_train": 0.0019183106174444184,
+            "force_train": 0.0001903838184650523,
+            "virial_train": 3.861455522208729e-05,
+            "energy_test": 0.0019183106174444184,
+            "force_test": 0.0001903838184650523,
+            "virial_test": 3.861455522208729e-05
+          },
+          "after_rmse": {
+            "energy_train": 5.586143571377349e-06,
+            "force_train": 1.5528371882888254e-05,
+            "virial_train": 6.058306281464525e-06,
+            "energy_test": 5.586143571377349e-06,
+            "force_test": 1.5528371882888254e-05,
+            "virial_test": 6.058306281464525e-06
+          },
+          "loss_first_last": [
+            [
+              20.0,
+              3e-05,
+              0.0,
+              0.0,
+              0.0,
+              3e-05,
+              0.0,
+              0.0,
+              2e-05,
+              1e-05
+            ],
+            [
+              200.0,
+              1e-05,
+              0.0,
+              0.0,
+              0.0,
+              1e-05,
+              0.0,
+              1e-05,
+              2e-05,
+              1e-05
+            ]
+          ],
+          "initialization": "teacher output weights scaled by 0.6, sigma=0.003"
+        },
+        "known_stream1_compiled0": {
+          "generations": 200,
+          "population": 30,
+          "before_rmse": {
+            "energy_train": 0.0019183106174444184,
+            "force_train": 0.0001903838184650523,
+            "virial_train": 3.861455522208729e-05,
+            "energy_test": 0.0019183106174444184,
+            "force_test": 0.0001903838184650523,
+            "virial_test": 3.861455522208729e-05
+          },
+          "after_rmse": {
+            "energy_train": 5.586143571377349e-06,
+            "force_train": 1.5528371882888254e-05,
+            "virial_train": 6.058306281464525e-06,
+            "energy_test": 5.586143571377349e-06,
+            "force_test": 1.5528371882888254e-05,
+            "virial_test": 6.058306281464525e-06
+          },
+          "loss_first_last": [
+            [
+              20.0,
+              3e-05,
+              0.0,
+              0.0,
+              0.0,
+              3e-05,
+              0.0,
+              0.0,
+              2e-05,
+              1e-05
+            ],
+            [
+              200.0,
+              1e-05,
+              0.0,
+              0.0,
+              0.0,
+              1e-05,
+              0.0,
+              1e-05,
+              2e-05,
+              1e-05
+            ]
+          ],
+          "initialization": "teacher output weights scaled by 0.6, sigma=0.003"
+        },
+        "known_stream1_compiled1": {
+          "generations": 200,
+          "population": 30,
+          "before_rmse": {
+            "energy_train": 0.0019183106174444184,
+            "force_train": 0.0001903838184650523,
+            "virial_train": 3.861455522208729e-05,
+            "energy_test": 0.0019183106174444184,
+            "force_test": 0.0001903838184650523,
+            "virial_test": 3.861455522208729e-05
+          },
+          "after_rmse": {
+            "energy_train": 5.586143571377349e-06,
+            "force_train": 1.5528371882888254e-05,
+            "virial_train": 6.058306281464525e-06,
+            "energy_test": 5.586143571377349e-06,
+            "force_test": 1.5528371882888254e-05,
+            "virial_test": 6.058306281464525e-06
+          },
+          "loss_first_last": [
+            [
+              20.0,
+              3e-05,
+              0.0,
+              0.0,
+              0.0,
+              3e-05,
+              0.0,
+              0.0,
+              2e-05,
+              1e-05
+            ],
+            [
+              200.0,
+              1e-05,
+              0.0,
+              0.0,
+              0.0,
+              1e-05,
+              0.0,
+              1e-05,
+              2e-05,
+              1e-05
+            ]
+          ],
+          "initialization": "teacher output weights scaled by 0.6, sigma=0.003"
+        }
+      },
+      "input_guards": [
+        "missing_mode",
+        "wrong_mode",
+        "duplicate",
+        "temperature",
+        "dipole",
+        "polarizability",
+        "charge",
+        "vdw",
+        "charge_vdw",
+        "atomic_virial"
+      ]
+    },
+    "nep_sha256": "ff97fd5ba3da9cf5d543aeeb89845a11c008ebbf6d2c94bfea6535cd7dd21e4b",
+    "scope": "two small synthetic frames, shared bead types and coefficients; no physical validation"
+  },
+  "ordinary_nep_smoke": {
+    "checks": {
+      "ordinary_training": {
+        "exit_code": 0,
+        "loss_rows": 1
+      },
+      "ordinary_prediction": {
+        "exit_code": 0,
+        "output_rows": {
+          "energy_train.out": 2,
+          "force_train.out": 10,
+          "virial_train.out": 2,
+          "energy_test.out": 2,
+          "force_test.out": 10,
+          "virial_test.out": 2
+        }
+      },
+      "incomplete_feature_guard": {
+        "nonzero_exit": true,
+        "diagnostic": "CG topology requires explicit bonded parameters"
+      }
+    },
+    "nep_sha256": "ff97fd5ba3da9cf5d543aeeb89845a11c008ebbf6d2c94bfea6535cd7dd21e4b",
+    "scope": "ordinary NEP smoke and stage-C guard; not CG residual-training validation"
+  },
+  "source_sha256": {
+    "src/main_nep/parameters.cu": "c73e2bf64c1286a1a84533fed080f867930cf806503b8c4d45a2b4edbd70a443",
+    "src/main_nep/parameters.cuh": "f747a9a040ecd337e224bea35529e84371fc0a5ec226214fc1ca5d9f87fe82ad",
+    "src/main_nep/fitness.cu": "eef4fec0663335dac56fe323547e06c17429e93e0b4bbfdb8943c353b4efc1d6",
+    "src/main_nep/nep.cu": "8a8038407d48f2d22f55ea3ac06e4ad7ee594ff2ad2b088b8840eed01f52e537",
+    "src/main_nep/nep.cuh": "43a393f3732b9f08e0e2d8cf96c438218e4249add9e646dfed63df56fb2e92a5",
+    "src/main_nep/dataset.cu": "f8f147b3e7c3cc59092349db1e6957e8a1df0f09da6d3c0265acff912ec7afc4",
+    "src/main_nep/dataset.cuh": "44251fbd667a6a42324513d3ca8c1fe1923ebcb797647803c69d7c994d1d8567",
+    "src/main_nep/structure.cu": "b674bb1c67a92fb6e9970130ab32bef4d8720badffec5b5bcd389319ad31f2d5",
+    "tests/CMakeLists.txt": "f2de0b4ab5ccb42601f4e70b9f45d5593f48a1e7bc1b7d822222fbee39eef751",
+    "tests/test_bonded_nep.cu": "f40eefbd4d33c18f96c519676f8bca40528dd50f0b58a929140e83b825f77b7c",
+    "developers/cg_stage_d/run_training_validation.py": "7789413fdbfc04779c62f5759999d6cc17db181ca8b9e0bdc177186f71482d8b",
+    "developers/cg_stage_c/run_nep_smoke.py": "3f267285413c73a46878cff51a634362ba3ac9662f5f9f832829b32003ecbe56"
+  },
+  "scope_limits": [
+    "train and test use the same two synthetic frames, not independent generalization",
+    "fixed bonded coefficients only; gnep unsupported",
+    "float label / total / loss cancellation remains under strong bonded baseline",
+    "no multi-GPU hardware validation",
+    "nep.txt is residual, full model packaging and new MD interface remain stage E",
+    "no real CG dataset, large-system, long-time or new GROMACS validation"
+  ]
+}
