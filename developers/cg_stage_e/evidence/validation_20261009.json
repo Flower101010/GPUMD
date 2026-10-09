@@ -1,0 +1,207 @@
+{
+  "date": "2026-10-09",
+  "implementation_commit": "362a0f8fe417dd02f937aacb1a34ac8888294c94",
+  "environment": {
+    "gpu": "NVIDIA GeForce RTX 3060",
+    "compute_capability": "8.6",
+    "cuda": "13.4.92",
+    "driver": "615.71.09",
+    "host_compiler": "GCC 16.2.1",
+    "build": "CMake/Ninja Release, sm_86"
+  },
+  "ctest": {
+    "tests": 19,
+    "passed": 19,
+    "failed": 0,
+    "skipped": 0,
+    "names": [
+      "unit.test_topology",
+      "unit.test_force_field_parameters",
+      "unit.test_read_molecular_force",
+      "unit.test_cg_model",
+      "unit.test_gpu_vector",
+      "unit.test_bonded_geometry",
+      "unit.test_harmonic_bond_data",
+      "unit.test_harmonic_bond",
+      "unit.test_harmonic_angle_data",
+      "unit.test_harmonic_angle",
+      "unit.test_periodic_dihedral_data",
+      "unit.test_periodic_dihedral",
+      "unit.test_molecular_force",
+      "unit.test_bonded_core",
+      "unit.test_bonded_dataset",
+      "unit.test_bonded_dataset_host",
+      "unit.test_bonded_nep",
+      "unit.test_bonded_nep_compiled",
+      "integration.molecular_force_run_in"
+    ]
+  },
+  "md_validation": {
+    "comparison": [
+      {
+        "frame": "frame6",
+        "errors": {
+          "energy_error_eV": 7.314837124905438e-09,
+          "max_force_error_eV_per_A": 4.7596947416739255e-07,
+          "max_virial_error_eV": 1.8448270574511483e-06
+        },
+        "legacy_and_split_equivalent": true,
+        "absent_C_type_mapping_checked": true,
+        "restart_and_replicate_before_checked": true
+      },
+      {
+        "frame": "frame4",
+        "errors": {
+          "energy_error_eV": 1.6163414090497596e-07,
+          "max_force_error_eV_per_A": 3.2792836195394415e-06,
+          "max_virial_error_eV": 1.7055680485711378e-06
+        },
+        "legacy_and_split_equivalent": true,
+        "absent_C_type_mapping_checked": true,
+        "restart_and_replicate_before_checked": true
+      }
+    ],
+    "nve": [
+      {
+        "frame": "frame6",
+        "dt_fs": 0.05,
+        "duration_fs": 50,
+        "max_energy_deviation_eV": 7.443731701028966e-07,
+        "relative_deviation": 1.570638178432867e-06
+      },
+      {
+        "frame": "frame6",
+        "dt_fs": 0.025,
+        "duration_fs": 50,
+        "max_energy_deviation_eV": 1.9896050174050828e-07,
+        "relative_deviation": 4.198095431674537e-07
+      },
+      {
+        "frame": "frame4",
+        "dt_fs": 0.05,
+        "duration_fs": 50,
+        "max_energy_deviation_eV": 1.2712022079974794e-06,
+        "relative_deviation": 3.4004545136715298e-06
+      },
+      {
+        "frame": "frame4",
+        "dt_fs": 0.025,
+        "duration_fs": 50,
+        "max_energy_deviation_eV": 3.251555980021692e-07,
+        "relative_deviation": 8.697883230795103e-07
+      }
+    ],
+    "guards": [
+      "frame6:missing_topology",
+      "frame6:duplicate_model",
+      "frame6:mixed_model",
+      "frame6:mixed_model_before",
+      "frame6:replicate_after",
+      "frame6:residual_only",
+      "frame6:atom_count",
+      "frame6:pbc",
+      "frame6:coefficients_checksum",
+      "frame4:missing_topology",
+      "frame4:duplicate_model",
+      "frame4:mixed_model",
+      "frame4:mixed_model_before",
+      "frame4:replicate_after",
+      "frame4:residual_only",
+      "frame4:atom_count",
+      "frame4:pbc",
+      "frame4:coefficients_checksum"
+    ],
+    "package_checks": {
+      "current_and_checkpoint_manifests": 2,
+      "hashlib_cross_check": true,
+      "types": [
+        "C",
+        "O"
+      ]
+    },
+    "binary_sha256": {
+      "gpumd": "71c2cf3833c53ec7c507f5fef629f3d12e402f1a9beb66b4112e66d4e7a63c8d",
+      "nep": "205bc97a45ab961060e9a85f3f8506b912e6e17a1fef196d2cf5a5ee624c80a8"
+    },
+    "scope": "two synthetic frames, one GPU, 50 fs; not real CG physical validation"
+  },
+  "ordinary_nep": {
+    "checks": {
+      "ordinary_training": {
+        "exit_code": 0,
+        "loss_rows": 1
+      },
+      "ordinary_prediction": {
+        "exit_code": 0,
+        "output_rows": {
+          "energy_train.out": 2,
+          "force_train.out": 10,
+          "virial_train.out": 2,
+          "energy_test.out": 2,
+          "force_test.out": 10,
+          "virial_test.out": 2
+        }
+      },
+      "incomplete_feature_guard": {
+        "nonzero_exit": true,
+        "diagnostic": "CG topology requires explicit bonded parameters"
+      }
+    },
+    "nep_sha256": "205bc97a45ab961060e9a85f3f8506b912e6e17a1fef196d2cf5a5ee624c80a8",
+    "scope": "ordinary NEP smoke and stage-C guard; not CG residual-training validation"
+  },
+  "sanitizer": {
+    "tool": "Compute Sanitizer memcheck",
+    "checks": [
+      {
+        "frame": "frame4",
+        "steps": 1000,
+        "dt_fs": 0.05,
+        "errors": 0,
+        "exit_code": 0
+      },
+      {
+        "frame": "frame6",
+        "steps": 1000,
+        "dt_fs": 0.05,
+        "errors": 0,
+        "exit_code": 0
+      }
+    ],
+    "gpumd_sha256": "71c2cf3833c53ec7c507f5fef629f3d12e402f1a9beb66b4112e66d4e7a63c8d"
+  },
+  "cg_model_cxx14_compile": {
+    "passed": true,
+    "scope": "new model translation unit only; not full make build"
+  },
+  "source_sha256": {
+    "src/model/cg_model.cu": "3492868adcfae85afb0fb56e1eae905c210ad7f3a61fe29e21e53182f425ce48",
+    "src/model/read_molecular_force.cu": "1ef53facec11b8e91e512ab7b18150ff4d6107d488dbb9b0fdc2c282d15e1c58",
+    "src/model/read_xyz.cu": "28a55f2d9ad7f8c2d5ddbd1c1de06ecb73f15d497a67ab2a2a69801dd7c3ec34",
+    "src/main_gpumd/run.cu": "366e361ad51d395abb70edc97a47fe26f88747990b04b473599f845504d75c4e",
+    "src/main_nep/fitness.cu": "0bee02e2eb92d2caee924ee30803d3bb0572e24bf9c2716c1effb0b80381bf8e",
+    "src/utilities/compact_nep.cu": "b6af5f9e6bba44632ffec5f3aa90905ade3df766a6aac038d3a346432da0c470",
+    "src/utilities/read_file.cu": "d3a16c737cd09d0156eea57a1bc7e171210898a500298aac2d67706c50919d2a",
+    "tests/test_cg_model.cpp": "6105e5646dde090fb0629d117d331cef5b9c1d047012511e81829a437210da86",
+    "developers/cg_stage_e/run_md_validation.py": "02cc73c420dd662d8609a0aecb761345e2465212b66fe54bce6e13b5be40d3c8"
+  },
+  "example_sha256": {
+    "README.md": "35945ac4d867b011fc6e6ec3d2dcaaf4460fde1b211391cb2bc7b0c31e7407de",
+    "cg_model.bonded.in": "0b308716bfd61e497283e8efbcf58e3f12f7c436354ef67de54924e2cdd0fa77",
+    "cg_model.json": "4799ca360318bf898930c19c6b996485ebb20dadea1288a13707992c50fffe53",
+    "frame4/model.xyz": "ccc038dc778af94ec9bd7cf0c9f0365bfd1bbbe062fb8bb300d3ee2b2033e5d3",
+    "frame4/run.in": "a90f9add5b4b87a803b283f89f2d357a880f8a6d3a41c07520c84432a69350d6",
+    "frame4/topology.in": "74081547af3ef63533fec584bec4f7726a6f69d8f652e4c05989b2a8a19f6981",
+    "frame6/model.xyz": "102d26367a4b33c11394a4cfe2ac0576b7ea6baa5c96d2d60226bbb3fee03d29",
+    "frame6/run.in": "a90f9add5b4b87a803b283f89f2d357a880f8a6d3a41c07520c84432a69350d6",
+    "frame6/topology.in": "c2b7952147384ae8b376f20bbea9695a443098ef25774647f7c67e55e02b9f72",
+    "nep.txt": "f42d7a146062809d73c5ac1110264ebac20fddb87dcddb4afa0fcc678c356859"
+  },
+  "limitations": [
+    "single GPU, two synthetic frames, train and test share frames",
+    "only 50 fs combined NVE; no real CG or long-time distributions",
+    "no new GROMACS comparison, large-scale performance or multi-GPU validation",
+    "float total training precision limitation remains",
+    "missing or renamed companions cannot identify residual-only loading"
+  ]
+}

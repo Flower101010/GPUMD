@@ -136,6 +136,6 @@ baseline evaluator 和 CPU 累加优先 double；写入现有 float 训练数组
 
 完成标准：变大小/变拓扑数据可训练并预测；完整模型可在固定拓扑的多 bead、多分子体系中运行；CPU/GPU、训练/MD 的 E/F/W 一致；异常输入可定位；原功能保持兼容；交付例子能复现全流程。
 
-阶段 A/B/C/D 已完成：输入草案、物理计算核心、共享参数/逐帧拓扑读取、Structure/Dataset baseline 打包，以及普通 NEP prediction/loss/输出接入和合成训练验收。阶段 C/D 记录见 `cg_stage_c/STATUS.md`、`cg_stage_d/STATUS.md`。下一步是阶段 E：完整模型清单、MD 参数/拓扑分离接口及训练/MD 对照。测试随各阶段进入，不等合并完成后集中补。
+阶段 A/B/C/D/E 已完成：输入草案、计算核心、共享参数/逐帧拓扑、训练 baseline、NEP 总预测/loss，以及完整模型清单与 MD 加载闭环。阶段 E 支持独立参数与体系拓扑、自动模型包导出、一致性检查，并在两种大小/拓扑下对齐训练与 MD。实现提交 `362a0f8f`，详细数值、复现与证据边界见 `cg_stage_e/STATUS.md`。
 
-当前证据边界：host 检查通过；CUDA 构建成功；CTest 14/14 通过；两帧 GPU E/F/W 对照、50 fs 时间步收敛检查及 Compute Sanitizer 通过。GROMACS、NEP 训练、新草案读取器和长时间/大体系验证尚未完成。详细数值和提交边界见阶段 B 文档。
+当前证据边界：CUDA 构建成功；CTest 19/19 通过；两帧训练/MD 总 E/F/W 对照、combined NEP + bonded 的 50 fs NVE 时间步收敛及误用检查通过。单 GPU、小合成数据不构成真实模型物理验收。强 bonded + 小 residual 的 float 精度限制仍在；真实数据、长期动力学、大体系/多 GPU 性能和新增 GROMACS 对照尚未完成。下一步是阶段 F：扩展独立验证矩阵，先补跨软件与合成体系检查，并评估目标量级的小 residual 精度，再进入真实数据与规模验收。

@@ -1,0 +1,5 @@
+cg_model ../cg_model.json topology.in
+time_step 0.05
+ensemble nve
+dump_thermo 1
+run 1000

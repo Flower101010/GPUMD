@@ -1,0 +1,12 @@
+{
+  "format": "gpumd_cg_model",
+  "version": 1,
+  "units": "eV_angstrom_radian",
+  "bonded_convention": "harmonic_half_k_periodic_proper_v1",
+  "image_convention": "consecutive_mic",
+  "nep_file": "nep.txt",
+  "bonded_parameters_file": "cg_model.bonded.in",
+  "nep_sha256": "f42d7a146062809d73c5ac1110264ebac20fddb87dcddb4afa0fcc678c356859",
+  "bonded_parameters_sha256": "0b308716bfd61e497283e8efbcf58e3f12f7c436354ef67de54924e2cdd0fa77",
+  "bead_types": ["C", "O"]
+}

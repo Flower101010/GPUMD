@@ -85,9 +85,11 @@ float training coordinates and cell, then packed into float prediction arrays.
 Very large bonded terms can obscure a small residual in float total labels and
 predictions. Double evaluation alone does not remove that limitation.
 
-The exported ``nep.txt`` contains the **residual NEP**, so it is not the complete
-CG model. Retain the shared parameter file, bead-type mapping, units and topology
-convention. Each MD system also requires its own topology and masses. The
-training parameter file and XYZ topology fields are not yet a two-file MD
-``molecular_force`` input; complete model packaging and that MD interface are a
-separate implementation stage.
+The exported ``nep.txt`` contains the **residual NEP**. Each model output also
+writes ``cg_model.json`` and ``cg_model.bonded.in`` containing the shared parameter
+snapshot, bead-type mapping, units, conventions and file checksums. Checkpoint
+companions use the checkpoint filename as a prefix. Deliver these three files
+together and use :ref:`kw_cg_model` for MD, with the system's independent topology
+and masses. The MD :ref:`kw_molecular_force` also accepts shared parameters and
+topology as separate files; training XYZ topology fields remain a different
+per-frame representation.

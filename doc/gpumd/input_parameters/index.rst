@@ -15,6 +15,8 @@ Below you can find a listing of keywords for the ``run.in`` input file.
    velocity
    correct_velocity
    potential
+   cg_model
+   molecular_force
    compute_extrapolation
    dftd3
    change_box

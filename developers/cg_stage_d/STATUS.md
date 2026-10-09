@@ -17,7 +17,7 @@ Parameters 读取一次共享系数，Fitness 给 train/test 读取器显式传�
 
 - XYZ energy、virial 是 **总模型的帧总量**；force 是总模型逐 bead 力。不得预先减 bonded。
 - Dataset reference 标签保持不变。prediction 中 E/W 仍遵循 GPUMD 原有按 bead 归一化规则，F 不除以 N。
-- `nep.txt` 是 residual 模型，尚不是完整 CG 模型包。完整 MD 加载和独立参数/拓扑入口属于阶段 E。
+- `nep.txt` 是 residual 模型。本阶段快照没有完整 CG 包；后续阶段 E 已实现伴随清单/参数快照、完整 MD 加载和独立参数/拓扑入口，见 `../cg_stage_e/STATUS.md`。
 - 普通 potential NEP 支持本入口；charge/vdw/temperature/dipole/polarizability/atomic tensor 拒绝。GNEP 尚未接入。
 - 类型和连接表格式、单位及精度边界详见 `doc/nep/input_parameters/molecular_force.rst`。共享表仍采用 k/2 的 harmonic bond/angle 和 radians。
 
