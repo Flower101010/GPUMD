@@ -12,7 +12,7 @@ if [[ -n "${gpu_probe}" ]]; then
     exit 2
   fi
 
-  probe_output=$("${gpu_probe}")
+  probe_output=$("${gpu_probe}" --probe)
   if [[ "${probe_output}" == SKIP:* ]]; then
     echo "SKIP: no accessible GPU for molecular_force run.in integration test."
     exit 0

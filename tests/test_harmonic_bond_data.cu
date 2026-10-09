@@ -92,6 +92,8 @@ static void test_reupload_empty_data()
   HarmonicBondData data;
   data.upload(topology, parameters);
 
+  const int* atom_allocation = data.atom_i().data();
+  const double* parameter_allocation = data.force_constant().data();
   topology.bonds.clear();
   parameters.harmonic_bond_parameters.clear();
   data.upload(topology, parameters);
@@ -99,6 +101,16 @@ static void test_reupload_empty_data()
   assert(data.number_of_atoms() == 2);
   assert(data.number_of_bonds() == 0);
   assert(data.number_of_parameters() == 0);
+  assert(data.atom_i().data() == atom_allocation);
+  assert(data.force_constant().data() == parameter_allocation);
+
+  topology.bonds = {{0, 1, 0}};
+  parameters.harmonic_bond_parameters = {{1.7, 25.0}};
+  data.upload(topology, parameters);
+  assert(data.atom_i().data() == atom_allocation);
+  assert(data.force_constant().data() == parameter_allocation);
+  assert(copy_to_host(data.force_constant()) == std::vector<double>({25.0}));
+  data.clear();
   assert(data.atom_i().data() == nullptr);
   assert(data.force_constant().data() == nullptr);
 }

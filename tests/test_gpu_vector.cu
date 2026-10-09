@@ -1,6 +1,7 @@
 #include "utilities/gpu_macro.cuh"
 #include "utilities/gpu_vector.cuh"
 #include <cassert>
+#include <cstring>
 #include <iostream>
 #include <vector>
 
@@ -58,11 +59,13 @@ static void test_global_memory_copy_fill_and_resize()
   device.copy_to_host(output.data());
   assert(output == std::vector<int>({3, 3, 3, 3, 3, 3, 3}));
 
+  int* allocation = device.data();
   device.resize(0);
   assert(device.size() == 0);
-  assert(device.data() == nullptr);
+  assert(device.data() == allocation);
 
   device.resize(2);
+  assert(device.data() == allocation);
   const std::vector<int> second_input = {10, 11};
   device.copy_from_host(second_input.data());
   output.resize(2);
@@ -87,8 +90,14 @@ static void test_managed_memory()
   CHECK(gpuDeviceSynchronize());
   assert(managed[1] == 4.5);
 
+  double* allocation = managed.data();
   managed.resize(0, Memory_Type::managed);
   assert(managed.size() == 0);
+  assert(managed.data() == allocation);
+  managed.resize(2, Memory_Type::managed);
+  assert(managed.data() == allocation);
+  assert(managed[1] == 4.5);
+  managed.clear();
   assert(managed.data() == nullptr);
 }
 
@@ -104,8 +113,18 @@ static void test_repeated_allocation_and_release()
   }
 }
 
-int main()
+int main(int argc, char** argv)
 {
+  // An availability probe must not depend on the container regression tests.
+  if (argc == 2 && std::strcmp(argv[1], "--probe") == 0) {
+    std::cout << (gpu_is_available() ? "PASS: GPU is accessible.\n" :
+      "SKIP: no accessible GPU.\n");
+    return 0;
+  }
+  if (argc != 1) {
+    std::cerr << "Usage: test_gpu_vector [--probe]\n";
+    return 2;
+  }
   test_default_and_zero_size_states();
 
   if (!gpu_is_available()) {
