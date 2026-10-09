@@ -122,7 +122,8 @@ void host_baseline(const ForceFieldParameters& p, const std::vector<Structure>& 
       close(sum, double(s.virial[k]) * s.num_atom, 3e-6);
     }
   }
-  const auto& four = *std::find_if(frames.begin(), frames.end(), [](const Structure& s) { return s.num_atom == 4; });
+  const auto& four =
+    *std::find_if(frames.begin(), frames.end(), [](const Structure& s) { return s.num_atom == 4; });
   auto topology = four.topology;
   float cell[9] = {20, 0, 0, 0, 20, 0, 0, 0, 20};
   auto x = four.x, y = four.y, z = four.z;
@@ -272,6 +273,47 @@ int main(int argc, char** argv)
     },
     "plain potential NEP");
   para.train_mode = 0;
+  auto no_topology = xyz;
+  size_t start = 0;
+  while ((start = no_topology.find("cg_topology_version=", start)) != std::string::npos) {
+    const auto end = no_topology.find("Properties=", start);
+    assert(end != std::string::npos);
+    no_topology.erase(start, end - start);
+  }
+  write("train.xyz", no_topology);
+  std::vector<Structure> ordinary;
+  read_structures(true, para, ordinary);
+  assert(ordinary.size() == frames.size());
+  for (size_t i = 0; i < ordinary.size(); ++i) {
+    assert(!ordinary[i].has_bonded_baseline);
+    assert(ordinary[i].energy == frames[i].energy);
+    assert(ordinary[i].fx == frames[i].fx);
+  }
+  auto all_none = xyz;
+  const auto cg_start = all_none.find("cg_topology_version=");
+  const auto cg_end = all_none.find("Properties=", cg_start);
+  all_none.replace(cg_start, cg_end - cg_start, empty + " ");
+  write("train.xyz", all_none);
+  std::vector<Structure> empty_frames;
+  read_structures(true, para, empty_frames, &p);
+  assert(empty_frames[1].num_atom == 4);
+  assert(
+    std::accumulate(
+      empty_frames[1].bonded_baseline.energy.begin(),
+      empty_frames[1].bonded_baseline.energy.end(),
+      0.0) == 0.0);
+  auto invalid_cell = xyz;
+  invalid_cell.replace(
+    invalid_cell.find("20 0 0 0 20 0 0 0 20"),
+    std::string("20 0 0 0 20 0 0 0 20").size(),
+    "20 0 0 0 20 0 0 0 0");
+  write("train.xyz", invalid_cell);
+  fails(
+    [&] {
+      std::vector<Structure> bad;
+      read_structures(true, para, bad, &p);
+    },
+    "invalid training cell volume");
   if (!host_only) {
     for (const auto& s : frames)
       for (bool skew : {false, true})
@@ -293,10 +335,9 @@ int main(int argc, char** argv)
     auto mixed = frames;
     mixed[1].has_bonded_baseline = false;
     fails([&] { d.construct(para, mixed, 0, 2, 0); }, "cannot mix");
-    auto plain = frames;
-    for (auto& s : plain)
-      s.has_bonded_baseline = false;
-    d.construct(para, plain, 0, 2, 0);
+    d.construct(para, empty_frames, 0, 2, 0, true);
+    packed(d);
+    d.construct(para, ordinary, 0, 2, 0);
     assert(!d.has_bonded_baseline && d.bonded_energy.size() == 0 && d.bonded_force_cpu.empty());
   }
   fs::current_path(old);

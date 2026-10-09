@@ -1,0 +1,96 @@
+{
+  "date": "2026-10-09",
+  "implementation_commit": "c60dc833",
+  "toolchain": {
+    "cuda": "13.4.92",
+    "gpu": "RTX 3060",
+    "cuda_arch": 86,
+    "gcc": "16.2.1",
+    "build": "Release"
+  },
+  "ctest": {
+    "passed": 16,
+    "failed": 0,
+    "skipped": 0,
+    "names": [
+      "unit.test_topology",
+      "unit.test_force_field_parameters",
+      "unit.test_read_molecular_force",
+      "unit.test_gpu_vector",
+      "unit.test_bonded_geometry",
+      "unit.test_harmonic_bond_data",
+      "unit.test_harmonic_bond",
+      "unit.test_harmonic_angle_data",
+      "unit.test_harmonic_angle",
+      "unit.test_periodic_dihedral_data",
+      "unit.test_periodic_dihedral",
+      "unit.test_molecular_force",
+      "unit.test_bonded_core",
+      "unit.test_bonded_dataset",
+      "unit.test_bonded_dataset_host",
+      "integration.molecular_force_run_in"
+    ]
+  },
+  "compute_sanitizer": {
+    "tool": "memcheck",
+    "target": "test_bonded_dataset",
+    "errors": 0
+  },
+  "cpu_gpu_baseline": {
+    "frames": [
+      4,
+      6
+    ],
+    "cell_types": [
+      "orthogonal",
+      "triclinic"
+    ],
+    "checks": "per-bead E/F and 6-component W, translated/wrapped across PBC",
+    "tolerance": "2e-12 * (1 + abs(reference))"
+  },
+  "ordinary_nep_smoke": {
+    "checks": {
+      "ordinary_training": {
+        "exit_code": 0,
+        "loss_rows": 1
+      },
+      "ordinary_prediction": {
+        "exit_code": 0,
+        "output_rows": {
+          "energy_train.out": 2,
+          "force_train.out": 10,
+          "virial_train.out": 2,
+          "energy_test.out": 2,
+          "force_test.out": 10,
+          "virial_test.out": 2
+        }
+      },
+      "incomplete_feature_guard": {
+        "nonzero_exit": true,
+        "diagnostic": "CG topology requires explicit bonded parameters"
+      }
+    },
+    "nep_sha256": "b01364e5aab978dd283c67f89c7c9267eeea0162ba5ff1e799d0ce8c6e33deac",
+    "scope": "ordinary NEP smoke and stage-C guard; not CG residual-training validation"
+  },
+  "source_sha256": {
+    "src/main_nep/bonded_baseline.cu": "984f125d0c8a9c5ced8b19291cad096941489cfa7428d0226394ba3d2b124cb2",
+    "src/main_nep/bonded_baseline.cuh": "e84fc5f0bd8fa5562fc6f242bd156139bbe25dcb227562eb1150056b906700cd",
+    "src/main_nep/structure.cu": "e020e115d640decb5b518e952bc90f476488f9c546b09e20e3a3eb3fc80ecb8c",
+    "src/main_nep/structure.cuh": "c44ebd3993675de1966375e99bb620ee086b938735a01b98ed79c57b88a5bb3c",
+    "src/main_nep/dataset.cu": "138c2127fa30d4862b4df536dc73ae5df0c63566ec52ff41eaa4af73b169fc4a",
+    "src/main_nep/dataset.cuh": "0ba972117f44a1b9c7c2f6f2a1622b03032f2e2740ccdb83e4a709cb323418c1",
+    "src/model/read_molecular_force.cu": "b6c7a6a2864a7b4da8abd80838631219f6898d71c9c01076e26831dbe1fa8859",
+    "src/model/read_molecular_force.cuh": "26876055d70ca730d82613c589f30807932a40e5f884b593c80e84e28a72a35b",
+    "tests/test_bonded_dataset.cu": "8ab562e44c7240c073557723fc698e69b330c773a30257d57133aca4d55ac3e2",
+    "developers/cg_stage_c/run_nep_smoke.py": "63ff2c2214952aaad41c091656f69508eb9d1790c1c91af30252c9708b6d3974"
+  },
+  "scope_limits": [
+    "one GPU only",
+    "CG keyword not enabled; no baseline addition to production prediction/loss yet",
+    "coordinates and cells remain float",
+    "no strong bonded / small residual cancellation validation yet",
+    "wrapped coordinate convention",
+    "no new GROMACS, large-system or long-time physical validation"
+  ]
+}

@@ -136,6 +136,6 @@ baseline evaluator 和 CPU 累加优先 double；写入现有 float 训练数组
 
 完成标准：变大小/变拓扑数据可训练并预测；完整模型可在固定拓扑的多 bead、多分子体系中运行；CPU/GPU、训练/MD 的 E/F/W 一致；异常输入可定位；原功能保持兼容；交付例子能复现全流程。
 
-阶段 A/B 已完成：输入草案、两帧最小数据、基线、容器测试修正、共用 evaluator/累加、可定位退化错误及补充验证。下一步是阶段 C：逐帧拓扑与训练 baseline。测试随各阶段进入，不等合并完成后集中补。
+阶段 A/B/C 已完成：输入草案、两帧最小数据、基线、容器测试修正、共用 evaluator/累加、可定位退化错误，以及共享参数/逐帧拓扑读取、Structure/Dataset baseline 打包和验收。阶段 C 记录见 `cg_stage_c/STATUS.md`；训练关键字尚未开放。下一步是阶段 D：接入 residual prediction、loss 和输出，并验证 baseline 仅相加一次。测试随各阶段进入，不等合并完成后集中补。
 
 当前证据边界：host 检查通过；CUDA 构建成功；CTest 14/14 通过；两帧 GPU E/F/W 对照、50 fs 时间步收敛检查及 Compute Sanitizer 通过。GROMACS、NEP 训练、新草案读取器和长时间/大体系验证尚未完成。详细数值和提交边界见阶段 B 文档。
