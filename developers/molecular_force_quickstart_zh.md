@@ -1,7 +1,8 @@
 # GPUMD 分子 bonded force 快速开始
 
-本文说明 `polymer-development` 分支中新增的固定拓扑分子力功能，包括如何编译、如何在
-`run.in` 中启用，以及如何运行 bond、angle 和 proper dihedral 的验证。
+本文介绍固定拓扑的 bonded-only/叠加入口，包括编译、`run.in` 和三类相互作用验证。
+当前多 bead CG 训练、共享参数和完整模型加载见
+[训练与 MD 使用指南](multibead_cg_guide_zh.md)。下文的 combined v1/v2 示例仍兼容。
 
 ## 当前支持范围
 
@@ -49,8 +50,8 @@ make -C src -j2
 
 ## 在 run.in 中启用
 
-`molecular_force` 是对已有 GPUMD potential 的叠加项，因此 `run.in` 仍然需要至少一个
-`potential`。最小配置如下：
+以下旧式 `molecular_force` 入口需要已有 `potential`。训练得到的完整 CG 包使用
+`cg_model manifest topology` 一次加载，不能混用两种声明。旧入口的最小配置如下：
 
 ```text
 potential zero_lj.txt

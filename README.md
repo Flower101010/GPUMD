@@ -28,6 +28,15 @@ This software is distributed under the GNU General Public License (GPL) version 
   * `path/to/gpumd`
   * `path/to/nep`
 
+## Multi-bead CG development
+
+This branch adds fixed bond/angle/proper-dihedral terms, per-frame training topology,
+and complete residual-NEP model packages for CG simulations. See the
+[Chinese training and MD guide](developers/multibead_cg_guide_zh.md),
+[validated scope](developers/cg_stage_e/STATUS.md), and
+[runnable synthetic examples](developers/cg_stage_e/example/README.md).
+Real CG data and long-time physical validation remain pending.
+
 ## Tutorials
 * We provide a [Colab Tutorial](https://colab.research.google.com/drive/1QnXAveZgzwut4Mvldsw-r2I0EWIsj1KA?usp=sharing) to show the workflow of the construction of a NEP model and its application in large-scale atomistic simulations for PbTe system. This will run entirely on Google's cloud virtual machine.
 * We also provide many tutorials and examples in the [GPUMD-Tutorials repository](https://github.com/brucefan1983/GPUMD-Tutorials).

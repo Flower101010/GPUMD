@@ -6,6 +6,12 @@
 
 * This is a work in progress, which will be constantly updated along with the GPUMD development activities.
 
+## Multi-bead CG extension
+
+* [Training, model delivery and MD guide (Chinese)](multibead_cg_guide_zh.md)
+* [Stage E handoff and continuation boundary (Chinese)](HANDOFF_20261009_CG_STAGE_E.md)
+* [Stage E validation](cg_stage_e/STATUS.md) and [runnable examples](cg_stage_e/example/README.md)
+
 ## Using git to manage pull request (PR) contributions
 
 * If you are new to this, here is a good place to start reading: https://git-scm.com/book/ms/v2/GitHub-Contributing-to-a-Project
