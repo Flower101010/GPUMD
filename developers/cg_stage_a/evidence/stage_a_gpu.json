@@ -1,0 +1,96 @@
+{
+  "recorded_at_utc": "2026-10-09T08:27:21.963127+00:00",
+  "head": "bee7f3abeedac1c009f4de1b6a8da099efd6e01c",
+  "build_directory": "/tmp/gpumd-stage-a-build",
+  "cuda_compiler": "/usr/local/cuda/bin/nvcc",
+  "cuda_version": "13.4.92",
+  "cuda_architecture": 86,
+  "build_type": "Release",
+  "cmake_version": "4.4.4",
+  "compiler": "GNU 16.2.1",
+  "gpu": "NVIDIA GeForce RTX 3060, 615.71.09",
+  "build_status": "PASS",
+  "ctest_exit_code": 8,
+  "ctest_results": [
+    {
+      "name": "unit.test_topology",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_force_field_parameters",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_read_molecular_force",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_gpu_vector",
+      "status": "FAIL"
+    },
+    {
+      "name": "unit.test_bonded_geometry",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_harmonic_bond_data",
+      "status": "FAIL"
+    },
+    {
+      "name": "unit.test_harmonic_bond",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_harmonic_angle_data",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_harmonic_angle",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_periodic_dihedral_data",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_periodic_dihedral",
+      "status": "PASS"
+    },
+    {
+      "name": "unit.test_molecular_force",
+      "status": "PASS"
+    },
+    {
+      "name": "integration.molecular_force_run_in",
+      "status": "FAIL"
+    }
+  ],
+  "independent_integration": {
+    "status": "PASS",
+    "command": [
+      "bash",
+      "tests/test_molecular_force_run_in.sh",
+      "/tmp/gpumd-stage-a-build/gpumd"
+    ],
+    "potential_energy_eV": 1.3121444959,
+    "note": "No failing full GPU_Vector test supplied as availability probe"
+  },
+  "fixture_report": "fixture_md_baseline.json",
+  "not_run": [
+    "GROMACS cross-validation (executable not found)",
+    "NEP training",
+    "new input parsers",
+    "long-time NVE/NVT stability",
+    "donor CUDA kernels"
+  ],
+  "source_sha256": {
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/utilities/gpu_vector.cuh": "6f9296901355f3fd684ef8d06602c6c6679ddf3b6bf7574710e63dd0d4ee57c4",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/tests/test_gpu_vector.cu": "f5d7853223f5f6773bc054891ee3501c2f192c3e1fa9fee310e94df0d7f837c5",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/tests/test_harmonic_bond_data.cu": "7b6d67852f6d69a4d5aadc36e5c2d9327243580dd8cbd987877e8b381e13c25b",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/tests/test_molecular_force_run_in.sh": "2d9198d0874ff527eb4376871498375b8396be284f293ce365fe1747c1c1858b",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/measure/dump_xyz.cu": "0497b10a66ce8fc54ccdf7156645288976e9833fad21e9a8e8b53c0a77b2e998",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/force/bonded_geometry.cuh": "ce2d75e0248634629f5d95a76e82f5b6b1a35a9533c11cfc1643418040ec9d44",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/developers/cg_stage_a/run_fixture_md.py": "9ed72e7b4f67e01aa9d2826c81567242bf3c8b1f7890cd079248f001ea480dc5",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/developers/cg_stage_a/make_fixture.cpp": "d178190f9c2cae2b34bbad1c64e1faa9d36be45727ab79317708d90f42211aa4"
+  }
+}

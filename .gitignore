@@ -35,3 +35,12 @@ push-to-both.sh
 /examples/gpumd_harmonic_trimer/gpumd.log
 /examples/gpumd_harmonic_trimer/movie.xyz
 /examples/gpumd_harmonic_trimer/thermo.out
+
+# Regenerated CG verification reports; frozen evidence lives under evidence/.
+/developers/cg_stage_a/baseline.json
+/developers/cg_stage_a/gpu_baseline.json
+/developers/cg_stage_a/fixture_md_baseline.json
+/developers/cg_stage_a/gpu_tests.xml
+/developers/cg_stage_b/*baseline.json
+/developers/cg_stage_b/gpu_tests.xml
+compile_commands.json

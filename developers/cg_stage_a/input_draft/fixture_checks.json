@@ -1,0 +1,7 @@
+{
+  "status": "PASS",
+  "max_force_fd_error": 5.4758886314232313e-10,
+  "max_virial_fd_error": 6.5599614629263669e-10,
+  "max_net_force": 2.2204460492503131e-16,
+  "max_net_torque": 1.1102230246251565e-15
+}

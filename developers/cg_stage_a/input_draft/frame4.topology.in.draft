@@ -1,0 +1,12 @@
+gpumd_topology 1
+number_of_atoms 4
+bonds 3
+0 1 0
+1 2 1
+2 3 0
+angles 2
+0 1 2 0
+1 2 3 0
+dihedrals 2
+0 1 2 3 0
+0 1 2 3 1

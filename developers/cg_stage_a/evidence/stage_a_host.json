@@ -1,0 +1,223 @@
+{
+  "recorded_at_utc": "2026-10-09T08:07:53.721344+00:00",
+  "repository": "/home/flos/Documents/Project/GPUMDs/GPUMD",
+  "donor": "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test",
+  "scope": "Host-only baseline; no CUDA kernels, NEP training or MD executed",
+  "toolchain": {
+    "g++": "/usr/bin/g++",
+    "nvcc": null,
+    "cmake": null,
+    "ctest": null
+  },
+  "results": [
+    {
+      "name": "own_topology",
+      "compile_command": [
+        "g++",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "-pedantic",
+        "-UNDEBUG",
+        "-I/home/flos/Documents/Project/GPUMDs/GPUMD/src",
+        "-x",
+        "c++",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/tests/test_topology.cpp",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/src/model/topology.cu",
+        "-o",
+        "/tmp/gpumd-cg-stage-a-72kwbctu/own_topology"
+      ],
+      "compile_exit_code": 0,
+      "compile_output": "",
+      "run_command": [
+        "/tmp/gpumd-cg-stage-a-72kwbctu/own_topology"
+      ],
+      "run_exit_code": 0,
+      "run_output": "",
+      "status": "PASS"
+    },
+    {
+      "name": "own_parameters",
+      "compile_command": [
+        "g++",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "-pedantic",
+        "-UNDEBUG",
+        "-I/home/flos/Documents/Project/GPUMDs/GPUMD/src",
+        "-x",
+        "c++",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/tests/test_force_field_parameters.cpp",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/src/model/topology.cu",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/src/model/force_field_parameters.cu",
+        "-o",
+        "/tmp/gpumd-cg-stage-a-72kwbctu/own_parameters"
+      ],
+      "compile_exit_code": 0,
+      "compile_output": "",
+      "run_command": [
+        "/tmp/gpumd-cg-stage-a-72kwbctu/own_parameters"
+      ],
+      "run_exit_code": 0,
+      "run_output": "",
+      "status": "PASS"
+    },
+    {
+      "name": "own_reader",
+      "compile_command": [
+        "g++",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "-pedantic",
+        "-UNDEBUG",
+        "-I/home/flos/Documents/Project/GPUMDs/GPUMD/src",
+        "-x",
+        "c++",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/tests/test_read_molecular_force.cpp",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/src/model/topology.cu",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/src/model/force_field_parameters.cu",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/src/model/read_molecular_force.cu",
+        "-o",
+        "/tmp/gpumd-cg-stage-a-72kwbctu/own_reader"
+      ],
+      "compile_exit_code": 0,
+      "compile_output": "",
+      "run_command": [
+        "/tmp/gpumd-cg-stage-a-72kwbctu/own_reader"
+      ],
+      "run_exit_code": 0,
+      "run_output": "",
+      "status": "PASS"
+    },
+    {
+      "name": "own_geometry",
+      "compile_command": [
+        "g++",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "-pedantic",
+        "-UNDEBUG",
+        "-I/home/flos/Documents/Project/GPUMDs/GPUMD/src",
+        "-D__host__=",
+        "-D__device__=",
+        "-x",
+        "c++",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/tests/test_bonded_geometry.cu",
+        "-o",
+        "/tmp/gpumd-cg-stage-a-72kwbctu/own_geometry"
+      ],
+      "compile_exit_code": 0,
+      "compile_output": "",
+      "run_command": [
+        "/tmp/gpumd-cg-stage-a-72kwbctu/own_geometry"
+      ],
+      "run_exit_code": 0,
+      "run_output": "",
+      "status": "PASS"
+    },
+    {
+      "name": "donor_cg_topology",
+      "compile_command": [
+        "g++",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "-pedantic",
+        "-UNDEBUG",
+        "-I/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src",
+        "-x",
+        "c++",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/tests/cg_topology_unit.cpp",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/utilities/coarse_grained.cu",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/utilities/error.cu",
+        "-o",
+        "/tmp/gpumd-cg-stage-a-72kwbctu/donor_cg_topology"
+      ],
+      "compile_exit_code": 0,
+      "compile_output": "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/utilities/error.cu: In function ‘std::string remove_spaces_step1(const std::string&)’:\n/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/utilities/error.cu:54:21: warning: comparison of integer expressions of different signedness: ‘int’ and ‘std::__cxx11::basic_string<char>::size_type’ {aka ‘long unsigned int’} [-Wsign-compare]\n   54 |   for (int n = 0; n < line.size(); ++n) {\n      |                   ~~^~~~~~~~~~~~~\n/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/utilities/error.cu:63:29: warning: comparison of integer expressions of different signedness: ‘int’ and ‘std::__cxx11::basic_string<char>::size_type’ {aka ‘long unsigned int’} [-Wsign-compare]\n   63 |       for (int k = 1; n + k < line.size(); ++k) {\n      |                       ~~~~~~^~~~~~~~~~~~~\n/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/utilities/error.cu:74:21: warning: comparison of integer expressions of different signedness: ‘int’ and ‘std::__cxx11::basic_string<char>::size_type’ {aka ‘long unsigned int’} [-Wsign-compare]\n   74 |   for (int n = 0; n < line.size(); ++n) {\n      |                   ~~^~~~~~~~~~~~~\n/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/utilities/error.cu: In function ‘std::string remove_spaces(const std::string&)’:\n/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/utilities/error.cu:88:21: warning: comparison of integer expressions of different signedness: ‘int’ and ‘std::__cxx11::basic_string<char>::size_type’ {aka ‘long unsigned int’} [-Wsign-compare]\n   88 |   for (int n = 0; n < line.size(); ++n) {\n      |                   ~~^~~~~~~~~~~~~\n/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/utilities/error.cu:94:33: warning: comparison of integer expressions of different signedness: ‘int’ and ‘std::__cxx11::basic_string<char>::size_type’ {aka ‘long unsigned int’} [-Wsign-compare]\n   94 |           for (int k = 1; n + k < line.size(); ++k) {\n      |                           ~~~~~~^~~~~~~~~~~~~\n/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/utilities/error.cu:115:21: warning: comparison of integer expressions of different signedness: ‘int’ and ‘std::__cxx11::basic_string<char>::size_type’ {aka ‘long unsigned int’} [-Wsign-compare]\n  115 |   for (int n = 0; n < line.size(); ++n) {\n      |                   ~~^~~~~~~~~~~~~\n",
+      "run_command": [
+        "/tmp/gpumd-cg-stage-a-72kwbctu/donor_cg_topology",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/tests/cg_topology.in",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/tests/cg_coefficients.in",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/examples/coarse_grained_polymer/train_variable.xyz"
+      ],
+      "run_exit_code": 0,
+      "run_output": "",
+      "status": "PASS"
+    },
+    {
+      "name": "stage_a_fixture",
+      "compile_command": [
+        "g++",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "-pedantic",
+        "-UNDEBUG",
+        "-I/home/flos/Documents/Project/GPUMDs/GPUMD/src",
+        "-D__host__=",
+        "-D__device__=",
+        "-x",
+        "c++",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/developers/cg_stage_a/make_fixture.cpp",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/src/model/topology.cu",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/src/model/force_field_parameters.cu",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/src/model/read_molecular_force.cu",
+        "-o",
+        "/tmp/gpumd-cg-stage-a-72kwbctu/stage_a_fixture"
+      ],
+      "compile_exit_code": 0,
+      "compile_output": "",
+      "run_command": [
+        "/tmp/gpumd-cg-stage-a-72kwbctu/stage_a_fixture",
+        "/home/flos/Documents/Project/GPUMDs/GPUMD/developers/cg_stage_a/input_draft"
+      ],
+      "run_exit_code": 0,
+      "run_output": "PASS: two synthetic frames, legacy v2 roundtrip, E/F/W finite differences\n",
+      "status": "PASS"
+    },
+    {
+      "name": "gpu_md_training_baseline",
+      "status": "NOT_RUN",
+      "reason": "This runner is host-only; GPU/MD/training need a separate CUDA build"
+    }
+  ],
+  "source_sha256": {
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/CMakeLists.txt": "a17f98f4a12ba85f1e83041ddeac7d6ee642a47a4b0a096dead43895e9020c66",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/developers/cg_stage_a/make_fixture.cpp": "b68f29d5b15beaa77a32fc1d83be257c92e57f26372366982641d4d2b35822d2",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/force/bonded_geometry.cuh": "ce2d75e0248634629f5d95a76e82f5b6b1a35a9533c11cfc1643418040ec9d44",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/force/force.cu": "17bbde0864f54be4b22aed4d95b81e985cba8e58eaa6377354a33a336199d308",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/force/harmonic_angle.cu": "fffdb9b66d53eb727063549725fee2a7148757afd1d41ea6624e2c77db7cb5db",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/force/harmonic_bond.cu": "d05f263472a47206039b898a316e06dba79b23549545b556c8cb01cbb61f9ed7",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/force/molecular_force.cu": "696304a18b1f0ba0d5f246055411a17ce942c4540d2e6a745a4031af9352c019",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/force/periodic_dihedral.cu": "c887a7aa88409866a65ce5264759fdd9b7bd66d9525ad35894baf7b707b0edbb",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/main_gpumd/run.cu": "4a66d4b9eb20ab20f23711a6c6840252afc92f17e8727819973491b26f6b6e51",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/main_nep/dataset.cu": "af0736c9fd7aa816b0163af2a5166e9c26e73bb50799ad84adb29d491f1726ed",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/main_nep/nep.cu": "15a64a891ddb2c0c300d9adf30abc76afb30468b1de7e83e5b7b3b659910bc3b",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/main_nep/structure.cu": "9dde839861d18064f228fbd9ee6373b725c99da7c21201ac5434601caa0d206e",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/model/force_field_parameters.cu": "48299f2114c66bdbfd95fd63d2a83c174e229259b832b4ead56bba4fec9e5ecc",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/model/read_molecular_force.cu": "55ccb4e044adc754183157f507aa1c206a01812a097c83251f37b05d4ad0c9fc",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/src/model/topology.cu": "f3056699166685027c167123adb48088b63a938a5ec078fb7cfb68146b521816",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/tests/CMakeLists.txt": "342cf2942135ccb5f03487afce9c39fa8bea24c3bbdd8f9f01570d4977d38eef",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/tests/test_bonded_geometry.cu": "07b47799c2abc7a065d62d8e4525367d0de9ca0cbbfe879968b6da0c3b33427c",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/tests/test_force_field_parameters.cpp": "955940edd29fd513e28112a12a990367811ea4731230ce8beefa6b4438ef66c6",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/tests/test_read_molecular_force.cpp": "a0fe9ead694dbaa0e56196c18ca71624dc5d88f221beb2eeba0f9fcc7e9cac59",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD/tests/test_topology.cpp": "633efa25f71711bf30b5b1ca099e71c8213c7c95b3a1a8e539e6d9411d8bb75b",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/force/coarse_grained.cu": "ca672aaacdfd7b9a8e45cfb5b41ed2fde4a91b6798ca89f5b78ff372a0ce74ea",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/force/force.cu": "2d0f27c0b38376f60cbe19e4e501f0a197f0dea196b0ef7970db929a323f2f79",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/main_nep/dataset.cu": "126a4729b6df13d1f38a1a72e299159df7c1cd674e1e699bd2f018261d5f2b6c",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/main_nep/nep.cu": "d9438071a96a10891b6dcbe85f3e196c0199caba32dcdb8d7e3f85aec2dcaf13",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/main_nep/parameters.cu": "37019668eeaf6a430b1a1fc3a53f6d1661905377e379c85215a23c4b5af5e86f",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/main_nep/structure.cu": "bcc8be8e87f41447b26dbd03c19d615df3085cba776ead03410e88fcd26ae99a",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/utilities/coarse_grained.cu": "cab98e8e4ff205118d1e5b48540cf9a9f67caf0a0a2e4b25e703071fa62b2226",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/utilities/coarse_grained.cuh": "35e0b3fe206a614c8c7bffba8a92193360594b8ce085ec62ac2144e3816d2e04",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/src/utilities/error.cu": "6840e46a769f880e6a692054aaba3db2233822169df7203f9086ac61c8e66fcd",
+    "/home/flos/Documents/Project/GPUMDs/GPUMD-5.6_bondangledihedral_need_test/tests/cg_topology_unit.cpp": "a13a386dec0946395f9161ab83fe808167e0daa5c087d5e074187b722268a612"
+  },
+  "head": "bee7f3abeedac1c009f4de1b6a8da099efd6e01c",
+  "compiler": "g++ (GCC) 16.2.1 20260819 (Red Hat 16.2.1-2)",
+  "host_baseline_status": "PASS"
+}
