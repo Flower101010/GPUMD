@@ -36,10 +36,10 @@ std::vector<std::string> ForceFieldParameters::validate_bond(const Topology& top
       errors.emplace_back(message.str());
     }
 
-    if (!std::isfinite(parameter.force_constant) || parameter.force_constant <= 0.0) {
+    if (!std::isfinite(parameter.force_constant) || parameter.force_constant < 0.0) {
       std::ostringstream message;
       message << "harmonic_bond_parameter[" << i
-              << "] force_constant must be finite and positive, but is " << parameter.force_constant
+              << "] force_constant must be finite and non-negative, but is " << parameter.force_constant
               << ".";
       errors.emplace_back(message.str());
     }
@@ -67,18 +67,18 @@ std::vector<std::string> ForceFieldParameters::validate_angle(const Topology& to
     const HarmonicAngleParameter& parameter = harmonic_angle_parameters[i];
 
     if (
-      !std::isfinite(parameter.equilibrium_angle) || parameter.equilibrium_angle <= 0 ||
-      parameter.equilibrium_angle > PI) {
+      !std::isfinite(parameter.equilibrium_angle) || parameter.equilibrium_angle < 0 ||
+      parameter.equilibrium_angle > std::acos(-1.0)) {
       std::ostringstream message;
       message << "harmonic_angle_parameter[" << i
               << "] equilibrium angle must be finite and within the range [0, PI], but is"
               << parameter.equilibrium_angle << ".";
       errors.emplace_back(message.str());
     }
-    if (!std::isfinite(parameter.angle_constant) || parameter.angle_constant <= 0) {
+    if (!std::isfinite(parameter.angle_constant) || parameter.angle_constant < 0) {
       std::ostringstream message;
       message << "harmonic_angle_parameter[" << i
-              << "] angle constant must be finite and positive, but is" << parameter.angle_constant
+              << "] angle constant must be finite and non-negative, but is" << parameter.angle_constant
               << ".";
       errors.emplace_back(message.str());
     }

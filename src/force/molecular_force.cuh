@@ -47,6 +47,7 @@ public:
 
 private:
   bool initialized_ = false;
+  mutable BondedErrorState errors_;
   HarmonicBondData harmonic_bond_data_;
   HarmonicBond harmonic_bond_;
   HarmonicAngleData harmonic_angle_data_;

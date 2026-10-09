@@ -37,6 +37,8 @@ public:
   const GPU_Vector<double>& phase() const { return phase_; }
 
 private:
+  friend class MolecularForce;
+  void upload_validated(const Topology& topology, const ForceFieldParameters& parameters);
   int number_of_atoms_ = 0;
   GPU_Vector<int> atom_i_;
   GPU_Vector<int> atom_j_;

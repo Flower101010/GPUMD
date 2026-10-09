@@ -16,9 +16,10 @@
 void MolecularForce::initialize(
   const Topology& topology, const ForceFieldParameters& parameters)
 {
-  harmonic_bond_data_.upload(topology, parameters);
-  harmonic_angle_data_.upload(topology, parameters);
-  periodic_dihedral_data_.upload(topology, parameters);
+  parameters.validate_or_throw(topology);
+  harmonic_bond_data_.upload_validated(topology, parameters);
+  harmonic_angle_data_.upload_validated(topology, parameters);
+  periodic_dihedral_data_.upload_validated(topology, parameters);
   initialized_ = true;
 }
 
@@ -27,6 +28,7 @@ void MolecularForce::clear()
   harmonic_bond_data_.clear();
   harmonic_angle_data_.clear();
   periodic_dihedral_data_.clear();
+  errors_.clear();
   initialized_ = false;
 }
 
@@ -41,25 +43,33 @@ void MolecularForce::compute(
     return;
   }
 
+  if (number_of_harmonic_bonds() + number_of_harmonic_angles() +
+      number_of_periodic_dihedrals() == 0) return;
+  errors_.reset();
+
   harmonic_bond_.compute(
     box,
     harmonic_bond_data_,
     position_per_atom,
     potential_per_atom,
     force_per_atom,
-    virial_per_atom);
+    virial_per_atom,
+    &errors_);
   harmonic_angle_.compute(
     box,
     harmonic_angle_data_,
     position_per_atom,
     potential_per_atom,
     force_per_atom,
-    virial_per_atom);
+    virial_per_atom,
+    &errors_);
   periodic_dihedral_.compute(
     box,
     periodic_dihedral_data_,
     position_per_atom,
     potential_per_atom,
     force_per_atom,
-    virial_per_atom);
+    virial_per_atom,
+    &errors_);
+  errors_.check();
 }

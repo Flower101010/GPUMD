@@ -2,6 +2,8 @@
 #include "utilities/common.cuh"
 #include <cassert>
 #include <cmath>
+#include <limits>
+#include <initializer_list>
 
 namespace
 {
@@ -105,9 +107,41 @@ void test_periodic_dihedral_host_formula()
 }
 } // namespace
 
+void test_robust_geometry()
+{
+  const double zero[3]={0,0,0}, x[3]={1,0,0};
+  double energy,phi,force[4][3];
+  assert(!bonded_geometry::harmonic_bond(zero,1.0,2.0,energy,force[0],force[1]));
+  const double nan[3]={std::numeric_limits<double>::quiet_NaN(),0,0};
+  assert(!bonded_geometry::harmonic_bond(nan,1.0,2.0,energy,force[0],force[1]));
+  assert(bonded_geometry::harmonic_bond(nan,1.0,0.0,energy,force[0],force[1]));
+  assert(energy==0 && force[0][0]==0);
+  assert(!bonded_geometry::harmonic_angle(x,x,1.3,2.0,energy,force[0],force[1],force[2]));
+  assert(bonded_geometry::harmonic_angle(x,x,0.0,2.0,energy,force[0],force[1],force[2]));
+  const double almost_x[3]={1,1e-14,0};
+  assert(bonded_geometry::harmonic_angle(x,almost_x,0.0,2.0,energy,force[0],force[1],force[2]));
+  assert(std::abs(energy-1e-28)<1e-40);
+  assert(std::abs(force[0][1]-2e-14)<1e-26);
+  const double bonds[3][3]={{0.9,-0.2,0.1},{0.4,1.1,0.2},{0.6,0.2,0.8}};
+  double expected_energy,expected_phi,expected_force[4][3];
+  assert(bonded_geometry::periodic_dihedral(bonds[0],bonds[1],bonds[2],1.7,3,0.4,
+    expected_phi,expected_energy,expected_force[0],expected_force[1],expected_force[2],expected_force[3]));
+  // Normalized geometry must not change its degeneracy decision with length units.
+  for(double scale:{1e-100,1e100}) {
+    double scaled[3][3];
+    for(int i=0;i<3;++i) for(int d=0;d<3;++d) scaled[i][d]=bonds[i][d]*scale;
+    assert(bonded_geometry::periodic_dihedral(scaled[0],scaled[1],scaled[2],1.7,3,0.4,
+      phi,energy,force[0],force[1],force[2],force[3]));
+    assert(std::abs(energy-expected_energy)<1e-12);
+    for(int i=0;i<4;++i) for(int d=0;d<3;++d)
+      assert(std::abs(force[i][d]*scale-expected_force[i][d])<1e-12);
+  }
+}
+
 int main()
 {
   test_harmonic_angle_host_formula();
   test_periodic_dihedral_host_formula();
+  test_robust_geometry();
   return 0;
 }

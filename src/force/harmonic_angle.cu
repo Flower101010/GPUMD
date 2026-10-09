@@ -8,6 +8,7 @@
 */
 
 #include "harmonic_angle.cuh"
+#include "bonded_accumulation.cuh"
 #include "bonded_geometry.cuh"
 #include "utilities/error.cuh"
 #include <stdexcept>
@@ -29,7 +30,8 @@ __global__ void gpu_compute_harmonic_angles(
   const double* position,
   double* potential,
   double* force,
-  double* virial)
+  double* virial,
+  int* errors)
 {
   const int angle_index = blockIdx.x * blockDim.x + threadIdx.x;
   if (angle_index >= number_of_angles) {
@@ -40,6 +42,7 @@ __global__ void gpu_compute_harmonic_angles(
   const int atom_j = angle_atom_j[angle_index];
   const int atom_k = angle_atom_k[angle_index];
   const int type = angle_type[angle_index];
+  if (angle_constant[type] == 0.0) return;
 
   double a[3] = {
     position[atom_i] - position[atom_j],
@@ -52,49 +55,15 @@ __global__ void gpu_compute_harmonic_angles(
   apply_mic(box, a[0], a[1], a[2]);
   apply_mic(box, b[0], b[1], b[2]);
 
-  double energy = 0.0;
-  double force_i[3];
-  double force_k[3];
-  double force_j[3];
-  if (!bonded_geometry::harmonic_angle(
-        a,
-        b,
-        equilibrium_angle[type],
-        angle_constant[type],
-        energy,
-        force_i,
-        force_j,
-        force_k)) {
-    return;
-  }
-
+  double energy = 0.0, forces[3][3];
   const int atoms[3] = {atom_i, atom_j, atom_k};
-  const double* forces[3] = {force_i, force_j, force_k};
-  for (int p = 0; p < 3; ++p) {
-    atomicAdd(&force[atoms[p]], forces[p][0]);
-    atomicAdd(&force[atoms[p] + number_of_atoms], forces[p][1]);
-    atomicAdd(&force[atoms[p] + 2 * number_of_atoms], forces[p][2]);
-    atomicAdd(&potential[atoms[p]], energy / 3.0);
+  const double r[3][3] = {{a[0],a[1],a[2]}, {0.0,0.0,0.0}, {b[0],b[1],b[2]}};
+  if (!bonded_geometry::harmonic_angle(a, b, equilibrium_angle[type], angle_constant[type],
+        energy, forces[0], forces[1], forces[2]) ||
+      !add_bonded_interaction(number_of_atoms, atoms, r, forces, energy, potential, force, virial)) {
+    atomicMin(errors+1, angle_index);
   }
 
-  // The interaction virial is sum_a r_a tensor F_a. Use atom j as the origin and
-  // distribute the resulting tensor equally among the three participating atoms.
-  const double interaction_virial[9] = {
-    a[0] * force_i[0] + b[0] * force_k[0],
-    a[1] * force_i[1] + b[1] * force_k[1],
-    a[2] * force_i[2] + b[2] * force_k[2],
-    a[0] * force_i[1] + b[0] * force_k[1],
-    a[0] * force_i[2] + b[0] * force_k[2],
-    a[1] * force_i[2] + b[1] * force_k[2],
-    a[1] * force_i[0] + b[1] * force_k[0],
-    a[2] * force_i[0] + b[2] * force_k[0],
-    a[2] * force_i[1] + b[2] * force_k[1]};
-  for (int component = 0; component < 9; ++component) {
-    const double per_atom_virial = interaction_virial[component] / 3.0;
-    for (int p = 0; p < 3; ++p) {
-      atomicAdd(&virial[atoms[p] + component * number_of_atoms], per_atom_virial);
-    }
-  }
 }
 } // namespace
 
@@ -104,7 +73,8 @@ void HarmonicAngle::compute(
   const GPU_Vector<double>& position_per_atom,
   GPU_Vector<double>& potential_per_atom,
   GPU_Vector<double>& force_per_atom,
-  GPU_Vector<double>& virial_per_atom) const
+  GPU_Vector<double>& virial_per_atom,
+  BondedErrorState* shared_errors) const
 {
   const int number_of_atoms = angle_data.number_of_atoms();
   if (position_per_atom.size() != static_cast<size_t>(3 * number_of_atoms) ||
@@ -118,6 +88,9 @@ void HarmonicAngle::compute(
   if (number_of_angles == 0) {
     return;
   }
+
+  BondedErrorState& errors = shared_errors ? *shared_errors : errors_;
+  if (!shared_errors) errors.reset();
 
   const int grid_size = (number_of_angles + BLOCK_SIZE - 1) / BLOCK_SIZE;
   gpu_compute_harmonic_angles<<<grid_size, BLOCK_SIZE>>>(
@@ -133,6 +106,8 @@ void HarmonicAngle::compute(
     position_per_atom.data(),
     potential_per_atom.data(),
     force_per_atom.data(),
-    virial_per_atom.data());
+    virial_per_atom.data(),
+    errors.data());
   GPU_CHECK_KERNEL
+  if (!shared_errors) errors.check();
 }

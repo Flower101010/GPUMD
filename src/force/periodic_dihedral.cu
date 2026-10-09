@@ -8,6 +8,7 @@
 */
 
 #include "periodic_dihedral.cuh"
+#include "bonded_accumulation.cuh"
 #include "bonded_geometry.cuh"
 #include "utilities/error.cuh"
 #include <stdexcept>
@@ -31,7 +32,8 @@ __global__ void gpu_compute_periodic_dihedrals(
   const double* position,
   double* potential,
   double* force,
-  double* virial)
+  double* virial,
+  int* errors)
 {
   const int dihedral_index = blockIdx.x * blockDim.x + threadIdx.x;
   if (dihedral_index >= number_of_dihedrals) {
@@ -43,6 +45,7 @@ __global__ void gpu_compute_periodic_dihedrals(
   const int atom_k = dihedral_atom_k[dihedral_index];
   const int atom_l = dihedral_atom_l[dihedral_index];
   const int type = dihedral_type[dihedral_index];
+  if (force_constant[type] == 0.0) return;
 
   // Consecutive minimum-image bond vectors unwrap the four-atom chain without a neighbor list.
   double b1[3] = {
@@ -61,55 +64,16 @@ __global__ void gpu_compute_periodic_dihedrals(
   apply_mic(box, b2[0], b2[1], b2[2]);
   apply_mic(box, b3[0], b3[1], b3[2]);
 
-  double phi = 0.0;
-  double energy = 0.0;
-  double force_i[3];
-  double force_j[3];
-  double force_k[3];
-  double force_l[3];
-  if (!bonded_geometry::periodic_dihedral(
-        b1,
-        b2,
-        b3,
-        force_constant[type],
-        multiplicity[type],
-        phase[type],
-        phi,
-        energy,
-        force_i,
-        force_j,
-        force_k,
-        force_l)) {
-    return;
-  }
-
+  double phi = 0.0, energy = 0.0, forces[4][3];
   const int atoms[4] = {atom_i, atom_j, atom_k, atom_l};
-  const double* forces[4] = {force_i, force_j, force_k, force_l};
-  for (int p = 0; p < 4; ++p) {
-    atomicAdd(&force[atoms[p]], forces[p][0]);
-    atomicAdd(&force[atoms[p] + number_of_atoms], forces[p][1]);
-    atomicAdd(&force[atoms[p] + 2 * number_of_atoms], forces[p][2]);
-    atomicAdd(&potential[atoms[p]], energy * 0.25);
+  const double r[4][3] = {{-b1[0],-b1[1],-b1[2]}, {0.0,0.0,0.0},
+    {b2[0],b2[1],b2[2]}, {b2[0]+b3[0],b2[1]+b3[1],b2[2]+b3[2]}};
+  if (!bonded_geometry::periodic_dihedral(b1, b2, b3, force_constant[type], multiplicity[type],
+        phase[type], phi, energy, forces[0], forces[1], forces[2], forces[3]) ||
+      !add_bonded_interaction(number_of_atoms, atoms, r, forces, energy, potential, force, virial)) {
+    atomicMin(errors+2, dihedral_index);
   }
 
-  // Use atom j as origin: r_i=-b1, r_k=b2, r_l=b2+b3.
-  const double relative_i[3] = {-b1[0], -b1[1], -b1[2]};
-  const double relative_k[3] = {b2[0], b2[1], b2[2]};
-  const double relative_l[3] = {b2[0] + b3[0], b2[1] + b3[1], b2[2] + b3[2]};
-  const double* relative[3] = {relative_i, relative_k, relative_l};
-  const double* relative_force[3] = {force_i, force_k, force_l};
-  const int row[9] = {0, 1, 2, 0, 0, 1, 1, 2, 2};
-  const int column[9] = {0, 1, 2, 1, 2, 2, 0, 0, 1};
-  for (int component = 0; component < 9; ++component) {
-    double interaction_virial = 0.0;
-    for (int p = 0; p < 3; ++p) {
-      interaction_virial += relative[p][row[component]] * relative_force[p][column[component]];
-    }
-    const double per_atom_virial = interaction_virial * 0.25;
-    for (int p = 0; p < 4; ++p) {
-      atomicAdd(&virial[atoms[p] + component * number_of_atoms], per_atom_virial);
-    }
-  }
 }
 } // namespace
 
@@ -119,7 +83,8 @@ void PeriodicDihedral::compute(
   const GPU_Vector<double>& position_per_atom,
   GPU_Vector<double>& potential_per_atom,
   GPU_Vector<double>& force_per_atom,
-  GPU_Vector<double>& virial_per_atom) const
+  GPU_Vector<double>& virial_per_atom,
+  BondedErrorState* shared_errors) const
 {
   const int number_of_atoms = dihedral_data.number_of_atoms();
   if (position_per_atom.size() != static_cast<size_t>(3 * number_of_atoms) ||
@@ -134,6 +99,9 @@ void PeriodicDihedral::compute(
   if (number_of_dihedrals == 0) {
     return;
   }
+
+  BondedErrorState& errors = shared_errors ? *shared_errors : errors_;
+  if (!shared_errors) errors.reset();
 
   const int grid_size = (number_of_dihedrals + BLOCK_SIZE - 1) / BLOCK_SIZE;
   gpu_compute_periodic_dihedrals<<<grid_size, BLOCK_SIZE>>>(
@@ -151,6 +119,8 @@ void PeriodicDihedral::compute(
     position_per_atom.data(),
     potential_per_atom.data(),
     force_per_atom.data(),
-    virial_per_atom.data());
+    virial_per_atom.data(),
+    errors.data());
   GPU_CHECK_KERNEL
+  if (!shared_errors) errors.check();
 }

@@ -17,6 +17,17 @@ static void test_valid_harmonic_bond_parameters()
   parameters.validate_or_throw(topology);
 }
 
+static void test_disabled_terms_and_endpoint_angles()
+{
+  Topology t; t.number_of_atoms=4;
+  t.bonds={{0,1,0}};t.angles={{0,1,2,0},{1,2,3,1}};t.dihedrals={{0,1,2,3,0}};
+  ForceFieldParameters p;
+  p.harmonic_bond_parameters={{1.2,0.0}};
+  p.harmonic_angle_parameters={{0.0,0.0},{3.14159265358979323846,2.0}};
+  p.periodic_dihedral_parameters={{0.0,3,0.4}};
+  p.validate_or_throw(t);
+}
+
 static void test_valid_harmonic_angle_parameters()
 {
   Topology topology;
@@ -137,6 +148,7 @@ static void test_clear()
 
 int main()
 {
+  test_disabled_terms_and_endpoint_angles();
   test_valid_harmonic_bond_parameters();
   test_valid_harmonic_angle_parameters();
   test_invalid_parameters_report_all_errors();

@@ -75,7 +75,7 @@ atom_i atom_j type
 U(r) = 1/2 * k_bond * (r - r0)^2
 ```
 
-`r0` 必须为有限正数，单位 Å；`k_bond` 必须为有限正数，单位 eV/Å²。详细的版本 1
+`r0` 必须为有限正数，单位 Å；`k_bond` 必须为有限非负数，单位 eV/Å²。零强度表示关闭此项。详细的版本 1
 说明仍见 [molecular_force_input_format_v1_zh.md](molecular_force_input_format_v1_zh.md)。
 
 ## 5. Harmonic angle
@@ -95,8 +95,8 @@ U(theta) = 1/2 * k_angle * (theta - theta0)^2
 
 | 参数 | 单位 | 约束 | 含义 |
 | --- | --- | --- | --- |
-| `theta0` | rad | 有限，`0 < theta0 <= π` | 平衡键角 |
-| `k_angle` | eV/rad² | 有限正数 | 键角力常数 |
+| `theta0` | rad | 有限，`0 <= theta0 <= π` | 平衡键角 |
+| `k_angle` | eV/rad² | 有限非负数 | 键角力常数，0 表示关闭此项 |
 
 输入其他软件的角度参数时必须先把 degree 转成 rad，并核对对方公式是否包含 `1/2`。
 
@@ -174,12 +174,22 @@ Topology interaction table -> consecutive MIC vectors -> bonded CUDA kernel
 以下几何没有良好定义的解析方向：
 
 - angle 任一臂长度为 0；
-- angle 精确为 0 或 π，导致 `sin(theta) = 0`；
+- angle 精确为 0 或 π，且平衡角不在同一端点；
 - dihedral 中心键长度为 0；
 - dihedral 任一相邻三原子共线，导致平面法向量长度为 0。
 
-当前 GPU kernel 对这些精确退化 interaction 不累加能量、力或 virial，以避免 NaN。它是数值保护，
-不是合理的物理模型；输入构型和积分步长必须避免到达这些状态。
+非零强度项遇到上述状态会抛出运行错误，报告相互作用种类和 0-based interaction 编号；非有限
+坐标、能量、力或 virial 也会报错。不能把异常计算后的部分输出用于继续积分。
+
+angle 使用单位向量叉积与 `atan2`，近共线但非零叉积时继续计算，不因 `acos` 舍入而静默丢项。
+共线且处于平衡端点的 angle 具有可定义的零梯度极限，返回零力；端点匹配容差约为 8 倍
+double machine epsilon 乘 π，以兼容既有 π 输入精度。
+
+dihedral 使用归一化相邻键的叉积平方作为退化判据，任一值 <= 1e-24 时报错。该阈值无量纲，
+不随长度单位改变。零强度项在计算几何前直接跳过。
+
+三个 kernel 共用错误缓冲区，每次 `MolecularForce::compute` 结束读回一次；独立调用某个计算器时
+在该调用结束检查。错误缓冲区复用，不为每个 interaction 单独同步。
 
 ## 8. 当前边界
 

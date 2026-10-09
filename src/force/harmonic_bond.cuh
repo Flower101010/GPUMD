@@ -16,6 +16,7 @@
 #include "model/box.cuh"
 #include "model/harmonic_bond_data.cuh"
 #include "utilities/gpu_vector.cuh"
+#include "bonded_error.cuh"
 
 class HarmonicBond
 {
@@ -28,5 +29,9 @@ public:
     const GPU_Vector<double>& position_per_atom,
     GPU_Vector<double>& potential_per_atom,
     GPU_Vector<double>& force_per_atom,
-    GPU_Vector<double>& virial_per_atom) const;
+    GPU_Vector<double>& virial_per_atom,
+    BondedErrorState* shared_errors = nullptr) const;
+
+private:
+  mutable BondedErrorState errors_;
 };

@@ -47,6 +47,7 @@ gpumd_add_unit_test(test_harmonic_angle test_harmonic_angle.cu)
 gpumd_add_unit_test(test_periodic_dihedral_data test_periodic_dihedral_data.cu)
 gpumd_add_unit_test(test_periodic_dihedral test_periodic_dihedral.cu)
 gpumd_add_unit_test(test_molecular_force test_molecular_force.cu)
+gpumd_add_unit_test(test_bonded_core test_bonded_core.cu)
 
 set(GPUMD_GPU_UNIT_TESTS
     unit.test_gpu_vector
@@ -56,7 +57,8 @@ set(GPUMD_GPU_UNIT_TESTS
     unit.test_harmonic_angle
     unit.test_periodic_dihedral_data
     unit.test_periodic_dihedral
-    unit.test_molecular_force)
+    unit.test_molecular_force
+    unit.test_bonded_core)
 set_tests_properties(${GPUMD_GPU_UNIT_TESTS} PROPERTIES
     LABELS "unit;gpu"
     RESOURCE_LOCK gpu
