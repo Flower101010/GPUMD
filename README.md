@@ -33,9 +33,11 @@ This software is distributed under the GNU General Public License (GPL) version 
 This branch adds fixed bond/angle/proper-dihedral terms, per-frame training topology,
 and complete residual-NEP model packages for CG simulations. See the
 [Chinese training and MD guide](developers/multibead_cg_guide_zh.md),
-[validated scope](developers/cg_stage_e/STATUS.md), and
-[runnable synthetic examples](developers/cg_stage_e/example/README.md).
-Real CG data and long-time physical validation remain pending.
+[calculation validation results](developers/cg_stage_f/STATUS.md), and
+[step-by-step build, training and MD example](examples/multibead_cg/README.md).
+The example includes training data and a script that trains, predicts, exports a
+complete model package and runs two different CG systems. Scientific model quality
+is separate from the software correctness checks.
 
 ## Tutorials
 * We provide a [Colab Tutorial](https://colab.research.google.com/drive/1QnXAveZgzwut4Mvldsw-r2I0EWIsj1KA?usp=sharing) to show the workflow of the construction of a NEP model and its application in large-scale atomistic simulations for PbTe system. This will run entirely on Google's cloud virtual machine.

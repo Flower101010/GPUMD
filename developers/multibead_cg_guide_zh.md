@@ -1,7 +1,11 @@
 # 多 bead CG：训练、模型交付与 MD 使用指南
 
-更新于 2026-10-09，适用于 `codex/multibead-cg-stage-b` 分支。
-阶段 A–E 已完成，当前为已进行小规模软件验收的开发实现。
+更新于 2026-10-10，适用于 `codex/multibead-cg-stage-b` 分支。
+主要功能已完成，阶段 F 已扩大计算正确性验收；科学模型效果不属于软件通过条件。
+
+**第一次使用请先读 [从编译到训练、预测和 MD 的入门例子](../examples/multibead_cg/README.md)。**
+仓库包含完整训练输入，运行无需 Python；一条命令可训练并用同一模型运行两种拓扑。
+本页进一步说明格式约定、部署和限制。
 
 目标是训练和运行 `U_total = U_bonded + U_NEP_residual`：训练帧可以具有不同 bead 数、
 分子数和连接关系，但共享 bead 类型与 bonded 系数。每次 MD 的拓扑固定。
@@ -14,11 +18,13 @@
 ```bash
 cmake -S . -B build-cg -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CUDA_ARCHITECTURES=native -DBUILD_TESTING=ON
-cmake --build build-cg --parallel 2 --target gpumd nep check
+cmake --build build-cg --parallel 2 --target gpumd nep
+cmake --build build-cg --parallel 2 --target check
 ```
 
 `native` 对应本机 GPU；集群可显式设置架构，例如 `70;80`。
-本地验收为 RTX 3060、CUDA 13.4.92、GCC 16.2.1、sm_86，19/19 CTest 通过。
+本地验收为 RTX 3060、CUDA 13.4.92、GCC 16.2.1、sm_86，22/22 CTest 通过
+（包含显式配置的 GROMACS double 三个外部对照；未安装时这些测试不会注册）。
 该编译器/CUDA 组合在本次本地构建使用了 `--allow-unsupported-compiler`；移植时优先
 选择 CUDA 支持的 host 编译器，不应将此开关当作其他环境已经兼容的证据。
 源码仍保留 Makefile，但本阶段没有对完整 make 构建单独验收。
@@ -146,7 +152,8 @@ run 1000
 [MD cg_model](../doc/gpumd/input_parameters/cg_model.rst) 和
 [MD molecular_force](../doc/gpumd/input_parameters/molecular_force.rst)。
 
-仓库提供两个可运行的合成体系，见 [example/README.md](cg_stage_e/example/README.md)。
+仓库提供完整训练到 MD 的 [入门例子](../examples/multibead_cg/README.md)，
+以及已经导出的 [历史验收模型包](cg_stage_e/example/README.md)。
 它们共享一套模型；4 bead 链含 dihedral，6 bead 体系含两个三 bead 片段。
 它们不是实际材料的 CG 力场。
 
@@ -160,16 +167,20 @@ run 1000
 | 短 NVE | 两个体系各 50 fs；时间步减半后能量偏差约降至四分之一 |
 | GPU 内存 | 两个完整包示例各 1000 步 memcheck，0 errors |
 | 普通 NEP | 不启用 bonded 的训练与 fresh train/test prediction smoke |
+| 独立大体系参考 | OpenMM E/F、独立应变导数 W；21 用例各 3 次，最大 8,192 bead |
+| 较大体系 NEP/MD | frozen residual 32/256/2,048 bead 预测与 MD 对齐 |
+| GROMACS | double 2026.3，三种 bonded 层级的 8 bead NVE 交叉对照 |
 
 训练坐标/盒与 total 预测/loss 仍含 float 路径。强 bonded 加小 residual 可能丢失小信号；
 阶段 D 的放大 1e7 用例最大力误差为 1.13261e-3 eV/angstrom，此问题尚未解决。
 同坐标/类型但不同拓扑，普通 NEP residual 无法仅靠连接表区分。
 
-当前只验收一张 GPU、两个合成帧；train/test 同帧不是泛化验证。
-真实 CG 数据、独立 holdout、长期动力学、NVT/NPT 分布、大体系/多 GPU 性能及新增
-GROMACS 对照尚未验收。未实现 improper、约束、刚体、virtual site、拓扑非键排除
+当前验收使用一张 GPU；软件测试中的 train/test 同帧不是泛化验证。
+真实 CG 模型效果、长期动力学、NVT/NPT 分布、多 GPU 和性能基准未由这些测试证明。
+未实现 improper、约束、刚体、virtual site、拓扑非键排除
 和 1–4 scaling；此实现不等同完整原子力场。
 
-详细结果与复现脚本见 [阶段 D](cg_stage_d/STATUS.md)、[阶段 E](cg_stage_e/STATUS.md)。
+详细结果与复现脚本见 [阶段 D](cg_stage_d/STATUS.md)、[阶段 E](cg_stage_e/STATUS.md)、
+[阶段 F](cg_stage_f/STATUS.md)。
 开发续接见 [交接文档](HANDOFF_20261009_CG_STAGE_E.md)。阶段 A/B/C 文档是当时状态
 快照；其中“尚未开放”的表述不能用于判断当前接口。

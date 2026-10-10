@@ -47,4 +47,5 @@ potential YOUR_NEP_MODEL.txt z # force to partition along the z direction (the c
 | gpumd_static           | Doing a static calculation using the `gpumd` executable.     |
 | gpumd_dynamic          | Doing a dynamic simulation using the `gpumd` executable.     |
 | gpumd_harmonic_trimer  | Testing a three-particle chain with harmonic bonds.          |
+| [multibead_cg](multibead_cg/README.md) | Build, train, predict and run fixed bonded + residual NEP for 4/6-bead systems (Chinese tutorial; supplied data). |
 | gpumd_mdi              | Minimal GPUMD-VASP MDI coupling test (Cu dimer).             |

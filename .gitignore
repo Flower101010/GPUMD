@@ -66,3 +66,6 @@ compile_commands.json
 /developers/cg_stage_f/gpu_tests.xml
 /developers/cg_stage_f/work/
 /developers/cg_stage_f/.venv/
+
+# Outputs of the user-facing CG training-to-MD example.
+/examples/multibead_cg/work/

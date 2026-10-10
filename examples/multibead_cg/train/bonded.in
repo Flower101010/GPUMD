@@ -1,0 +1,10 @@
+# All lengths are angstrom, energies eV, angles radians.
+gpumd_bonded_parameters 1
+harmonic_bond_parameters 2
+1.2 5.0
+1.4 3.0
+harmonic_angle_parameters 1
+1.9 2.0
+periodic_dihedral_parameters 2
+0.2 3 0.4
+0.07 1 -0.3

@@ -1,0 +1,19 @@
+{
+  "purpose": "synthetic file-format and workflow demonstration, not a material CG model",
+  "seed": 20261010,
+  "openmm_version": "8.6.1",
+  "numpy_version": "2.5.3",
+  "reference": "OpenMM native bonded forces, Reference CPU; virial from energy strain derivatives",
+  "hamiltonian": "total = supplied fixed bonded; target residual is zero",
+  "train_frames": 12,
+  "test_frames": 4,
+  "bead_counts": [
+    4,
+    6
+  ],
+  "sha256": {
+    "train/train.xyz": "6b459ecc62ce3e7d05bd58dab3f8a864009fb7977b8f40085295ef9e56e4b209",
+    "train/test.xyz": "115a3419caa4717fa05331de9088f8393c1616a5caaa8334c8b247cf5702379a",
+    "train/bonded.in": "e94c00436ecaaac080425f9e32e9e6d7407308d7fc8c6723fe3ab2f5d1938f29"
+  }
+}

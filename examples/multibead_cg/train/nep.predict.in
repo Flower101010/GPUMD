@@ -1,0 +1,12 @@
+# Same model dimensions and bonded parameters; evaluate a frozen nep.txt.
+type 2 C O
+cutoff 4 3
+n_max 1 1
+basis_size 1 1
+l_max 2 0 0
+neuron 4
+molecular_force bonded.in per_frame
+prediction 1
+batch 4
+stream_train 1
+nep_compile off

@@ -1,0 +1,17 @@
+# Small demonstration: fixed bonded baseline + residual NEP.
+type 2 C O
+cutoff 4 3
+n_max 1 1
+basis_size 1 1
+l_max 2 0 0
+neuron 4
+molecular_force bonded.in per_frame
+lambda_e 1
+lambda_f 1
+lambda_v 0.1
+batch 4
+stream_train 1
+generation 40
+population 10
+output_interval 10
+nep_compile off

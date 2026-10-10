@@ -1,0 +1,7 @@
+cg_model ../package/cg_model.json topology.in
+time_step 0.05
+ensemble nve
+dump_thermo 20
+dump_xyz 20 movie.xyz force potential virial precision double
+dump_restart 1000
+run 1000
