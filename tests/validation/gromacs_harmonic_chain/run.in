@@ -5,5 +5,5 @@ time_step 0.05
 ensemble nve
 
 dump_thermo 20
-dump_position 20 precision double
+dump_xyz 20 movie.xyz precision double
 run 2000

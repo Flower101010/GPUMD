@@ -27,7 +27,8 @@ cmake --build build --target gpumd -j2
 ctest --test-dir build -R validation.gromacs_harmonic_chain --output-on-failure
 ```
 
-CMake 会依次查找 `gmx`、`gmx_mpi`，并额外检查 `$HOME/gromacs/bin`。也可以显式指定：
+CMake 会依次查找 `gmx_d`、`gmx_mpi_d`、`gmx`、`gmx_mpi`，并额外检查
+`$HOME/gromacs/bin`。独立参考推荐双精度版本。也可以显式指定：
 
 ```bash
 cmake -S . -B build \

@@ -117,7 +117,7 @@ endif()
 # because non-interactive shells do not necessarily source GMXRC or shell aliases.
 find_package(Python3 QUIET COMPONENTS Interpreter)
 find_program(GPUMD_GROMACS_EXECUTABLE
-    NAMES gmx gmx_mpi
+    NAMES gmx_d gmx_mpi_d gmx gmx_mpi
     HINTS "$ENV{HOME}/gromacs/bin"
     DOC "GROMACS executable used for independent molecular-force validation")
 if(UNIX AND Python3_Interpreter_FOUND AND GPUMD_GROMACS_EXECUTABLE)

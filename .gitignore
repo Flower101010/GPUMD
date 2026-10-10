@@ -59,3 +59,10 @@ compile_commands.json
 /developers/cg_stage_e/example/frame*/gpumd.log
 /developers/cg_stage_e/example/frame*/restart.xyz
 /developers/cg_stage_e/example/frame*/result.xyz
+
+# Regenerated stage F reports and temporary independent-reference cases.
+/developers/cg_stage_f/*baseline.json
+/developers/cg_stage_f/*.log
+/developers/cg_stage_f/gpu_tests.xml
+/developers/cg_stage_f/work/
+/developers/cg_stage_f/.venv/
