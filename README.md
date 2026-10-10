@@ -17,13 +17,15 @@ This software is distributed under the GNU General Public License (GPL) version 
 ## Prerequisites
 
 * You need to have a GPU card with compute capability no less than 3.5 and a `CUDA` toolkit no older than `CUDA` 9.0.
-* Works for both Linux (with GCC) and Windows (with MSVC) operating systems. 
+* Works for both Linux (with GCC) and Windows (with MSVC) operating systems.
 
 ## Compile GPUMD
+
 * Go to the `src` directory and type `make`.
-* When the compilation finishes, two executables, `gpumd` and `nep`, will be generated in the `src` directory. 
+* When the compilation finishes, two executables, `gpumd` and `nep`, will be generated in the `src` directory.
 
 ## Run GPUMD
+
 * Go to the directory of an example in the [examples directory](examples) and type one of the following commands:
   * `path/to/gpumd`
   * `path/to/nep`
@@ -31,78 +33,85 @@ This software is distributed under the GNU General Public License (GPL) version 
 ## Multi-bead CG development
 
 This branch adds fixed bond/angle/proper-dihedral terms, per-frame training topology,
-and complete residual-NEP model packages for CG simulations. See the
+and complete residual-NEP model packages for CG simulations.
+
+See the
 [Chinese training and MD guide](developers/multibead_cg_guide_zh.md),
 [calculation validation results](developers/cg_stage_f/STATUS.md), and
 [step-by-step build, training and MD example](examples/multibead_cg/README.md).
+
 The example includes training data and a script that trains, predicts, exports a
 complete model package and runs two different CG systems. Scientific model quality
 is separate from the software correctness checks.
 
 ## Tutorials
+
 * We provide a [Colab Tutorial](https://colab.research.google.com/drive/1QnXAveZgzwut4Mvldsw-r2I0EWIsj1KA?usp=sharing) to show the workflow of the construction of a NEP model and its application in large-scale atomistic simulations for PbTe system. This will run entirely on Google's cloud virtual machine.
 * We also provide many tutorials and examples in the [GPUMD-Tutorials repository](https://github.com/brucefan1983/GPUMD-Tutorials).
 
 ## Manual
+
 * For users and developers:
-  * Latest released version: https://gpumd.org/
-  * Development version: https://gpumd.org/dev/
+  * Latest released version: <https://gpumd.org/>
+  * Development version: <https://gpumd.org/dev/>
 * For developers only:
   * [The developer guide](developers)
   
 ## Discussion
-* Github discussion: https://github.com/brucefan1983/GPUMD/discussions
-* matsci.org discussion: https://matsci.org/c/gpumd/68
+
+* Github discussion: <https://github.com/brucefan1983/GPUMD/discussions>
+* matsci.org discussion: <https://matsci.org/c/gpumd/68>
 
 ## Tools
 
 Various tools for `GPUMD` and `NEP` can be found in [tools](./tools/readme.md).
 
 ## CPU version of NEP
+
 There is a standalone C++ implementation of the neuroevolution potential (NEP) in the [NEP_CPU repository](https://github.com/brucefan1983/NEP_CPU), which serves as the engine for many Python packages and provides an interface to the [LAMMPS package](https://github.com/lammps/lammps).
 
 ## Related packages
-* A GPU-native interface between GPUMD and PySAGES for enhanced-sampling molecular dynamics on machine-learning potentials: https://github.com/JaafarMehrez/GPUMD-PySAGES
+
+* A GPU-native interface between GPUMD and PySAGES for enhanced-sampling molecular dynamics on machine-learning potentials: <https://github.com/JaafarMehrez/GPUMD-PySAGES>
 
 ## Citations
 
-| Reference             | cite for what?                    |
+| Reference | cite for what? |
 | --------------------- | --------------------------------- |
-| [Xu2025]                   | for any work that used `GPUMD`    |
-| [Fan2017]                   | for historical citation   |
-| [Fan2015]                 | virial and heat current formulation   |
-| [Fan2017]                   | in-out decomposition and related spectral decomposition  |
-| [Fan2019]                 | HNEMD and related spectral decomposition   |
-| [Gabourie2021]                 | EMD and HNEMD based modal analyses   |
-| [Brorsson2021]                   | force constant potential (FCP) |
-| [Fan2021]                   | neuroevolution potential (NEP) and specifically NEP1 |
-| [Fan2022JPCM]                   | NEP2 |
-| [Fan2022JCP]                   | NEP3 |
-| [Liu2023]                  | NEP + ZBL |
-| [Ying2024]                  | NEP + D3 dispersion correction |
-| [Shi2023]                  | MSST integrator for shock wave simulation |
-| [Fan2024]                  | linear-scaling quantum transport |
-| [Song2024]                  | NEP4 or UNEP-v1 (General-purpose machine-learned potential for 16 elemental metals and their alloys)|
-| [Xu2024]                  | TNEP (tensorial NEP models of dipole and polarizability) |
-| [Song2026]                  | MCMD (hybrid Monte Carlo and molecular dynamics simulations) |
-| [Ying2025]                  | PIMD/TRPMD (path-integral molecular dynamics/thermostatted ring-polymer molecular dynamics) |
-| [Pan2024]                  | NEMD and NPHug shock methods |
-| [Jiang2025]                  | SW + ILP (hybrid Stillinger-Weber potential with anisotropic interlayer potential) |
-| [Liang2025]                  | NEP89 (Universal neuroevolution potential for inorganic and organic materials across 89 elements) |
-| [Huang2026]                  | GNEP: An alternative training scheme for NEP models |
-| [Fan2026a]                  | qNEP: NEP with dynamic charge (q) |
-| [Li2025]                    | CGNEP: Coarse-grained machine learning potential for mesoscale multilayered graphene (https://github.com/lmqnuaa/CGNEP) |
-| [Fan2026b]                  | NEP-CG and NEP-AACG: NEP with coarse graining |
-| [Bu2026]                  | NEP + ILP (hybrid NEP with anisotropic interlayer potential) |
-
+| [Xu2025] | for any work that used `GPUMD` |
+| [Fan2017] | for historical citation |
+| [Fan2015] | virial and heat current formulation |
+| [Fan2017] | in-out decomposition and related spectral decomposition |
+| [Fan2019] | HNEMD and related spectral decomposition |
+| [Gabourie2021] | EMD and HNEMD based modal analyses |
+| [Brorsson2021] | force constant potential (FCP) |
+| [Fan2021] | neuroevolution potential (NEP) and specifically NEP1 |
+| [Fan2022JPCM] | NEP2 |
+| [Fan2022JCP] | NEP3 |
+| [Liu2023] | NEP + ZBL |
+| [Ying2024] | NEP + D3 dispersion correction |
+| [Shi2023] | MSST integrator for shock wave simulation |
+| [Fan2024] | linear-scaling quantum transport |
+| [Song2024] | NEP4 or UNEP-v1 (General-purpose machine-learned potential for 16 elemental metals and their alloys) |
+| [Xu2024] | TNEP (tensorial NEP models of dipole and polarizability) |
+| [Song2026] | MCMD (hybrid Monte Carlo and molecular dynamics simulations) |
+| [Ying2025] | PIMD/TRPMD (path-integral molecular dynamics/thermostatted ring-polymer molecular dynamics) |
+| [Pan2024] | NEMD and NPHug shock methods |
+| [Jiang2025] | SW + ILP (hybrid Stillinger-Weber potential with anisotropic interlayer potential) |
+| [Liang2025] | NEP89 (Universal neuroevolution potential for inorganic and organic materials across 89 elements) |
+| [Huang2026] | GNEP: An alternative training scheme for NEP models |
+| [Fan2026a] | qNEP: NEP with dynamic charge (q) |
+| [Li2025] | CGNEP: Coarse-grained machine learning potential for mesoscale multilayered graphene (<https://github.com/lmqnuaa/CGNEP>) |
+| [Fan2026b] | NEP-CG and NEP-AACG: NEP with coarse graining |
+| [Bu2026] | NEP + ILP (hybrid NEP with anisotropic interlayer potential) |
 
 ## References
 
 [Xu2025] Ke Xu, Hekai Bu, Shuning Pan, Eric Lindgren, Yongchao Wu, Yong Wang, Jiahui Liu, Keke Song, Bin Xu, Yifan Li, Tobias Hainer, Lucas Svensson, Julia Wiktor, Rui Zhao, Hongfu Huang, Cheng Qian, Shuo Zhang, Zezhu Zeng, Bohan Zhang, Benrui Tang, Yang Xiao, Zihan Yan, Jiuyang Shi, Zhixin Liang, Junjie Wang, Ting Liang, Shuo Cao, Yanzhou Wang, Penghua Ying, Nan Xu, Chengbing Chen, Yuwen Zhang, Zherui Chen, Xin Wu, Wenwu Jiang, Esme Berger, Yanlong Li, Shunda Chen, Alexander J. Gabourie, Haikuan Dong, Shiyun Xiong, Ning Wei, Yue Chen, Jianbin Xu, Feng Ding, Zhimei Sun, Tapio Ala-Nissila, Ari Harju, Jincheng Zheng, Pengfei Guan, Paul Erhart, Jian Sun, Wengen Ouyang, Yanjing Su, Zheyong Fan, [GPUMD 4.0: A high-performance molecular dynamics package for versatile materials simulations with machine-learned potentials]( https://doi.org/10.1002/mgea.70028), MGE Advances **3**, e70028 (2025).
 
-[Fan2017] Zheyong Fan, Wei Chen, Ville Vierimaa, and Ari Harju. [Efficient molecular dynamics simulations with many-body potentials on graphics processing units](https://doi.org/10.1016/j.cpc.2017.05.003), Computer Physics Communications **218**, 10 (2017). 
+[Fan2017] Zheyong Fan, Wei Chen, Ville Vierimaa, and Ari Harju. [Efficient molecular dynamics simulations with many-body potentials on graphics processing units](https://doi.org/10.1016/j.cpc.2017.05.003), Computer Physics Communications **218**, 10 (2017).
 
-[Fan2015] Zheyong Fan, Luiz Felipe C. Pereira, Hui-Qiong Wang, Jin-Cheng Zheng, Davide Donadio, and Ari Harju. [Force and heat current formulas for many-body potentials in molecular dynamics simulations with applications to thermal conductivity calculations](https://doi.org/10.1103/PhysRevB.92.094301), Phys. Rev. B **92**, 094301, (2015). 
+[Fan2015] Zheyong Fan, Luiz Felipe C. Pereira, Hui-Qiong Wang, Jin-Cheng Zheng, Davide Donadio, and Ari Harju. [Force and heat current formulas for many-body potentials in molecular dynamics simulations with applications to thermal conductivity calculations](https://doi.org/10.1103/PhysRevB.92.094301), Phys. Rev. B **92**, 094301, (2015).
 
 [Gabourie2021] Alexander J. Gabourie, Zheyong Fan, Tapio Ala-Nissila, Eric Pop,
 [Spectral Decomposition of Thermal Conductivity: Comparing Velocity Decomposition Methods in Homogeneous Molecular Dynamics Simulations](https://doi.org/10.1103/PhysRevB.103.205421),
@@ -110,9 +119,9 @@ Phys. Rev. B **103**, 205421 (2021).
 
 [Fan2017] Zheyong Fan, Luiz Felipe C. Pereira, Petri Hirvonen, Mikko M. Ervasti, Ken R. Elder, Davide Donadio, Tapio Ala-Nissila, and Ari Harju. [Thermal conductivity decomposition in two-dimensional materials: Application to graphene](https://doi.org/10.1103/PhysRevB.95.144309), Phys. Rev. B **95**, 144309, (2017).  
 
-[Fan2019] Zheyong Fan, Haikuan Dong, Ari Harju, and Tapio Ala-Nissila, [Homogeneous nonequilibrium molecular dynamics method for heat transport and spectral decomposition with many-body potentials](https://doi.org/10.1103/PhysRevB.99.064308), Phys. Rev. B **99**, 064308 (2019). 
+[Fan2019] Zheyong Fan, Haikuan Dong, Ari Harju, and Tapio Ala-Nissila, [Homogeneous nonequilibrium molecular dynamics method for heat transport and spectral decomposition with many-body potentials](https://doi.org/10.1103/PhysRevB.99.064308), Phys. Rev. B **99**, 064308 (2019).
 
-[Brorsson2021] Joakim Brorsson, Arsalan Hashemi, Zheyong Fan, Erik Fransson, Fredrik Eriksson, Tapio Ala-Nissila, Arkady V. Krasheninnikov, Hannu-Pekka Komsa, Paul Erhart, [Efficient calculation of the lattice thermal conductivity by atomistic simulations with ab-initio accuracy]( https://doi.org/10.1002/adts.202100217), Advanced Theory and Simulations **4**, 2100217 (2021). 
+[Brorsson2021] Joakim Brorsson, Arsalan Hashemi, Zheyong Fan, Erik Fransson, Fredrik Eriksson, Tapio Ala-Nissila, Arkady V. Krasheninnikov, Hannu-Pekka Komsa, Paul Erhart, [Efficient calculation of the lattice thermal conductivity by atomistic simulations with ab-initio accuracy]( https://doi.org/10.1002/adts.202100217), Advanced Theory and Simulations **4**, 2100217 (2021).
 
 [Fan2021] Zheyong Fan, Zezhu Zeng, Cunzhi Zhang, Yanzhou Wang, Keke Song, Haikuan Dong, Yue Chen, and Tapio Ala-Nissila, [Neuroevolution machine learning potentials: Combining high accuracy and low cost in atomistic simulations and application to heat transport](https://doi.org/10.1103/PhysRevB.104.104309), Phys. Rev. B. **104**, 104309 (2021).
 
