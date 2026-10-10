@@ -1,0 +1,1354 @@
+{
+  "date": "2026-10-10",
+  "scope": "calculation correctness only, no scientific NEP fit-quality criterion",
+  "base_commit": "53c42a62d208050e69952e831c57c3ec04619426",
+  "environment": {
+    "python": "Python 3.14.8",
+    "uv": "uv 0.12.17 (x86_64-unknown-linux-gnu)",
+    "gromacs_version": "               :-) GROMACS - gmx_d, 2026.3 (double precision) (-:\n\nExecutable:   /home/flos/opt/gromacs-2026.3-double/bin/gmx_d\nData prefix:  /home/flos/opt/gromacs-2026.3-double\nWorking dir:  /home/flos/Documents/Project/GPUMDs/GPUMD\nCommand line:\n  gmx_d --version\n\nGROMACS version:     2026.3\nPrecision:           double\nMemory model:        64 bit\nMPI library:         thread_mpi\nMPI version:         built in\nOpenMP support:      enabled (GMX_OPENMP_MAX_THREADS = 128)\nGPU support:         disabled\nSIMD instructions:   AVX2_256\nCPU FFT library:     fftw-3.3.10-sse2-avx-avx2-avx2_128\nGPU FFT library:     none\nMulti-GPU FFT:       none\nRDTSCP:              enabled\nTNG support:         enabled\nHwloc support:       disabled\nTracing support:     disabled\nColvars support:     enabled (version 2025-10-13)\nCP2K support:        disabled\nTorch support:       disabled\nPlumed support:      enabled\nC compiler:          /usr/bin/cc GNU 16.2.1\nC compiler flags:    -fexcess-precision=fast -funroll-all-loops -mavx2 -mfma -Wno-missing-field-initializers -O3 -DNDEBUG\nC++ compiler:        /usr/bin/c++ GNU 16.2.1\nC++ compiler flags:  -fexcess-precision=fast -funroll-all-loops -mavx2 -mfma -Wno-missing-field-initializers -Wno-stringop-truncation -Wno-cast-function-type-strict SHELL:-fopenmp -O3 -DNDEBUG\nBLAS library:        Internal\nLAPACK library:      Internal\n\n"
+  },
+  "ctest": {
+    "passed": 22,
+    "skipped": 0,
+    "tests": [
+      {
+        "name": "unit.test_topology",
+        "output": ""
+      },
+      {
+        "name": "unit.test_force_field_parameters",
+        "output": ""
+      },
+      {
+        "name": "unit.test_read_molecular_force",
+        "output": ""
+      },
+      {
+        "name": "unit.test_cg_model",
+        "output": "PASS CG package, checksums and split topology\n"
+      },
+      {
+        "name": "unit.test_gpu_vector",
+        "output": "PASS: GPU_Vector runtime tests.\n"
+      },
+      {
+        "name": "unit.test_bonded_geometry",
+        "output": ""
+      },
+      {
+        "name": "unit.test_harmonic_bond_data",
+        "output": "PASS: HarmonicBondData GPU upload tests.\n"
+      },
+      {
+        "name": "unit.test_harmonic_bond",
+        "output": "PASS: HarmonicBond energy, force, virial, PBC, and finite-difference tests.\n"
+      },
+      {
+        "name": "unit.test_harmonic_angle_data",
+        "output": "PASS: HarmonicAngleData GPU upload tests.\n"
+      },
+      {
+        "name": "unit.test_harmonic_angle",
+        "output": "PASS: HarmonicAngle energy, force, virial, PBC, and finite-difference tests.\n"
+      },
+      {
+        "name": "unit.test_periodic_dihedral_data",
+        "output": "PASS: PeriodicDihedralData GPU upload tests.\n"
+      },
+      {
+        "name": "unit.test_periodic_dihedral",
+        "output": "PASS: PeriodicDihedral energy, force, PBC, and finite-difference tests.\n"
+      },
+      {
+        "name": "unit.test_molecular_force",
+        "output": "PASS: MolecularForce topology-to-kernel pipeline tests.\n"
+      },
+      {
+        "name": "unit.test_bonded_core",
+        "output": "PASS: bonded E/F/W, triclinic PBC, invariances, endpoints and error reporting.\n"
+      },
+      {
+        "name": "unit.test_bonded_dataset",
+        "output": "\n---------------------------------------------------------------\nStarted reading nep.in.\n---------------------------------------------------------------\n\nInput or default parameters:\n    (default) model_type = potential.\n    (default) calculation mode = train.\n    (default) use NEP version 4.\n    (input)   number of atom types = 2.\n        type 0 (C with Z = 6) has cutoffs (4 A, 3 A).\n        type 1 (O with Z = 8) has cutoffs (4 A, 3 A).\n    (default) will not add the ZBL potential.\n    (default) n_max_radial = 6.\n    (default) n_max_angular = 6.\n    (default) basis_size_radial = 6.\n    (default) basis_size_angular = 6.\n    (default) l_max_3body = 4.\n    (default) has_q_222 = 1.\n    (default) has_q_1111 = 0.\n    (default) has_q_112 = 0.\n    (default) has_q_123 = 0.\n    (default) has_q_233 = 0.\n    (default) has_q_134 = 0.\n    (default) number of neurons = 30.\n    (default) lambda_1 = 0.0389423.\n    (default) lambda_2 = 0.0389423.\n    (default) lambda_e = 1.\n    (default) lambda_f = 1.\n    (default) lambda_v =...\n[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]\n"
+      },
+      {
+        "name": "unit.test_bonded_dataset_host",
+        "output": "\n---------------------------------------------------------------\nStarted reading nep.in.\n---------------------------------------------------------------\n\nInput or default parameters:\n    (default) model_type = potential.\n    (default) calculation mode = train.\n    (default) use NEP version 4.\n    (input)   number of atom types = 2.\n        type 0 (C with Z = 6) has cutoffs (4 A, 3 A).\n        type 1 (O with Z = 8) has cutoffs (4 A, 3 A).\n    (default) will not add the ZBL potential.\n    (default) n_max_radial = 6.\n    (default) n_max_angular = 6.\n    (default) basis_size_radial = 6.\n    (default) basis_size_angular = 6.\n    (default) l_max_3body = 4.\n    (default) has_q_222 = 1.\n    (default) has_q_1111 = 0.\n    (default) has_q_112 = 0.\n    (default) has_q_123 = 0.\n    (default) has_q_233 = 0.\n    (default) has_q_134 = 0.\n    (default) number of neurons = 30.\n    (default) lambda_1 = 0.0389423.\n    (default) lambda_2 = 0.0389423.\n    (default) lambda_e = 1.\n    (default) lambda_f = 1.\n    (default) lambda_v =...\n[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]\n"
+      },
+      {
+        "name": "unit.test_bonded_nep",
+        "output": "\n---------------------------------------------------------------\nStarted reading nep.in.\n---------------------------------------------------------------\n\nInput or default parameters:\n    (default) model_type = potential.\n    (default) calculation mode = train.\n    (default) use NEP version 4.\n    (input)   number of atom types = 2.\n        type 0 (C with Z = 6) has cutoffs (4 A, 3 A).\n        type 1 (O with Z = 8) has cutoffs (4 A, 3 A).\n    (default) will not add the ZBL potential.\n    (input)   n_max_radial = 1.\n    (input)   n_max_angular = 1.\n    (input)   basis_size_radial = 1.\n    (input)   basis_size_angular = 1.\n    (input)   l_max_3body = 2.\n    (input)   has_q_222 = 0.\n    (input)   has_q_1111 = 0.\n    (input)   has_q_112 = 0.\n    (input)   has_q_123 = 0.\n    (input)   has_q_233 = 0.\n    (input)   has_q_134 = 0.\n    (input)   number of neurons = 4.\n    (default) lambda_1 = 0.00696419.\n    (default) lambda_2 = 0.00696419.\n    (default) lambda_e = 1.\n    (default) lambda_f = 1.\n    (default) lambda_v ...\n[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]\n"
+      },
+      {
+        "name": "unit.test_bonded_nep_compiled",
+        "output": "\n---------------------------------------------------------------\nStarted reading nep.in.\n---------------------------------------------------------------\n\nInput or default parameters:\n    (default) model_type = potential.\n    (default) calculation mode = train.\n    (default) use NEP version 4.\n    (input)   number of atom types = 2.\n        type 0 (C with Z = 6) has cutoffs (4 A, 3 A).\n        type 1 (O with Z = 8) has cutoffs (4 A, 3 A).\n    (default) will not add the ZBL potential.\n    (input)   n_max_radial = 1.\n    (input)   n_max_angular = 1.\n    (input)   basis_size_radial = 1.\n    (input)   basis_size_angular = 1.\n    (input)   l_max_3body = 2.\n    (input)   has_q_222 = 0.\n    (input)   has_q_1111 = 0.\n    (input)   has_q_112 = 0.\n    (input)   has_q_123 = 0.\n    (input)   has_q_233 = 0.\n    (input)   has_q_134 = 0.\n    (input)   number of neurons = 4.\n    (default) lambda_1 = 0.00696419.\n    (default) lambda_2 = 0.00696419.\n    (default) lambda_e = 1.\n    (default) lambda_f = 1.\n    (default) lambda_v ...\n[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]\n"
+      },
+      {
+        "name": "integration.molecular_force_run_in",
+        "output": "PASS: molecular_force was loaded from run.in.\nPASS: version-2 bond, angle, and dihedral input produced 1.3121444959e+00 eV potential energy.\n"
+      },
+      {
+        "name": "validation.gromacs_harmonic_chain",
+        "output": "coordinate RMSD (A): 1.30088517e-04\nbond-length RMSD (A): 1.19055029e-04\nall-pair-distance RMSD (A): 2.84648705e-04\nradius-of-gyration RMSD (A): 1.76600164e-04\npotential-energy RMSD (eV): 6.15272011e-04\ntotal-energy RMSD (eV): 9.06823046e-07\nFinal bond lengths (A):\n  1-2: GPUMD=1.47195309, GROMACS=1.47209599\n  2-3: GPUMD=1.57553485, GROMACS=1.57541599\n  3-4: GPUMD=1.62454932, GROMACS=1.62450323\n  4-5: GPUMD=1.83151293, GROMACS=1.83134915\n  5-6: GPUMD=1.62503168, GROMACS=1.62491035\n  6-7: GPUMD=1.53133985, GROMACS=1.53135619\n  7-8: GPUMD=1.50143569, GROMACS=1.50152613\nPASS: GPUMD and GROMACS gromacs_harmonic_chain NVE trajectories agree.\n"
+      },
+      {
+        "name": "validation.gromacs_harmonic_angle_chain",
+        "output": "coordinate RMSD (A): 1.80796117e-04\nbond-length RMSD (A): 1.79474103e-04\nall-pair-distance RMSD (A): 4.20506045e-04\nradius-of-gyration RMSD (A): 2.67045917e-04\npotential-energy RMSD (eV): 1.42367681e-03\ntotal-energy RMSD (eV): 2.50369680e-06\nangle RMSD (rad): 2.74071566e-04\nFinal bond lengths (A):\n  1-2: GPUMD=1.44466835, GROMACS=1.44463551\n  2-3: GPUMD=1.47460588, GROMACS=1.47440733\n  3-4: GPUMD=1.55249817, GROMACS=1.55222297\n  4-5: GPUMD=1.80232705, GROMACS=1.80217079\n  5-6: GPUMD=1.56976689, GROMACS=1.56948712\n  6-7: GPUMD=1.47444199, GROMACS=1.47429694\n  7-8: GPUMD=1.47409253, GROMACS=1.47401062\nPASS: GPUMD and GROMACS gromacs_harmonic_angle_chain NVE trajectories agree.\n"
+      },
+      {
+        "name": "validation.gromacs_full_bonded_chain",
+        "output": "coordinate RMSD (A): 1.91316620e-04\nbond-length RMSD (A): 1.94094038e-04\nall-pair-distance RMSD (A): 4.27695754e-04\nradius-of-gyration RMSD (A): 2.71920582e-04\npotential-energy RMSD (eV): 1.63521729e-03\ntotal-energy RMSD (eV): 4.17666814e-06\nangle RMSD (rad): 2.97508241e-04\nsigned-dihedral RMSD (rad): 2.37330435e-04\nFinal bond lengths (A):\n  1-2: GPUMD=1.41313960, GROMACS=1.41295278\n  2-3: GPUMD=1.47250336, GROMACS=1.47234478\n  3-4: GPUMD=1.57032827, GROMACS=1.57006737\n  4-5: GPUMD=1.78261201, GROMACS=1.78244420\n  5-6: GPUMD=1.53069482, GROMACS=1.53047919\n  6-7: GPUMD=1.42984279, GROMACS=1.42963887\n  7-8: GPUMD=1.45092079, GROMACS=1.45085031\nPASS: GPUMD and GROMACS gromacs_full_bonded_chain NVE trajectories agree.\n"
+      }
+    ]
+  },
+  "independent": {
+    "oracle": "OpenMM native bonded forces, Reference CPU platform",
+    "openmm_version": "8.6.1",
+    "numpy_version": "2.5.3",
+    "gpumd_sha256": "71c2cf3833c53ec7c507f5fef629f3d12e402f1a9beb66b4112e66d4e7a63c8d",
+    "cases": [
+      {
+        "name": "isolated_bond",
+        "beads": 8,
+        "interactions": [
+          7,
+          0,
+          0
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 1.6653345369377348e-16,
+            "tolerance_ratio": 1.4838756904486632e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 7.521760991835436e-15,
+            "tolerance_ratio": 6.068173597126875e-07,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 2.514437269507397e-11,
+            "tolerance_ratio": 0.00011193887945120304,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 5.2735593669694936e-11,
+        "process_wall_seconds": [
+          0.2793268480018014,
+          0.26142486999742687,
+          0.25790034100646153
+        ]
+      },
+      {
+        "name": "isolated_angle",
+        "beads": 8,
+        "interactions": [
+          7,
+          6,
+          0
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 1.6653345369377348e-16,
+            "tolerance_ratio": 1.3658768646428044e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 7.216449660063518e-15,
+            "tolerance_ratio": 4.71714783302875e-07,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 4.7353815313400105e-11,
+            "tolerance_ratio": 0.00019333804861454946,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 8.465450562766819e-11,
+        "process_wall_seconds": [
+          0.2744920229888521,
+          0.21855078100634273,
+          0.2110967909975443
+        ]
+      },
+      {
+        "name": "isolated_dihedral",
+        "beads": 8,
+        "interactions": [
+          0,
+          0,
+          6
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 4.163336342344337e-17,
+            "tolerance_ratio": 3.704865624140591e-08,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 2.886579864025407e-15,
+            "tolerance_ratio": 2.1230919684150785e-07,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 2.0231767650091825e-11,
+            "tolerance_ratio": 9.803678780185874e-05,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 2.3592239273284576e-11,
+        "process_wall_seconds": [
+          0.25808202200278174,
+          0.2454439740104135,
+          0.26524139899993315
+        ]
+      },
+      {
+        "name": "isolated_full",
+        "beads": 8,
+        "interactions": [
+          7,
+          6,
+          6
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 1.1102230246251565e-16,
+            "tolerance_ratio": 8.266798273945155e-08,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 8.18789480661053e-15,
+            "tolerance_ratio": 6.647408427069604e-07,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 3.5382585750198814e-11,
+            "tolerance_ratio": 0.00014658172284224497,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 6.938893903907228e-11,
+        "process_wall_seconds": [
+          0.2591276500024833,
+          0.25996251300966833,
+          0.26014228200074285
+        ]
+      },
+      {
+        "name": "n32_orthogonal",
+        "beads": 32,
+        "interactions": [
+          32,
+          54,
+          20
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 6.661338147750939e-16,
+            "tolerance_ratio": 3.5007593974593354e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 8.482103908136196e-14,
+            "tolerance_ratio": 2.464317062037455e-06,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 1.3441081581078151e-10,
+            "tolerance_ratio": 0.000362685855779367,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 1.3322676295501878e-10,
+        "process_wall_seconds": [
+          0.252269504009746,
+          0.2542645859939512,
+          0.25825592399633024
+        ]
+      },
+      {
+        "name": "n32_skew_crossing",
+        "beads": 32,
+        "interactions": [
+          32,
+          54,
+          20
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 5.551115123125783e-16,
+            "tolerance_ratio": 2.9172994978827846e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 2.2293278334473143e-13,
+            "tolerance_ratio": 6.904489094894284e-06,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 2.3858837128187815e-10,
+            "tolerance_ratio": 0.0008734297062396638,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 1.4432899320127035e-10,
+        "process_wall_seconds": [
+          0.25507577299140394,
+          0.2586065300129121,
+          0.26224557199748233
+        ]
+      },
+      {
+        "name": "n256_orthogonal",
+        "beads": 256,
+        "interactions": [
+          256,
+          432,
+          160
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 0.0,
+            "tolerance_ratio": 0.0,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 1.0835776720341528e-13,
+            "tolerance_ratio": 4.239836310318096e-06,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 6.597489221604746e-11,
+            "tolerance_ratio": 0.00024201706504385802,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 8.881784197001252e-16,
+        "strain_convergence_per_bead": 1.1102230246251565e-10,
+        "process_wall_seconds": [
+          0.26389651000499725,
+          0.2614852249971591,
+          0.25836526599596255
+        ]
+      },
+      {
+        "name": "n256_skew_crossing",
+        "beads": 256,
+        "interactions": [
+          256,
+          432,
+          160
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 1.4432899320127035e-15,
+            "tolerance_ratio": 7.617281218116431e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 2.1538326677728037e-13,
+            "tolerance_ratio": 1.0142747673262585e-05,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 1.3386175501395314e-10,
+            "tolerance_ratio": 0.0005243132161417916,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 1.7763568394002505e-15,
+        "strain_convergence_per_bead": 1.27675647831893e-10,
+        "process_wall_seconds": [
+          0.2463072579994332,
+          0.25859463898814283,
+          0.2620211799949175
+        ]
+      },
+      {
+        "name": "n2048_orthogonal",
+        "beads": 2048,
+        "interactions": [
+          2048,
+          3456,
+          1280
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 1.4432899320127035e-15,
+            "tolerance_ratio": 7.614183477200793e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 1.376676550535194e-13,
+            "tolerance_ratio": 7.88960665660582e-06,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 1.1199208227452573e-10,
+            "tolerance_ratio": 0.000469179816721031,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 2.2737367544323206e-13,
+        "strain_convergence_per_bead": 1.6653345369377348e-10,
+        "process_wall_seconds": [
+          0.2791026720078662,
+          0.28403079899726436,
+          0.27236491000803653
+        ]
+      },
+      {
+        "name": "n2048_skew_crossing",
+        "beads": 2048,
+        "interactions": [
+          2048,
+          3456,
+          1280
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 2.220446049250313e-16,
+            "tolerance_ratio": 1.1714128426462769e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 7.685518887967646e-13,
+            "tolerance_ratio": 5.438354127067233e-05,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 2.2894497408998404e-10,
+            "tolerance_ratio": 0.0010254977063454602,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 7.105427357601002e-15,
+        "strain_convergence_per_bead": 2.7755575615628914e-10,
+        "process_wall_seconds": [
+          0.27315549600461964,
+          0.2945861369953491,
+          0.2870229719992494
+        ]
+      },
+      {
+        "name": "n8192_orthogonal",
+        "beads": 8192,
+        "interactions": [
+          8192,
+          13824,
+          5120
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 5.551115123125783e-16,
+            "tolerance_ratio": 2.9260157260017933e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 8.003597784522753e-13,
+            "tolerance_ratio": 4.3222024472714024e-05,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 4.5231651757404734e-10,
+            "tolerance_ratio": 0.0017717454809926874,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 4.547473508864641e-13,
+        "strain_convergence_per_bead": 5.051514762044462e-10,
+        "process_wall_seconds": [
+          0.3521754520043032,
+          0.3593943070009118,
+          0.31267401299555786
+        ]
+      },
+      {
+        "name": "n8192_skew_crossing",
+        "beads": 8192,
+        "interactions": [
+          8192,
+          13824,
+          5120
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 1.7763568394002505e-15,
+            "tolerance_ratio": 9.363250323205735e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 1.4029888362188103e-12,
+            "tolerance_ratio": 9.42451024496517e-05,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 4.112339357931205e-10,
+            "tolerance_ratio": 0.001619185769773251,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 5.684341886080802e-14,
+        "strain_convergence_per_bead": 4.940492459581947e-10,
+        "process_wall_seconds": [
+          0.33461965300375596,
+          0.35229364699625876,
+          0.33602875701035373
+        ]
+      },
+      {
+        "name": "permuted_atoms",
+        "beads": 32,
+        "interactions": [
+          32,
+          54,
+          20
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 5.551115123125783e-16,
+            "tolerance_ratio": 2.9172994978827846e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 2.2293278334473143e-13,
+            "tolerance_ratio": 6.904489094894284e-06,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 2.3858837128187815e-10,
+            "tolerance_ratio": 0.0008734297062396638,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 1.4432899320127035e-10,
+        "process_wall_seconds": [
+          0.2504688740009442,
+          0.24907703400822356,
+          0.25222516201029066
+        ]
+      },
+      {
+        "name": "public_ala2_0",
+        "beads": 5,
+        "interactions": [
+          4,
+          3,
+          3
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 4.996003610813204e-16,
+            "tolerance_ratio": 4.1634283915391797e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 9.103828801926284e-15,
+            "tolerance_ratio": 4.253685720065938e-07,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 1.421209261387446e-10,
+            "tolerance_ratio": 0.0006100285181322418,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 1.9095836023552692e-10,
+        "process_wall_seconds": [
+          0.25898394199612085,
+          0.26044354200712405,
+          0.25873051199596375
+        ]
+      },
+      {
+        "name": "public_ala2_1",
+        "beads": 5,
+        "interactions": [
+          4,
+          3,
+          3
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 2.498001805406602e-16,
+            "tolerance_ratio": 2.079105985547538e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 8.992806499463768e-15,
+            "tolerance_ratio": 5.58885873029081e-07,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 8.113618110705545e-11,
+            "tolerance_ratio": 0.0003478289057655228,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 7.549516567451064e-11,
+        "process_wall_seconds": [
+          0.2623330780043034,
+          0.25447153400455136,
+          0.2643828769942047
+        ]
+      },
+      {
+        "name": "public_ala2_123",
+        "beads": 5,
+        "interactions": [
+          4,
+          3,
+          3
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 6.938893903907228e-16,
+            "tolerance_ratio": 5.981297193310953e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 1.7819079545233762e-14,
+            "tolerance_ratio": 1.4196757179808123e-06,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 1.974785612812724e-10,
+            "tolerance_ratio": 0.0008916833746773277,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 1.787459069646502e-10,
+        "process_wall_seconds": [
+          0.25577427599637304,
+          0.2546800199925201,
+          0.25944560999050736
+        ]
+      },
+      {
+        "name": "public_ala2_999",
+        "beads": 5,
+        "interactions": [
+          4,
+          3,
+          3
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 7.216449660063518e-16,
+            "tolerance_ratio": 6.224026187450253e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 1.4876988529977098e-14,
+            "tolerance_ratio": 5.506552322092985e-07,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 2.5325797015085527e-10,
+            "tolerance_ratio": 0.0007670771641054918,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 1.7763568394002505e-10,
+        "process_wall_seconds": [
+          0.25740119100373704,
+          0.25791897099406924,
+          0.25796726399858017
+        ]
+      },
+      {
+        "name": "public_ala2_2500",
+        "beads": 5,
+        "interactions": [
+          4,
+          3,
+          3
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 2.220446049250313e-16,
+            "tolerance_ratio": 1.954211910155057e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 7.771561172376096e-15,
+            "tolerance_ratio": 5.539268104051591e-07,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 3.197384232378475e-10,
+            "tolerance_ratio": 0.0015730268357774084,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 4.807265696626928e-10,
+        "process_wall_seconds": [
+          0.2515509149961872,
+          0.25774204899789765,
+          0.2678638580109691
+        ]
+      },
+      {
+        "name": "public_ala2_4999",
+        "beads": 5,
+        "interactions": [
+          4,
+          3,
+          3
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 6.661338147750939e-16,
+            "tolerance_ratio": 5.699828087629571e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 1.558128626122368e-14,
+            "tolerance_ratio": 1.5327107511527508e-06,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 2.093221151966418e-10,
+            "tolerance_ratio": 0.000677635628932965,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 2.19824158875781e-10,
+        "process_wall_seconds": [
+          0.24966262700036168,
+          0.2571675830113236,
+          0.225647294006194
+        ]
+      },
+      {
+        "name": "public_ala2_7500",
+        "beads": 5,
+        "interactions": [
+          4,
+          3,
+          3
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 1.0269562977782698e-15,
+            "tolerance_ratio": 8.725052201129259e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 1.5376588891058418e-14,
+            "tolerance_ratio": 1.0946592377081425e-06,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 3.49537870869554e-10,
+            "tolerance_ratio": 0.0015691193964711629,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 3.6970426720017713e-10,
+        "process_wall_seconds": [
+          0.22392116699484177,
+          0.2455310720106354,
+          0.26141801399353426
+        ]
+      },
+      {
+        "name": "public_ala2_9999",
+        "beads": 5,
+        "interactions": [
+          4,
+          3,
+          3
+        ],
+        "errors": {
+          "energy": {
+            "max_error": 1.3877787807814457e-16,
+            "tolerance_ratio": 1.195322519160883e-07,
+            "normalization": "per_bead",
+            "atol": 1e-09,
+            "rtol": 1e-09
+          },
+          "force": {
+            "max_error": 1.3322676295501878e-14,
+            "tolerance_ratio": 8.690905430145832e-07,
+            "normalization": "none",
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_error": 1.2873896393372775e-10,
+            "tolerance_ratio": 0.0005707388316484318,
+            "normalization": "per_bead",
+            "atol": 2e-07,
+            "rtol": 2e-07
+          }
+        },
+        "repeat_max_difference": 0.0,
+        "strain_convergence_per_bead": 2.3092638912203256e-10,
+        "process_wall_seconds": [
+          0.25285959999018814,
+          0.26173664699308574,
+          0.25721082599193323
+        ]
+      }
+    ],
+    "scope": "calculation correctness only; no scientific NEP quality criterion",
+    "public_geometry": {
+      "file_sha256": "00f1f6b70fbc9473157511d53a73b6f629d284d3e08e79155b9d2bf546d6dc81",
+      "shape": [
+        10000,
+        5,
+        3
+      ],
+      "scope": "published coordinate numbers interpreted as angstrom for identical mathematical tests; not force-label or PMF validation"
+    },
+    "status": "PASS"
+  },
+  "nep_interfaces": {
+    "scope": "prediction/loss input plumbing with frozen models; no fit-quality criterion",
+    "binary_sha256": {
+      "gpumd": "71c2cf3833c53ec7c507f5fef629f3d12e402f1a9beb66b4112e66d4e7a63c8d",
+      "nep": "205bc97a45ab961060e9a85f3f8506b912e6e17a1fef196d2cf5a5ee624c80a8",
+      "test_bonded_nep": "508ae0cb5459bb3df9939e1ced3462e27814bf8c90de06fc84f1eda1e946246f"
+    },
+    "sizes": [
+      32,
+      256,
+      2048
+    ],
+    "paths": [
+      {
+        "model": "zero",
+        "mode": "resident",
+        "batch": 2,
+        "stream": 0,
+        "compiled_required": false,
+        "baseline_identity": {
+          "energy_train": {
+            "max_absolute_error": 1.0000000000287557e-06,
+            "tolerance_ratio": 0.05275574932307808,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "energy_test": {
+            "max_absolute_error": 1.0000000000287557e-06,
+            "tolerance_ratio": 0.05275574932307808,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "force_train": {
+            "max_absolute_error": 0.0,
+            "tolerance_ratio": 0.0,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "force_test": {
+            "max_absolute_error": 0.0,
+            "tolerance_ratio": 0.0,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "virial_train": {
+            "max_absolute_error": 1.0000000000287557e-06,
+            "tolerance_ratio": 0.054243054449652994,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "virial_test": {
+            "max_absolute_error": 1.0000000000287557e-06,
+            "tolerance_ratio": 0.054243054449652994,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          }
+        }
+      },
+      {
+        "model": "zero",
+        "mode": "stream",
+        "batch": 1,
+        "stream": 1,
+        "compiled_required": false,
+        "baseline_identity": {
+          "energy_train": {
+            "max_absolute_error": 1.0000000000287557e-06,
+            "tolerance_ratio": 0.05275574932307808,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "energy_test": {
+            "max_absolute_error": 1.0000000000287557e-06,
+            "tolerance_ratio": 0.05275574932307808,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "force_train": {
+            "max_absolute_error": 0.0,
+            "tolerance_ratio": 0.0,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "force_test": {
+            "max_absolute_error": 0.0,
+            "tolerance_ratio": 0.0,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "virial_train": {
+            "max_absolute_error": 1.0000000000287557e-06,
+            "tolerance_ratio": 0.054243054449652994,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "virial_test": {
+            "max_absolute_error": 1.0000000000287557e-06,
+            "tolerance_ratio": 0.054243054449652994,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          }
+        }
+      },
+      {
+        "model": "teacher",
+        "mode": "resident",
+        "batch": 2,
+        "stream": 0,
+        "compiled_required": false,
+        "baseline_identity": {
+          "energy_train": {
+            "max_absolute_error": 1.000000000139778e-06,
+            "tolerance_ratio": 0.05277721628249603,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "energy_test": {
+            "max_absolute_error": 1.000000000139778e-06,
+            "tolerance_ratio": 0.05277721628249603,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "force_train": {
+            "max_absolute_error": 9.758999999887052e-06,
+            "tolerance_ratio": 0.47593304401463565,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "force_test": {
+            "max_absolute_error": 9.758999999887052e-06,
+            "tolerance_ratio": 0.47593304401463565,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "virial_train": {
+            "max_absolute_error": 1.1159999999676984e-06,
+            "tolerance_ratio": 0.06428360352971192,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "virial_test": {
+            "max_absolute_error": 1.1159999999676984e-06,
+            "tolerance_ratio": 0.06428360352971192,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          }
+        }
+      },
+      {
+        "model": "teacher",
+        "mode": "stream",
+        "batch": 1,
+        "stream": 1,
+        "compiled_required": false,
+        "baseline_identity": {
+          "energy_train": {
+            "max_absolute_error": 1.000000000139778e-06,
+            "tolerance_ratio": 0.05277721628249603,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "energy_test": {
+            "max_absolute_error": 1.000000000139778e-06,
+            "tolerance_ratio": 0.05277721628249603,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "force_train": {
+            "max_absolute_error": 9.758999999887052e-06,
+            "tolerance_ratio": 0.47593304401463565,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "force_test": {
+            "max_absolute_error": 9.758999999887052e-06,
+            "tolerance_ratio": 0.47593304401463565,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "virial_train": {
+            "max_absolute_error": 1.1159999999676984e-06,
+            "tolerance_ratio": 0.06428360352971192,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "virial_test": {
+            "max_absolute_error": 1.1159999999676984e-06,
+            "tolerance_ratio": 0.06428360352971192,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          }
+        }
+      }
+    ],
+    "md": [
+      {
+        "model": "zero",
+        "beads": 32,
+        "baseline_identity": {
+          "energy": {
+            "max_absolute_error": 4.440892098500626e-16,
+            "tolerance_ratio": 2.3338393018500814e-08,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "force": {
+            "max_absolute_error": 1.149080830487037e-13,
+            "tolerance_ratio": 7.549750447526243e-06,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_absolute_error": 1.682493588894829e-10,
+            "tolerance_ratio": 0.01231861752531165,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          }
+        }
+      },
+      {
+        "model": "zero",
+        "beads": 256,
+        "baseline_identity": {
+          "energy": {
+            "max_absolute_error": 8.881784197001252e-16,
+            "tolerance_ratio": 4.68755784422201e-08,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "force": {
+            "max_absolute_error": 1.0669243266647754e-13,
+            "tolerance_ratio": 5.518663674850384e-06,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_absolute_error": 1.0875672584731433e-10,
+            "tolerance_ratio": 0.007979090661387092,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          }
+        }
+      },
+      {
+        "model": "zero",
+        "beads": 2048,
+        "baseline_identity": {
+          "energy": {
+            "max_absolute_error": 6.661338147750939e-16,
+            "tolerance_ratio": 3.514238482133781e-08,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "force": {
+            "max_absolute_error": 1.0433875985427221e-12,
+            "tolerance_ratio": 5.5993830313673066e-05,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_absolute_error": 3.012424198978181e-10,
+            "tolerance_ratio": 0.0221440197119339,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          }
+        }
+      },
+      {
+        "model": "teacher",
+        "beads": 32,
+        "baseline_identity": {
+          "energy": {
+            "max_absolute_error": 4.440892098500626e-16,
+            "tolerance_ratio": 2.3338393018500814e-08,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "force": {
+            "max_absolute_error": 1.149080830487037e-13,
+            "tolerance_ratio": 7.549750447526243e-06,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_absolute_error": 1.682493588894829e-10,
+            "tolerance_ratio": 0.01231861752531165,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          }
+        }
+      },
+      {
+        "model": "teacher",
+        "beads": 256,
+        "baseline_identity": {
+          "energy": {
+            "max_absolute_error": 9.992007221626409e-16,
+            "tolerance_ratio": 5.273502574749761e-08,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "force": {
+            "max_absolute_error": 1.0669243266647754e-13,
+            "tolerance_ratio": 5.518663674850384e-06,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_absolute_error": 1.0875672584731433e-10,
+            "tolerance_ratio": 0.007979090661387092,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          }
+        }
+      },
+      {
+        "model": "teacher",
+        "beads": 2048,
+        "baseline_identity": {
+          "energy": {
+            "max_absolute_error": 6.661338147750939e-16,
+            "tolerance_ratio": 3.514238482133781e-08,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "force": {
+            "max_absolute_error": 1.0433875985427221e-12,
+            "tolerance_ratio": 5.5993830313673066e-05,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          },
+          "virial": {
+            "max_absolute_error": 3.012423088755156e-10,
+            "tolerance_ratio": 0.022144011550798908,
+            "atol": 1e-08,
+            "rtol": 1e-08
+          }
+        }
+      }
+    ],
+    "prediction_md_consistency": [
+      {
+        "model": "zero",
+        "errors": {
+          "energy": {
+            "max_absolute_error": 1.2009507490695626e-06,
+            "tolerance_ratio": 0.06335704994877923,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "force": {
+            "max_absolute_error": 5.108120375574288e-06,
+            "tolerance_ratio": 0.2442996370661975,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "virial": {
+            "max_absolute_error": 5.725198470862836e-07,
+            "tolerance_ratio": 0.03657907062709373,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          }
+        }
+      },
+      {
+        "model": "teacher",
+        "errors": {
+          "energy": {
+            "max_absolute_error": 5.084142412625781e-07,
+            "tolerance_ratio": 0.02839290224540189,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "force": {
+            "max_absolute_error": 5.335623765923003e-06,
+            "tolerance_ratio": 0.2442996345299879,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          },
+          "virial": {
+            "max_absolute_error": 9.186922600434855e-07,
+            "tolerance_ratio": 0.04985896424597019,
+            "atol": 1e-05,
+            "rtol": 1e-05
+          }
+        }
+      }
+    ],
+    "force_only_placeholder_prediction": {
+      "checked_constants": [
+        0,
+        1
+      ],
+      "virial_labels_omitted": true,
+      "scope": "prediction invariance only; does not certify training fitness ignores placeholder"
+    },
+    "status": "PASS"
+  },
+  "memcheck": {
+    "beads": 8192,
+    "geometry": "mixed chain/star, skew periodic cell crossing",
+    "steps": 1,
+    "errors": 0,
+    "command": "compute-sanitizer --tool memcheck --error-exitcode 1 gpumd",
+    "log_sha256": "4ea7ab7331b9364033fafc32e3e1ba0de9d438301c94aaf909beb07b2cb7fec1"
+  },
+  "harness_sha256": {
+    "run_independent_validation.py": "19082ce42f71920a4f0dff5c1ec42e4091ae2cab18e36f71d208860e44f401de",
+    "run_nep_interface_validation.py": "255e0f1ce36b1d1a01832131382137b8e3bb432cba9519ea74f4b9b4f93a14ec",
+    "uv.lock": "ca4964acef8a364fb66e104b3f972c98337f0f59674c78997d3a9c06e3bf43e4"
+  },
+  "validation_harness_commit": "c03d941e"
+}
