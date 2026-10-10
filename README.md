@@ -30,19 +30,43 @@ This software is distributed under the GNU General Public License (GPL) version 
   * `path/to/gpumd`
   * `path/to/nep`
 
-## Multi-bead CG development
+## Extensions in this repository / 本仓库新增功能
 
-This branch adds fixed bond/angle/proper-dihedral terms, per-frame training topology,
-and complete residual-NEP model packages for CG simulations.
+This repository includes three extensions. Start with the documentation linked below
+when using, modifying, or continuing work on these features.
+本仓库新增以下三项功能；使用或继续开发相关功能时，请先阅读对应文档。
 
-See the
-[Chinese training and MD guide](developers/multibead_cg_guide_zh.md),
-[calculation validation results](developers/cg_stage_f/STATUS.md), and
-[step-by-step build, training and MD example](examples/multibead_cg/README.md).
+| Feature / 功能 | Usage / 用途 | Documentation / 文档 |
+| --- | --- | --- |
+| Streaming training / 流式训练 | `stream_train 1` keeps only the current training batch on GPUs; parsed data stays on the CPU. Scratch space and validation data still occupy GPU memory. / 按批加载训练数据以减少显存占用，验证集仍常驻显存。 | [stream_train](doc/nep/input_parameters/stream_train.rst) |
+| Pair-specific cutoffs / 指定交叉类型截断半径 | `cross_cutoff i j radial angular` overrides the symmetric cutoff for a selected pair of different types; other pairs retain the default averaging rule. Indices start at 0 and follow the `type` order. / 为指定类型对单独设置径向和角向 cutoff。 | [cutoff and cross_cutoff](doc/nep/input_parameters/cutoff.rst), [cluster build and usage](INSTALL_CLUSTER.md) |
+| Multi-bead CG / 多 bead 粗粒化模型 | Fixed harmonic bond/angle and periodic proper-dihedral terms plus a trainable residual NEP, with per-frame topology, shared parameters and complete model packages for MD. / 支持不同大小与拓扑的训练帧，并导出可运行 MD 的完整模型。 | [build, training and MD tutorial / 入门例子](examples/multibead_cg/README.md), [detailed guide / 详细指南](developers/multibead_cg_guide_zh.md), [calculation validation / 计算验收](developers/cg_stage_f/STATUS.md) |
 
-The example includes training data and a script that trains, predicts, exports a
-complete model package and runs two different CG systems. Scientific model quality
-is separate from the software correctness checks.
+For streaming, add `stream_train 1` to `nep.in` or `gnep.in`; the default is `0`.
+Pair-specific cutoffs belong in `nep.in` after `type` and `cutoff`, for example:
+
+```text
+type 2 C O
+cutoff 8 4
+cross_cutoff 0 1 6 4
+stream_train 1
+```
+
+Here the C--O radial/angular cutoffs are 6/4 angstrom. These values only illustrate
+the syntax; choose cutoffs for your own system. `cross_cutoff` and bonded CG support
+different model subsets: check the linked documents rather than assume all extensions
+apply to every NEP variant.
+
+The CG tutorial includes ready-to-use training data and a script that trains,
+predicts, exports a complete model package and runs two systems with 4/6 beads.
+After building `gpumd` and `nep` in `build-cg`, run from the repository root:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 bash examples/multibead_cg/run_example.sh
+```
+
+The example demonstrates the workflow. Scientific model quality is separate from
+the software correctness checks.
 
 ## Tutorials
 
