@@ -34,13 +34,12 @@ This software is distributed under the GNU General Public License (GPL) version 
 
 This repository includes three extensions. Start with the documentation linked below
 when using, modifying, or continuing work on these features.
-本仓库新增以下三项功能；使用或继续开发相关功能时，请先阅读对应文档。
 
-| Feature / 功能 | Usage / 用途 | Documentation / 文档 |
+| Feature  | Usage  | Documentation |
 | --- | --- | --- |
-| Streaming training / 流式训练 | `stream_train 1` keeps only the current training batch on GPUs; parsed data stays on the CPU. Scratch space and validation data still occupy GPU memory. / 按批加载训练数据以减少显存占用，验证集仍常驻显存。 | [stream_train](doc/nep/input_parameters/stream_train.rst) |
-| Pair-specific cutoffs / 指定交叉类型截断半径 | `cross_cutoff i j radial angular` overrides the symmetric cutoff for a selected pair of different types; other pairs retain the default averaging rule. Indices start at 0 and follow the `type` order. / 为指定类型对单独设置径向和角向 cutoff。 | [cutoff and cross_cutoff](doc/nep/input_parameters/cutoff.rst), [cluster build and usage](INSTALL_CLUSTER.md) |
-| Multi-bead CG / 多 bead 粗粒化模型 | Fixed harmonic bond/angle and periodic proper-dihedral terms plus a trainable residual NEP, with per-frame topology, shared parameters and complete model packages for MD. / 支持不同大小与拓扑的训练帧，并导出可运行 MD 的完整模型。 | [build, training and MD tutorial / 入门例子](examples/multibead_cg/README.md), [detailed guide / 详细指南](developers/multibead_cg_guide_zh.md), [calculation validation / 计算验收](developers/cg_stage_f/STATUS.md) |
+| Streaming training  | `stream_train 1` keeps only the current training batch on GPUs; parsed data stays on the CPU. Scratch space and validation data still occupy GPU memory.  | [stream_train](doc/nep/input_parameters/stream_train.rst) |
+| Pair-specific cutoffs  | `cross_cutoff i j radial angular` overrides the symmetric cutoff for a selected pair of different types; other pairs retain the default averaging rule. Indices start at 0 and follow the `type` order.  | [cutoff and cross_cutoff](doc/nep/input_parameters/cutoff.rst), [cluster build and usage](INSTALL_CLUSTER.md) |
+| Multi-bead CG  | Fixed harmonic bond/angle and periodic proper-dihedral terms plus a trainable residual NEP, with per-frame topology, shared parameters and complete model packages for MD.  | [build, training and MD tutorial ](examples/multibead_cg/README.md), [detailed guide](developers/multibead_cg_guide_zh.md) |
 
 For streaming, add `stream_train 1` to `nep.in` or `gnep.in`; the default is `0`.
 Pair-specific cutoffs belong in `nep.in` after `type` and `cutoff`, for example:
