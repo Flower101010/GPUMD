@@ -16,24 +16,23 @@ compilation, and from ordinary C++ host tests.
 The full drift is named `integrate_free_rotation`: it contains no external
 torque kick. `math.cu` remains an include-only translation unit.
 
+Vec3 algebra, vector/quaternion norms and checked normalization, vector rotation
+and inverse rotation, momentum/omega conversions, and the fixed-orientation
+Miller torque kick are also implemented in the same header. Normalization uses
+component scaling so finite very large or subnormal inputs can be normalized;
+zero and non-finite inputs fail without changing the input. Rotation functions
+require a unit quaternion and do not normalize it implicitly.
+
 ## What you must implement
 
-All declarations marked TODO in `math.cuh` have no function bodies. Define them
-in that header with the same host/device inline qualifier. Do not put their
-bodies only in `math.cu`, and do not call them until they are implemented.
+The math interfaces are implemented. The rigid-body management and simulation
+integration below remain your implementation work.
 
 Suggested order:
 
-1. Vec3 algebra, norms, and checked normalization.
-2. Quaternion vector rotation and inverse rotation. Check known 90-degree
-   rotations, round trips, and equivalence of q and -q.
-3. Angular momentum/conjugate momentum/omega conversions. Check coordinate
-   frames, the factor of two, and zero-inertia axes.
-4. Fixed-orientation torque kick. Check that zero torque changes nothing,
-   space angular momentum changes by dt * torque, and q dot p stays zero.
-5. RigidBodySystem member construction, static geometry, and dynamic setup.
-6. Three-bead force/torque reduction and bead reconstruction.
-7. Ensemble_Rigid_NVE's two integration stages and full NVE validation.
+1. RigidBodySystem member construction, static geometry, and dynamic setup.
+2. Three-bead force/torque reduction and bead reconstruction.
+3. Ensemble_Rigid_NVE's two integration stages and full NVE validation.
 
 RigidBodySystem has declarations only, including its constructor/destructor;
 it cannot yet be instantiated and linked. No placeholder function returns a
@@ -82,9 +81,14 @@ body state. Thermodynamic DOF and constraint virial require separate treatment.
 
 ## Current validation boundary
 
-CTest runs the existing host quaternion checks and a GPU test exercising the
-already implemented math directly from a different translation unit. Future
-TODO functions and RigidBodySystem dynamics are not tested or implemented yet.
+CTest runs host and GPU checks for the implemented math, including extreme
+normalization inputs, known rotations, nontrivial frame/momentum conventions,
+zero-inertia omega, and torque kicks. The host test also checks a complete
+kick-drift-kick sequence against the constant axial torque analytic solution.
+The GPU test calls the functions from a different translation unit without
+device separate compilation. RigidBodySystem dynamics and full-system NVE are
+not implemented or validated yet; the math tests do not establish linear-body
+integration correctness.
 
 Run the implemented subset from the repository root:
 
