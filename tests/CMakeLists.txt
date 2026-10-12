@@ -51,7 +51,10 @@ gpumd_add_unit_test(test_periodic_dihedral_data test_periodic_dihedral_data.cu)
 gpumd_add_unit_test(test_periodic_dihedral test_periodic_dihedral.cu)
 gpumd_add_unit_test(test_molecular_force test_molecular_force.cu)
 gpumd_add_unit_test(test_bonded_core test_bonded_core.cu)
-
+gpumd_add_unit_test(test_quaternion test_quaternion.cu)
+target_sources(test_quaternion PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/utilities/math.cu)
+    
 gpumd_add_unit_test(test_bonded_dataset test_bonded_dataset.cu)
 add_library(gpumd_nep_bonded_test_support STATIC
     ${PROJECT_SOURCE_DIR}/src/main_nep/bonded_baseline.cu
