@@ -96,7 +96,7 @@ Read the named methods in this order in src/integrate/rigid_body.cu:
    principal_axes performs a scaled 3x3 Jacobi eigendecomposition, sorts moments,
    fixes eigenvector signs and enforces a right-handed basis. axes_to_quaternion
    stores the corresponding unit body-to-space quaternion. Member displacements
-   are inverse-rotated relative positions. The center is split into xcm/image.
+   are inverse-rotated relative positions. The center is wrapped into the primary box.
 5. setup_bodies_dynamic reads current DEVICE velocities, computes V and
    L=sum(r_i cross m_i*(v_i-V)), then p=2*q*(0,R(q)^T*L).
 6. Zero loads are uploaded and initialized becomes true only after all checks.
@@ -104,8 +104,6 @@ Read the named methods in this order in src/integrate/rigid_body.cu:
 Static initialization rejects multi-bead geometries if the smallest principal
 moment is <= 1e-10 times the largest; coincident bodies are also rejected.
 Single-bead bodies are handled separately with zero inertia and identity q.
-Initialization verifies that reconstructed member images fit GPUMD's int image
-storage, in addition to checking int64 body-image conversion/addition.
 
 For a reviewable snapshot after initialize:
 
@@ -126,18 +124,15 @@ periodic direction, with a small floating-point margin. It uses full H/H^-1,
 including for triclinic boxes. This is a lattice-image convention, not a general
 nearest-Euclidean-image search or a connectivity-based unwrap.
 
-If Atom.position_image exists, only the reference bead's image is used as the
-body's common absolute image. Other bead images may be inconsistent at startup;
-they do not determine relative geometry in this mode. The common integer image
-is added to the body image after local geometry is computed, never to large
-double coordinates. Atom.unwrapped_position and CPU position/velocity caches
-are not read. Managed bead data must be finite and mass must be positive;
-unmanaged bead values are not used in the physical calculations.
+Atom.position_image and Atom.unwrapped_position are not read: rigid bodies do
+not store or inherit crossing history. Current DEVICE masses, positions and
+velocities are used instead of CPU caches. Managed bead data must be finite and
+mass must be positive; unmanaged values are not used in physical calculations.
 
 Wrapped coordinates cannot distinguish a truly large molecule from a compact
 periodic alias. The default mode therefore requires the caller to satisfy the
 compact-molecule assumption even when the span check passes. For general body
-geometry or authoritative image history, use the explicit overload:
+geometry, use the explicit overload:
 
 ```cpp
 // HOST 3N SoA; all members of each body must be in the intended coherent image.
@@ -147,7 +142,7 @@ rigid.initialize(atom, box, body_labels, coherent_unwrapped_positions);
 This mode uses exactly the supplied positions and ignores Atom position/image
 buffers. Current DEVICE masses and velocities are still required. Member count
 is unrestricted in both modes. Very large double coordinates in explicit input
-can already have lost relative precision; integer image storage cannot restore
+can already have lost relative precision; initialization cannot restore
 information missing from the input.
 
 ## State and GPU storage
@@ -173,49 +168,33 @@ angular velocity, and rotation axes are derived locally when needed.
 
 ## Periodic center-of-mass coordinates
 
-BodyState stores Cartesian xcm near the primary box and a BodyImage containing
-three signed 64-bit integer lattice-image counters. In periodic directions,
-the fractional components of xcm are in [0,1); nonperiodic directions are not
-wrapped and their image counters remain zero. With box matrix H,
-X_cm_unwrapped = xcm + H*image. This relation defines an absolute image, but
-the large unwrapped coordinate is not reconstructed for integration.
+BodyState stores only the wrapped Cartesian center xcm, its velocity, and the
+Miller quaternion/momentum. No body image counters or absolute displacement
+history are retained. In periodic directions the fractional center lies in
+[0,1); nonperiodic coordinates are not wrapped. Initialization uses coherent
+member geometry before wrapping the center. For a length-10 box, members at
+9.8 and 10.2 have center 10, stored as xcm=0 with fixed relative offsets -0.2
+and +0.2. Directly averaging wrapped positions 9.8 and 0.2 would still be wrong.
 
-Initialization computes or accepts coherently unwrapped members of each body.
-Compute the center and fixed relative geometry from those coordinates, then
-split the center into xcm and image. For a length-10 periodic box, members at
-9.8 and 10.2 have center 10, stored as xcm=0 and image=1. Their relative offsets
-are -0.2 and +0.2. Averaging wrapped coordinates 9.8 and 0.2 would give the
-wrong center. A single-bead body follows the same coordinate splitting rule.
+After translational drift, remap_centers should compute f=H^-1*xcm, subtract
+floor(f) in periodic components, and replace xcm with H*f. This also handles
+multiple-box and negative crossings without storing counts. It changes no
+velocity, quaternion, momentum or body-relative geometry and may be fused into
+the drift kernel. Runtime remapping is still a declaration, not an implemented
+kernel.
 
-After each translational drift, remap_centers wraps the center and updates its
-image. Let s=H^-1*xcm and k=floor(s) in periodic directions, with k=0 in other
-directions. Replace xcm with xcm-H*k and image with image+k. Handle multiple
-crossings in one call, including negative coordinates; check integer conversion
-and counter addition for overflow. Remapping changes no velocity, quaternion,
-momentum, or body-relative geometry. The operation can be fused into the drift
-kernel; the separate interface describes its responsibility, not a required
-additional launch.
+Rebuild each bead from y_i=xcm+R(q)*s_i, then wrap y_i using the same full box
+matrix. Write only managed positions, preserving free beads. Torque arms remain
+R(q)*s_i and require no coordinate history. Initialization does not touch Atom's
+image buffers; the existing Atom image feature remains available to other code.
+The rigid module does not provide coherent continuous trajectories or diffusion
+history. When wiring the future rigid ensemble, any unwrapped-output feature
+needs an explicit compatible tracking design before it can be used for rigid
+members.
 
-Reconstruct each bead from the small local coordinate y_i=xcm+R(q)*s_i.
-Wrapping y_i gives a local image k_i, position_i=y_i-H*k_i, and absolute bead
-image_i=body.image+k_i. Overwrite the bead's old image rather than accumulating
-it. In the example above, the beads have positions 9.8 and 0.2 and absolute
-images 0 and 1. Torque arms remain R(q)*s_i, independent of all image counters.
-Use the full H and its inverse, including for triclinic boxes.
-
-Ensure Atom's image buffer exists before writing managed members. GPUMD's
-position_image currently uses int, whereas BodyImage uses int64_t: check range
-before conversion and report overflow, never silently truncate. The wider body
-counter does not remove the existing bead-image range limit. If unwrapped output
-is enabled, synchronize it from position_i+H*image_i; such output can still lose
-precision at large absolute displacements and must not feed back into dynamics.
-Already-wrapped bead coordinates and absolute images must remain consistent
-with Force::compute's subsequent PBC processing.
-
-The initial implementation assumes a fixed box matrix and fixed periodicity.
-Changing the box needs an explicit center-scaling/image policy before NPT or
-box deformation can be supported. Nonperiodic coordinates may still grow;
-wrapping only addresses numerical growth from periodic travel.
+This version assumes a fixed box matrix and periodicity. Changing the box needs
+an explicit coordinate scaling policy. Nonperiodic coordinates may still grow;
+wrapping addresses only periodic travel.
 
 Use one thread per body as the initial execution plan for the 1/3-bead mixture.
 Each thread loops over its own member range, gathers forces, and writes its
@@ -231,7 +210,7 @@ Assign a nonnegative body label to a single-bead molecule to manage it as a poin
 body through the same translation path. Label -1 instead means an unmanaged
 bead, updated by the ordinary bead integrator; never integrate it twice.
 
-A single-bead body has mass m, xcm/image representing the bead's position,
+A single-bead body has mass m, xcm equal to the wrapped bead position,
 vcm equal to its velocity, displace zero, inertia zero, and rotational_dof zero.
 Use identity quat and zero conjqm. Its body force is the bead force, torque is
 zero, and its velocity reconstruction is vcm. Skip all rotational kicks/drifts;
@@ -263,8 +242,7 @@ rotation drift, then remaps centers and reconstructs bead positions and any requ
 velocities. Evaluate new bead forces; stage two forms the new load, applies the
 second half kicks, and reconstructs full-step velocities.
 
-Reconstruction must agree with Force::compute's periodic wrapping/image
-updates. Do not use wrapped bead differences as torque arms. Free beads must
+Reconstruction must agree with Force::compute's periodic wrapping. Do not use wrapped bead differences as torque arms. Free beads must
 remain outside rigid updates. External velocity corrections must act on whole
 body state. Thermodynamic DOF and constraint virial require separate treatment.
 
@@ -282,8 +260,8 @@ integration correctness.
 The initialization test checks single-bead and boundary-straddling three-bead
 bodies, known principal moments, unequal masses, triclinic/mixed PBC, rigid
 velocity projection, repeated eigenvalues, 24 spatial orientations, explicit
-large-body geometry, unmanaged/empty systems, invalid input, image overflow and
-cleanup after failure. It reads back real GPU state and deliberately supplies
+large-body geometry, unmanaged/empty systems, invalid input, independence from
+Atom's image buffer and cleanup after failure. It reads back real GPU state and deliberately supplies
 incorrect CPU caches. Runtime remapping, bead reconstruction and force reduction
 remain unimplemented; their crossing/force-consistency tests and full-system
 NVE tests are still required.

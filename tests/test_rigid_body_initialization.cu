@@ -23,6 +23,17 @@ static Vec3 h_times(const Box& box, Vec3 v)
           box.cpu_h[3]*v.x+box.cpu_h[4]*v.y+box.cpu_h[5]*v.z,
           box.cpu_h[6]*v.x+box.cpu_h[7]*v.y+box.cpu_h[8]*v.z};
 }
+// 测试盒均为上三角；用解析逆得到期望的盒内质心。
+static Vec3 wrapped_center(const Box& box, Vec3 center)
+{
+  double z = center.z / box.cpu_h[8];
+  double y = (center.y - box.cpu_h[5]*z) / box.cpu_h[4];
+  double x = (center.x - box.cpu_h[1]*y - box.cpu_h[2]*z) / box.cpu_h[0];
+  if (box.pbc_x) x -= std::floor(x);
+  if (box.pbc_y) y -= std::floor(y);
+  if (box.pbc_z) z -= std::floor(z);
+  return h_times(box,{x,y,z});
+}
 static Box orthogonal()
 {
   Box box{};
@@ -69,7 +80,7 @@ static void check_body(const RigidBodySystem::HostSnapshot& snapshot, int b,
   const Vec3 center = center_of(x,mass);
   double M = 0; for (double m : mass) M += m;
   near(g.mass,M); near(s.vcm,V);
-  near(add(s.xcm,h_times(box,{double(s.image.x),double(s.image.y),double(s.image.z)})),center);
+  near(s.xcm,wrapped_center(box,center));
   near(dot(s.quat,s.quat),1); near(dot(s.quat,s.conjqm),0);
   double tensor[3][3] = {};
   Vec3 expected_L{0,0,0}, weighted{0,0,0};
@@ -123,10 +134,6 @@ int main()
   const double nan = std::numeric_limits<double>::quiet_NaN();
   populate(atom,{2,1,1,1,-1},{{10.1,-0.2,31},{9.8,2,3},{0.2,2,3},{9.8,2.4,3},{nan,nan,nan}},
            {{0.1,0.2,0.3},velocity[0],velocity[1],velocity[2],{nan,nan,nan}});
-  atom.position_image.resize(15,0);
-  std::vector<int> images(15,0);
-  images[1] = 3; // 只使用参考 bead 的共同 image；其他成员的零 image 不一致。
-  atom.position_image.copy_from_host(images.data());
   const auto original_positions = soa(std::vector<Vec3>{{10.1,-0.2,31},{9.8,2,3},{0.2,2,3},{9.8,2.4,3},{nan,nan,nan}});
   rigid.initialize(atom,box,{10,20,20,20,-1});
   assert(rigid.initialized() && rigid.number_of_bodies() == 2 && rigid.number_of_members() == 4);
@@ -136,7 +143,6 @@ int main()
   const auto& point = snapshot.bodies[0];
   near(point.geometry.mass,2); assert(point.geometry.rotational_dof == 0);
   near(point.state.xcm,{0.1,9.8,1});
-  assert(point.state.image.x == 1 && point.state.image.y == -1 && point.state.image.z == 3);
   near(point.state.vcm,{0.1,0.2,0.3}); near(dot(point.state.conjqm,point.state.conjqm),0);
   near(point.state.quat.w,1);
   check_body(snapshot,1,box,triangle,{1,1,1},V,omega);
@@ -167,7 +173,6 @@ int main()
   rigid.initialize(atom,box,{7,7,7});
   rigid.copy_to_host(snapshot);
   check_body(snapshot,0,box,actual,{1,2,3},V,omega);
-  assert(snapshot.bodies[0].state.image.z == 0);
 
   // 显式几何不受半盒限制，也不依赖 Atom 的位置/image。
   box = orthogonal();
@@ -225,9 +230,14 @@ int main()
   populate(atom,{1},{{1,1,1}},{{0,0,0}});
   box.cpu_h[8] = 0; fails({0}); box = orthogonal();
   populate(atom,{1},{{10.2,1,1}},{{0,0,0}});
-  atom.position_image.resize(3,0);
-  const int overflow_image[3] = {std::numeric_limits<int>::max(),0,0};
-  atom.position_image.copy_from_host(overflow_image); fails({0});
+  // 刚体初始化与 Atom 的跨盒历史无关，连该缓冲区尺寸也不依赖。
+  atom.position_image.resize(1, std::numeric_limits<int>::max());
+  rigid.initialize(atom,box,{0});
+  rigid.copy_to_host(snapshot);
+  near(snapshot.bodies[0].state.xcm,{0.2,1,1});
+  int unchanged_image = 0;
+  atom.position_image.copy_to_host(&unchanged_image);
+  assert(unchanged_image == std::numeric_limits<int>::max());
   atom.position_image.clear();
   rigid.initialize(atom,box,{-1});
   rigid.copy_to_host(snapshot);

@@ -10,7 +10,6 @@
 namespace
 {
 using namespace rigid_math;
-using Image = RigidBodySystem::BodyImage;
 constexpr double inertia_tolerance = 1e-10;
 
 void require(bool condition, const char* message)
@@ -33,23 +32,6 @@ void write_vec(std::vector<double>& values, int i, int N, Vec3 v)
   values[index] = v.x;
   values[index + count] = v.y;
   values[index + 2 * count] = v.z;
-}
-
-std::int64_t image_integer(double x)
-{
-  // INT64_MAX 转为 double 会舍入到 2^63，必须使用半开范围。
-  require(
-    std::isfinite(x) && x >= -9223372036854775808.0 && x < 9223372036854775808.0,
-    "Rigid body image exceeds int64 range.");
-  return static_cast<std::int64_t>(x);
-}
-
-std::int64_t add_image(std::int64_t a, std::int64_t b)
-{
-  const auto lo = std::numeric_limits<std::int64_t>::min();
-  const auto hi = std::numeric_limits<std::int64_t>::max();
-  require(!((b > 0 && a > hi - b) || (b < 0 && a < lo - b)), "Rigid body image counter overflow.");
-  return a + b;
 }
 
 // 初始化自己从 H 求逆，不依赖调用方是否已刷新 Box 的缓存逆矩阵。
@@ -109,7 +91,7 @@ struct Cell {
       h[3] * v.x + h[4] * v.y + h[5] * v.z,
       h[6] * v.x + h[7] * v.y + h[8] * v.z};
   }
-  Image wrap(Vec3& v) const
+  void wrap(Vec3& v) const
   {
     Vec3 f = fractional(v);
     require(finite(f), "Non-finite fractional coordinate.");
@@ -117,11 +99,9 @@ struct Cell {
       periodic[0] ? std::floor(f.x) : 0,
       periodic[1] ? std::floor(f.y) : 0,
       periodic[2] ? std::floor(f.z) : 0};
-    Image image{image_integer(k[0]), image_integer(k[1]), image_integer(k[2])};
-    // 用小的包装分数坐标恢复 Cartesian 坐标，避免减去巨大 H*image。
+    // 用包装后的分数坐标恢复 Cartesian 坐标，不保留跨盒计数。
     v = cartesian({f.x - k[0], f.y - k[1], f.z - k[2]});
     require(finite(v), "Non-finite wrapped coordinate.");
-    return image;
   }
 };
 
@@ -357,9 +337,6 @@ void RigidBodySystem::initialize_impl(
       require(
         atom.position_per_atom.size() == 3 * count,
         "Rigid initialization requires current atom positions.");
-      require(
-        atom.position_image.size() == 0 || atom.position_image.size() == 3 * count,
-        "Atom images must be absent or a 3N array.");
     }
     create_bodies(N, body_labels);
     if (number_of_bodies_ == 0) {
@@ -368,7 +345,6 @@ void RigidBodySystem::initialize_impl(
     }
 
     std::vector<double> positions(3 * count);
-    std::vector<Image> reference_images(number_of_bodies_, Image{});
     std::vector<BodyGeometry> geometry(number_of_bodies_);
     std::vector<int> members(number_of_members_);
     geometry_.copy_to_host(geometry.data());
@@ -376,25 +352,13 @@ void RigidBodySystem::initialize_impl(
     if (supplied_positions) {
       positions = *supplied_positions;
     } else {
-      // 默认恢复紧凑分子；只取参考 bead 的绝对 image，避免已有 image 不一致拉长分子。
+      // 默认以参考 bead 最小镜像恢复紧凑分子的局部几何。
       atom.position_per_atom.copy_to_host(positions.data());
-      std::vector<int> images(atom.position_image.size());
-      if (!images.empty())
-        atom.position_image.copy_to_host(images.data());
       for (int b = 0; b < number_of_bodies_; ++b) {
         const auto& g = geometry[b];
         const int reference = members[g.first_member];
         const Vec3 anchor = read_vec(positions, reference, N);
         require(finite(anchor), "Non-finite bead position.");
-        if (!images.empty()) {
-          const std::size_t index = static_cast<std::size_t>(reference);
-          reference_images[b] = {images[index], images[index + count], images[index + 2 * count]};
-          require(
-            (cell.periodic[0] || reference_images[b].x == 0) &&
-              (cell.periodic[1] || reference_images[b].y == 0) &&
-              (cell.periodic[2] || reference_images[b].z == 0),
-            "Nonperiodic reference images must be zero.");
-        }
         Vec3 low{0, 0, 0}, high{0, 0, 0};
         for (int j = g.first_member; j < g.first_member + g.natoms; ++j) {
           const int i = members[j];
@@ -410,7 +374,6 @@ void RigidBodySystem::initialize_impl(
             f.z -= std::floor(f.z + 0.5);
           low = {std::min(low.x, f.x), std::min(low.y, f.y), std::min(low.z, f.z)};
           high = {std::max(high.x, f.x), std::max(high.y, f.y), std::max(high.z, f.z)};
-          // common image 不加进 double 坐标，以免大周期像损害相对几何精度。
           write_vec(positions, i, N, add(anchor, cell.cartesian(f)));
         }
         const double limit = 0.5 - 64 * std::numeric_limits<double>::epsilon();
@@ -423,31 +386,6 @@ void RigidBodySystem::initialize_impl(
     }
     setup_bodies_static(atom, box, positions);
 
-    // 将参考 bead 的共同整数像加到已包装质心，不重新构造巨大展开坐标。
-    std::vector<BodyState> states(number_of_bodies_);
-    std::vector<Vec3> displace(number_of_members_);
-    state_.copy_to_host(states.data());
-    member_displace_.copy_to_host(displace.data());
-    for (int b = 0; b < number_of_bodies_; ++b) {
-      auto& s = states[b];
-      s.image = {
-        add_image(s.image.x, reference_images[b].x),
-        add_image(s.image.y, reference_images[b].y),
-        add_image(s.image.z, reference_images[b].z)};
-      const auto& g = geometry[b];
-      for (int j = g.first_member; j < g.first_member + g.natoms; ++j) {
-        Vec3 y = add(s.xcm, rotate(s.quat, displace[j]));
-        const Image local = cell.wrap(y);
-        const std::int64_t ix = add_image(s.image.x, local.x);
-        const std::int64_t iy = add_image(s.image.y, local.y);
-        const std::int64_t iz = add_image(s.image.z, local.z);
-        const auto lo = std::numeric_limits<int>::min(), hi = std::numeric_limits<int>::max();
-        require(
-          ix >= lo && ix <= hi && iy >= lo && iy <= hi && iz >= lo && iz <= hi,
-          "Reconstructed bead image exceeds GPUMD int range.");
-      }
-    }
-    state_.copy_from_host(states.data());
     setup_bodies_dynamic(atom);
     // 使用 HOST 零载荷上传，完成后首次积分前仍需实际 NEP 力和力矩。
     std::vector<BodyLoad> loads(number_of_bodies_, BodyLoad{});
@@ -492,7 +430,7 @@ void RigidBodySystem::setup_bodies_static(
     const Vec3 relative_center{weighted.x / g.mass, weighted.y / g.mass, weighted.z / g.mass};
     Vec3 center = add(anchor, relative_center);
     require(finite(center), "Non-finite body center.");
-    state.image = cell.wrap(center);
+    cell.wrap(center);
     state.xcm = center;
     state.quat = {1, 0, 0, 0};
     if (g.natoms == 1) {

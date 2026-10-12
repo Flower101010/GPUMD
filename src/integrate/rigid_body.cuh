@@ -2,7 +2,6 @@
 
 #include "utilities/gpu_vector.cuh"
 #include "utilities/math.cuh"
-#include <cstdint>
 #include <vector>
 
 using rigid_math::Quaternion;
@@ -23,16 +22,8 @@ public:
     int rotational_dof;    // 按惯量秩确定，线性为 2，非线性为 3，重合点状为 0
   };
 
-  // 周期像按盒的三个晶格方向计数，不是 Cartesian 位移，不能用浮点 Vec3。
-  struct BodyImage {
-    std::int64_t x;
-    std::int64_t y;
-    std::int64_t z;
-  };
-
   struct BodyState {
     Vec3 xcm;          // 空间质心位置；周期方向的分数坐标在 [0,1)
-    BodyImage image;   // X_cm_unwrapped = xcm + H*image；非周期方向计数为 0
     Vec3 vcm;          // 空间质心速度
     Quaternion quat;   // 单位四元数 (w,x,y,z)，body -> space
     Quaternion conjqm; // Miller 共轭动量 p；quat dot conjqm=0
@@ -90,13 +81,14 @@ public:
   RigidBodySystem(const RigidBodySystem&) = delete;
   RigidBodySystem& operator=(const RigidBodySystem&) = delete;
 
-  
+  // 从当前 Atom 坐标按参考 bead 最小镜像展开紧凑分子，再构建刚体。
+  // 每个周期方向的成员分数坐标跨度必须 < 1/2；body_labels 中 -1 为自由 bead。
   void initialize(
     const Atom& atom,
     const Box& box,
     const std::vector<int>& body_labels);
 
-  
+  // 一般几何可显式提供 HOST 3N SoA 展开坐标；不受默认半盒跨度限制。
   void initialize(
     const Atom& atom,
     const Box& box,
@@ -117,17 +109,13 @@ public:
   // 单 bead 的合力就是该 bead 的力，绕质心力矩恒为零。
   void compute_forces_and_torques(const Atom& atom);
 
-  // 质心漂移后调用：s=H^-1*xcm，周期方向 k=floor(s)，xcm-=H*k，image+=k。
-  // 非周期方向 k=0；支持单次越过多个周期，检查整数转换/加法溢出。
-  // 只改 xcm/image，不改姿态、速度或固定几何；可与积分阶段 kernel 合并。
+  // 质心漂移后调用：s=H^-1*xcm，周期方向 s-=floor(s)，再转换回空间坐标。
+  // 非周期方向不包装；只改 xcm，不改姿态、速度或固定几何，可合并到积分 kernel。
   void remap_centers(const Box& box);
 
-  // 前置条件：质心已 remap。先求局部位置 y_i=xcm+R(q)*s_i，再按完整盒矩阵包装。
-  // 若局部包装跨越 k_i 个周期，则 position_i=y_i-H*k_i，image_i=image+k_i。
-  // 绝对覆盖成员的 position_image，不能累加旧 bead image；保持自由 bead 原值。
-  // 确保 Atom image 存储就绪；当前它使用 int，写入前检查范围，不能静默截断。
-  // 若启用 Atom.unwrapped_position，仅输出同步时由 position_i+H*image_i 恢复。
-  // 展开输出仍可能损失大坐标精度，不得反馈给积分/几何/力矩；与 Force::compute PBC 配合。
+  // 前置条件：质心已 remap。求局部位置 y_i=xcm+R(q)*s_i，再按完整盒矩阵包装。
+  // 只写受管理 bead 的 position_per_atom，保持自由 bead 原值。
+  // 刚体不维护跨盒历史；连续展开轨迹输出需另行设计。
   void rebuild_positions(Atom& atom, const Box& box);
 
   // 有转动自由度时从 quat/conjqm 派生空间 L/omega，v_i=vcm+omega x R(q)*s_i。
@@ -144,7 +132,7 @@ private:
     const std::vector<double>* unwrapped_positions);
   // 构建变长成员范围，分配 body 与成员数组；标签/Atom 索引变化需重新构建。
   void create_bodies(int number_of_atoms, const std::vector<int>& body_labels);
-  // 从一致展开成员求 M/X_cm/惯性张量，再拆分 xcm/image；初始化绝对 image 而非清零。
+  // 从一致展开成员求 M/X_cm/惯性张量，再把质心包装到盒内。
   // 主惯量升序、右手主轴、quat 和固定 displace。
   // 重根主轴需可复现；初始化时用相对容差识别数值零惯量，不能在热路径猜测。
   void setup_bodies_static(
