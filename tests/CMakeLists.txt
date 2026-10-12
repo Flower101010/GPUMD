@@ -53,6 +53,9 @@ gpumd_add_unit_test(test_molecular_force test_molecular_force.cu)
 gpumd_add_unit_test(test_bonded_core test_bonded_core.cu)
 gpumd_add_unit_test(test_quaternion test_quaternion.cu)
 gpumd_add_unit_test(test_quaternion_gpu test_quaternion_gpu.cu)
+gpumd_add_unit_test(test_rigid_body_initialization test_rigid_body_initialization.cu)
+target_sources(test_rigid_body_initialization PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body.cu)
 
 gpumd_add_unit_test(test_bonded_dataset test_bonded_dataset.cu)
 add_library(gpumd_nep_bonded_test_support STATIC
@@ -86,6 +89,7 @@ set_tests_properties(unit.test_bonded_nep_compiled PROPERTIES
     SKIP_REGULAR_EXPRESSION "^SKIP: no accessible GPU")
 
 set(GPUMD_GPU_UNIT_TESTS
+    unit.test_rigid_body_initialization
     unit.test_quaternion_gpu
     unit.test_gpu_vector
     unit.test_harmonic_bond_data
