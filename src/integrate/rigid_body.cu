@@ -289,6 +289,11 @@ void RigidBodySystem::create_bodies(int number_of_atoms, const std::vector<int>&
     atom_to_body[member.second] = body;
   }
 
+  // 单 bead 分子走普通积分；直接传入的非负标签不得形成单成员 body。
+  for (const auto& g : geometry) {
+    require(g.natoms > 1, "Single-bead molecules must use body label -1.");
+  }
+
   // 统一分配；state/load/displace 尚未填入物理状态，当前不能读取其内容。
   geometry_.resize(number_of_bodies);
   state_.resize(number_of_bodies);
@@ -347,8 +352,8 @@ void RigidBodySystem::initialize_impl(
     std::vector<double> positions(3 * count);
     std::vector<BodyGeometry> geometry(number_of_bodies_);
     std::vector<int> members(number_of_members_);
-    geometry_.copy_to_host(geometry.data());
-    member_atoms_.copy_to_host(members.data());
+    geometry_.copy_to_host(geometry.data());// 存在重复的数据传输。考虑让 create_bodies() 直接返回或保留 CPU 端的拓扑数据，避免上传后立即下载
+    member_atoms_.copy_to_host(members.data());// 构造阶段，问题不大
     if (supplied_positions) {
       positions = *supplied_positions;
     } else {
@@ -432,13 +437,6 @@ void RigidBodySystem::setup_bodies_static(
     require(finite(center), "Non-finite body center.");
     cell.wrap(center);
     state.xcm = center;
-    state.quat = {1, 0, 0, 0};
-    if (g.natoms == 1) {
-      g.inertia = {0, 0, 0};
-      g.rotational_dof = 0;
-      displace[g.first_member] = {0, 0, 0};
-      continue;
-    }
     double tensor[3][3] = {};
     std::vector<Vec3> relative(g.natoms);
     for (int k = 0; k < g.natoms; ++k) {
@@ -496,12 +494,10 @@ void RigidBodySystem::setup_bodies_dynamic(const Atom& atom)
     state.vcm = {momentum.x / g.mass, momentum.y / g.mass, momentum.z / g.mass};
     require(finite(state.vcm), "Overflow computing center velocity.");
     Vec3 L{0, 0, 0};
-    if (g.rotational_dof != 0) {
-      for (int j = g.first_member; j < g.first_member + g.natoms; ++j) {
-        const int i = members[j];
-        const Vec3 r = rotate(state.quat, displace[j]);
-        L = add(L, cross(r, scale(subtract(read_vec(velocities, i, N), state.vcm), masses[i])));
-      }
+    for (int j = g.first_member; j < g.first_member + g.natoms; ++j) {
+      const int i = members[j];
+      const Vec3 r = rotate(state.quat, displace[j]);
+      L = add(L, cross(r, scale(subtract(read_vec(velocities, i, N), state.vcm), masses[i])));
     }
     require(finite(L), "Overflow computing rigid angular momentum.");
     state.conjqm = angular_momentum_to_conjqm(state.quat, L);

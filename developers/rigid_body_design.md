@@ -1,7 +1,8 @@
 # Variable-member rigid bodies: implementation guide
 
 The initial target is a few hundred molecules mixing one-bead and three-bead
-representations. Each body can contain any positive number of point-mass beads;
+representations. Single-bead molecules are free particles (label -1), while
+multi-bead groups form rigid bodies;
 the data layout does not impose a three-member limit.
 The rotational integrator is Miller's symmetric five-stage
 splitting, not a general interchangeable-integrator abstraction.
@@ -47,7 +48,8 @@ has been connected yet.
 ## Upper-layer body labels
 
 Use a dedicated existing XYZ grouping method to identify molecules. All beads
-in a molecule share a label; each single-bead molecule has its own label. Do not
+in a molecule share a label; single-bead molecules each have a unique XYZ label,
+which the adapter converts to -1. Do not
 use species or thermostat-region labels: that would combine many molecules into
 one rigid body. For example, a four-bead model with one point molecule and one
 three-bead molecule can use:
@@ -71,17 +73,19 @@ After the normal XYZ reader has populated Run::group, the upper layer can use:
 const int molecule_grouping_method = 0; // index of the selected grouping method
 auto body_labels =
   rigid_body_labels_from_group(group, molecule_grouping_method, atom.number_of_atoms);
-// body_labels is {0, 1, 1, 1}; the array index is the Atom index.
+// body_labels is {-1, 1, 1, 1}; the array index is the Atom index.
 RigidBodySystem rigid;
 rigid.initialize(atom, box, body_labels);
 ```
 
-The adapter copies HOST labels and validates the method index and array length.
+The adapter validates the method index, array length and nonnegative XYZ labels,
+counts members, and converts singleton groups to -1 in a copied HOST array.
 It does not initialize dynamics or add a run.in keyword. In the future ensemble,
 keep rigid as a member with simulation lifetime rather than this local example.
 The current XYZ reader permits only nonnegative group labels, so this adapter
-manages every bead. For unmanaged beads, construct labels explicitly, for example
-`std::vector<int> body_labels = {0, 1, 1, 1, -1};` for a five-bead system.
+uses its own -1 labels for singleton groups without modifying Group. For other
+unmanaged beads, construct labels explicitly, for example
+`std::vector<int> body_labels = {-1, 1, 1, 1, -1};` for a five-bead system.
 
 ## Reading the initialization implementation
 
@@ -89,7 +93,8 @@ Read the named methods in this order in src/integrate/rigid_body.cu:
 
 1. initialize_impl validates sizes, labels and the box, then calls create_bodies.
 2. create_bodies sorts (label, Atom index) pairs, builds contiguous member ranges
-   and the reverse mapping, and allocates the body/member GPU arrays.
+   and the reverse mapping, rejects single-member bodies before GPU allocation,
+   then allocates the body/member GPU arrays.
 3. initialize_impl prepares coherent coordinates as described below.
 4. setup_bodies_static reads current DEVICE masses, computes M and the center
    relative to a reference bead, then builds the symmetric inertia tensor.
@@ -103,7 +108,9 @@ Read the named methods in this order in src/integrate/rigid_body.cu:
 
 Static initialization rejects multi-bead geometries if the smallest principal
 moment is <= 1e-10 times the largest; coincident bodies are also rejected.
-Single-bead bodies are handled separately with zero inertia and identity q.
+Single-member nonnegative body labels are rejected; use -1 for free particles.
+Two point-mass beads necessarily form a linear body and are rejected by the
+current inertia check as well.
 
 For a reviewable snapshot after initialize:
 
@@ -156,11 +163,11 @@ have R = sum(natoms) elements, excluding unmanaged beads. Member ranges are
 disjoint and together cover [0,R). No per-body allocation or variable-length
 array is embedded in a GPU record. Each Atom index appears at most once.
 
-For example, bodies of sizes 1,3,1 have first_member values 0,1,4 and use five
-entries in each member array. Body labels need not be contiguous: initialization
-compresses labels in ascending order and sorts members by Atom index. A
-HostSnapshot copies both body records and the member arrays, so the range
-indices can still be interpreted on the host.
+For example, rigid bodies of sizes 3 and 4 have first_member values 0 and 3
+and use seven entries in each member array. Free beads are excluded. Body labels
+need not be contiguous: initialization compresses labels in ascending order and
+sorts members by Atom index. A HostSnapshot copies both body records and member
+arrays, so range indices remain interpretable on the host.
 
 The only authoritative rotational state
 is normalized quat plus tangent conjugate momentum conjqm. Angular momentum,
@@ -204,22 +211,18 @@ may be fused within an integration-stage kernel. This is a starting design,
 not a measured performance claim; use representative end-to-end timing before
 changing execution strategies or adopting strict SoA.
 
-## Single-bead molecules
+## Free particles and supported bodies
 
-Assign a nonnegative body label to a single-bead molecule to manage it as a point
-body through the same translation path. Label -1 instead means an unmanaged
-bead, updated by the ordinary bead integrator; never integrate it twice.
+Single-bead molecules use label -1 and follow the ordinary particle integrator.
+They have no body state, geometry or member displacement in RigidBodySystem.
+The upper-layer XYZ adapter maps single-member groups to -1 automatically; the
+manager rejects singleton bodies passed directly with nonnegative labels.
 
-A single-bead body has mass m, xcm equal to the wrapped bead position,
-vcm equal to its velocity, displace zero, inertia zero, and rotational_dof zero.
-Use identity quat and zero conjqm. Its body force is the bead force, torque is
-zero, and its velocity reconstruction is vcm. Skip all rotational kicks/drifts;
-there are three translational DOF and no rotational DOF. These are implementation
-contracts. The initialization part is implemented; runtime kernels remain unwritten.
-
-Multiple beads may also form linear or coincident geometries. Do not infer
-rotational DOF solely from natoms. Initialization explicitly rejects these
-multi-bead degeneracies in this version.
+The current initializer supports only nonlinear multi-bead bodies, with three
+rotational DOF. Linear, near-linear and coincident bodies are rejected by the
+principal-inertia check. Two point-mass beads are necessarily linear, so at
+least three noncollinear beads are needed in the current version. Member count
+alone does not establish that the body is nonlinear.
 
 ## Miller conventions
 
@@ -231,7 +234,6 @@ multi-bead degeneracies in this version.
   2 dt q (0,R(q)^T torque_space). Each half kick receives dt/2.
 - Free drift uses axes 3,2,1,2,3 with durations dt/2,dt/2,dt,dt/2,dt/2.
 - Time is GPUMD's internal time, not an unconverted value in femtoseconds.
-- Single-bead bodies bypass rotational integration entirely.
 - Zero-inertia axes are skipped by the existing free-flow function. That alone
   does not validate multi-bead linear/coincident geometries: test these separately
   or explicitly reject them in the first initialization version.
@@ -257,8 +259,8 @@ device separate compilation. RigidBodySystem dynamics and full-system NVE are
 not implemented or validated yet; the math tests do not establish linear-body
 integration correctness.
 
-The initialization test checks single-bead and boundary-straddling three-bead
-bodies, known principal moments, unequal masses, triclinic/mixed PBC, rigid
+The initialization test checks singleton-to-free label conversion, explicit
+singleton rejection and boundary-straddling three-bead bodies, known principal moments, unequal masses, triclinic/mixed PBC, rigid
 velocity projection, repeated eigenvalues, 24 spatial orientations, explicit
 large-body geometry, unmanaged/empty systems, invalid input, independence from
 Atom's image buffer and cleanup after failure. It reads back real GPU state and deliberately supplies

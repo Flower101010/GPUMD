@@ -2,10 +2,11 @@
 
 #include "model/group.cuh"
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
 
 // 上层选择一个专门表示分子归属的 grouping method，不要使用物种/温控分组。
-// 每个 group 是一个 body；单 bead 分子也必须有独立编号。
+// 每个多成员 group 是一个 body；单成员 group 自动转换成自由 bead（-1）。
 // 返回 HOST 标签，数组顺序与 Atom 索引一致；不创建刚体或修改 Group。
 inline std::vector<int> rigid_body_labels_from_group(
   const std::vector<Group>& groups, int grouping_method, int number_of_atoms)
@@ -18,13 +19,18 @@ inline std::vector<int> rigid_body_labels_from_group(
   if (labels.size() != static_cast<std::size_t>(number_of_atoms)) {
     throw std::invalid_argument("Rigid body group labels must contain one entry per atom.");
   }
+  std::unordered_map<int, int> member_counts;
   for (int label : labels) {
     if (label < 0) {
       throw std::invalid_argument("XYZ group labels must be nonnegative.");
     }
+    ++member_counts[label];
   }
-  return labels;
+  std::vector<int> body_labels = labels;
+  for (int& label : body_labels) {
+    if (member_counts.at(label) == 1) label = -1;
+  }
+  return body_labels;
 }
 
-// 当前 XYZ group 读取器不接受 -1，因此上述入口把所有 bead 都交给刚体模块。
-// 若需要未管理 bead，上层可自行构建 vector<int>，用 -1 表示它们，再传给 initialize。
+// 若还有其他未管理 bead，上层可自行构建 vector<int>，用 -1 表示它们。

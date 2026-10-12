@@ -16,10 +16,10 @@ public:
   struct BodyGeometry {
     int id;                // 非负外部标签，区别于数组中的内部 body 索引
     int first_member;      // 扁平成员数组起点
-    int natoms;            // 成员数 >= 1；范围 [first_member, first_member+natoms)
+    int natoms;            // 成员数 >= 2；范围 [first_member, first_member+natoms)
     double mass;           // 总质量 M；sum(m_i*s_i)=0
     Vec3 inertia;          // 主惯量，有限/非负；数值零轴精确存 0
-    int rotational_dof;    // 按惯量秩确定，线性为 2，非线性为 3，重合点状为 0
+    int rotational_dof;    // 按惯量秩确定；当前仅支持非线性刚体（3）
   };
 
   struct BodyState {
@@ -83,6 +83,7 @@ public:
 
   // 从当前 Atom 坐标按参考 bead 最小镜像展开紧凑分子，再构建刚体。
   // 每个周期方向的成员分数坐标跨度必须 < 1/2；body_labels 中 -1 为自由 bead。
+  // 非负标签至少对应两个 bead；单 bead 分子必须标记为 -1。
   void initialize(
     const Atom& atom,
     const Box& box,
@@ -106,7 +107,6 @@ public:
   // 1/3 bead 混合先采用每线程一个 body；以后长 body 可另选 warp/block 归约。
   // F=sum(f_i)，tau=sum((R(q)*s_i) x f_i)，每次覆盖旧载荷。
   // 力与当前位姿必须对应；不修改 Atom 的力/能量/virial。
-  // 单 bead 的合力就是该 bead 的力，绕质心力矩恒为零。
   void compute_forces_and_torques(const Atom& atom);
 
   // 质心漂移后调用：s=H^-1*xcm，周期方向 s-=floor(s)，再转换回空间坐标。
@@ -119,7 +119,6 @@ public:
   void rebuild_positions(Atom& atom, const Box& box);
 
   // 有转动自由度时从 quat/conjqm 派生空间 L/omega，v_i=vcm+omega x R(q)*s_i。
-  // 单 bead 直接写回 vcm，不做转动表示转换。
   // 只写刚体成员；不缓存 angmom/omega/主轴，避免额外同步 kernel。
   void rebuild_velocities(Atom& atom);
 

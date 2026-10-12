@@ -1,11 +1,13 @@
 #include "integrate/rigid_body.cuh"
 #include "model/atom.cuh"
 #include "model/box.cuh"
+#include "model/rigid_body_input.cuh"
 #include <cassert>
 #include <cmath>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <string>
 
 using namespace rigid_math;
 
@@ -135,23 +137,23 @@ int main()
   populate(atom,{2,1,1,1,-1},{{10.1,-0.2,31},{9.8,2,3},{0.2,2,3},{9.8,2.4,3},{nan,nan,nan}},
            {{0.1,0.2,0.3},velocity[0],velocity[1],velocity[2],{nan,nan,nan}});
   const auto original_positions = soa(std::vector<Vec3>{{10.1,-0.2,31},{9.8,2,3},{0.2,2,3},{9.8,2.4,3},{nan,nan,nan}});
-  rigid.initialize(atom,box,{10,20,20,20,-1});
-  assert(rigid.initialized() && rigid.number_of_bodies() == 2 && rigid.number_of_members() == 4);
+  std::vector<Group> groups(1);
+  groups[0].cpu_label = {10,20,20,20,99};
+  const auto labels = rigid_body_labels_from_group(groups,0,5);
+  assert(labels == std::vector<int>({-1,20,20,20,-1}));
+  assert(groups[0].cpu_label == std::vector<int>({10,20,20,20,99}));
+  rigid.initialize(atom,box,labels);
+  assert(rigid.initialized() && rigid.number_of_bodies() == 1 && rigid.number_of_members() == 3);
   RigidBodySystem::HostSnapshot snapshot;
   rigid.copy_to_host(snapshot);
-  assert(snapshot.member_atoms == std::vector<int>({0,1,2,3}));
-  const auto& point = snapshot.bodies[0];
-  near(point.geometry.mass,2); assert(point.geometry.rotational_dof == 0);
-  near(point.state.xcm,{0.1,9.8,1});
-  near(point.state.vcm,{0.1,0.2,0.3}); near(dot(point.state.conjqm,point.state.conjqm),0);
-  near(point.state.quat.w,1);
-  check_body(snapshot,1,box,triangle,{1,1,1},V,omega);
-  near(snapshot.bodies[1].geometry.inertia,{0.16/3,0.16,0.64/3});
+  assert(snapshot.member_atoms == std::vector<int>({1,2,3}));
+  check_body(snapshot,0,box,triangle,{1,1,1},V,omega);
+  near(snapshot.bodies[0].geometry.inertia,{0.16/3,0.16,0.64/3});
   std::vector<int> reverse(5);
   const RigidBodySystem& const_rigid = rigid;
   const auto view = const_rigid.device_view();
   CHECK(gpuMemcpy(reverse.data(),view.atom_to_body,5*sizeof(int),gpuMemcpyDeviceToHost));
-  assert(reverse == std::vector<int>({0,1,1,1,-1}));
+  assert(reverse == std::vector<int>({-1,0,0,0,-1}));
   std::vector<double> after(15);
   atom.position_per_atom.copy_to_host(after.data());
   for (int i = 0; i < 15; ++i)
@@ -217,6 +219,8 @@ int main()
     try { rigid.initialize(atom,box,labels); } catch (const std::invalid_argument&) { caught = true; }
     assert(caught && !rigid.initialized() && rigid.number_of_bodies() == 0);
   };
+  populate(atom,{1,1},{{1,1,1},{2,1,1}},{{0,0,0},{0,0,0}});
+  fails({0,0}); // 两个点质量 bead 必然组成线性刚体，当前仍明确拒绝。
   populate(atom,{1,1,1},{{1,1,1},{2,1,1},{3,1,1}},{{0,0,0},{0,0,0},{0,0,0}});
   fails({0,0,0}); // 线性
   populate(atom,{1,1,1},{{1,1,1},{1,1,1},{1,1,1}},{{0,0,0},{0,0,0},{0,0,0}});
@@ -226,20 +230,32 @@ int main()
   fails({-2,0,0}); fails({0});
   populate(atom,{0,1,1},{{1,1,1},{2,1,1},{1,2,1}},{{0,0,0},{0,0,0},{0,0,0}});
   fails({0,0,0});
-  populate(atom,{1},{{1,1,1}},{{nan,0,0}}); fails({0});
+  // 非线性几何确保这里失败的原因确实是速度，而非单成员检查。
+  populate(atom,{1,1,1},{{1,1,1},{2,1,1},{1,2,1}},{{nan,0,0},{0,0,0},{0,0,0}});
+  fails({0,0,0});
   populate(atom,{1},{{1,1,1}},{{0,0,0}});
-  box.cpu_h[8] = 0; fails({0}); box = orthogonal();
-  populate(atom,{1},{{10.2,1,1}},{{0,0,0}});
+  // 单成员非负标签必须在分配 body GPU 数组之前被拒绝。
+  bool singleton_rejected = false;
+  try { rigid.initialize(atom,box,{0}); }
+  catch (const std::invalid_argument& error) {
+    singleton_rejected = std::string(error.what()).find("Single-bead") != std::string::npos;
+  }
+  assert(singleton_rejected && !rigid.initialized());
+  box.cpu_h[8] = 0; fails({-1}); box = orthogonal();
+  populate(atom,{1,1,1},{{10.2,1,1},{10.6,1,1},{10.2,1.4,1}},{{0,0,0},{0,0,0},{0,0,0}});
   // 刚体初始化与 Atom 的跨盒历史无关，连该缓冲区尺寸也不依赖。
   atom.position_image.resize(1, std::numeric_limits<int>::max());
-  rigid.initialize(atom,box,{0});
+  rigid.initialize(atom,box,{0,0,0});
   rigid.copy_to_host(snapshot);
-  near(snapshot.bodies[0].state.xcm,{0.2,1,1});
+  near(snapshot.bodies[0].state.xcm,{1.0/3,1.0+0.4/3,1});
   int unchanged_image = 0;
   atom.position_image.copy_to_host(&unchanged_image);
   assert(unchanged_image == std::numeric_limits<int>::max());
   atom.position_image.clear();
-  rigid.initialize(atom,box,{-1});
+  groups[0].cpu_label = {2,1000000,7};
+  const auto all_free = rigid_body_labels_from_group(groups,0,3);
+  assert(all_free == std::vector<int>({-1,-1,-1}));
+  rigid.initialize(atom,box,all_free);
   rigid.copy_to_host(snapshot);
   assert(rigid.initialized() && snapshot.bodies.empty() && snapshot.member_atoms.empty());
   populate(atom,{}, {}, {});
