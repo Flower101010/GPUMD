@@ -2,8 +2,10 @@
 
 Status: implementation updated, 2026-10-13. Unified translational Verlet,
 ensemble initialization, both integration stages and paired temperature/KE
-DOF handling and global constraint virial are implemented. Tests call the ensemble directly. run.in wiring
-and full NEP-driven MD validation remain unimplemented. This builds on
+DOF handling and global constraint virial are implemented. The run.in entry and
+compatibility guards are now connected, with compilation checked only; runtime
+validation of this input path is assigned to the user. Full NEP-driven MD
+validation remains pending. This builds on
 `rigid_body_design.md` and current source interfaces.
 
 ## Goal and first validation system
@@ -209,11 +211,12 @@ branches in Run and measurements.
 
 Add `rigid_grouping_method = -1` to `Integrate`. `parse_ensemble` resets it before
 each new ensemble selection; `ensemble rigid_nve k` sets it after validation.
-`Integrate::finalize` also resets it. The case-0 construction chooses ordinary
-NVE for -1 and rigid NVE otherwise. Use a typed temporary owner to call the
-rigid initialization method, then transfer it to the existing
-`std::unique_ptr<Ensemble>`. A new virtual initialization hook on every ensemble
-is unnecessary.
+Like `type`, this selection persists through `Integrate::finalize`; a subsequent
+ensemble command resets it. This avoids silently changing consecutive run blocks
+to ordinary NVE. The case-0 construction chooses ordinary NVE for -1 and rigid
+NVE otherwise. The existing unique_ptr owns the instance; a temporary typed
+pointer performs rigid initialization after shared Ensemble context fields are
+attached. A new virtual initialization hook on every ensemble is unnecessary.
 
 For each `run`, the current Integrate lifecycle constructs a fresh ensemble.
 The first version therefore reconstructs body state from current bead x/v at
@@ -278,8 +281,8 @@ validation boundary below before using other measurement interfaces.
 3. Paired temperature/KE handling and output metadata are implemented. Ensemble
    guards reject incorrect stage order, changed dt, fixed/moving groups, box
    deformation, array mismatches and unsupported rigid unwrapped storage.
-   Input selection and Run-owned compatibility guards remain to implement.
-   Build and inspect the wired executable after those changes.
+   Input selection and Run-owned compatibility guards are now implemented and
+   the executable compiles. Input/runtime testing is left to the user.
 4. Run the agreed free-particle/three-bead-mixture validation, then connect the
    same ensemble to NEP for integration validation.
 
@@ -442,11 +445,42 @@ Current boundary: global thermo pressure after compute2 is corrected; Atom
 per-atom virial is still the interaction contribution. Direct calls to the base
 find_thermo only perform its raw reduction. In particular dump_observer observe
 recomputes alternate model forces and raw thermo, so it is not compatible with
-cached main-model constraint virial. The future input/Run preflight must reject
-that combination until a model-specific observer design exists. run.in selection,
-NEP-driven pressure comparison, and per-atom constraint stress remain separate work.
+cached main-model constraint virial. The connected Run preflight rejects that
+combination until a model-specific observer design exists. End-to-end input
+validation, NEP-driven pressure comparison and per-atom constraint stress remain
+separate work.
 
 The updated gpumd executable builds and links. CTest passes the six targeted
 tests (quaternion host/GPU, rigid initialization/runtime/translation, and the
 new ensemble test). CUDA Compute Sanitizer memcheck on the new ensemble test
 reports zero errors.
+
+## Input connection and user testing handoff (2026-10-13)
+
+`ensemble rigid_nve k` validates a zero-based molecule-grouping method and keeps
+the existing type-0 force/integration path. It sets otherwise unused temperature
+target fields to zero; temperature-dependent NEP models are explicitly rejected.
+The rigid initialization runs before the first bead force evaluation. Runtime
+logs report body/free-particle counts and thermal DOFs. No main-loop stage order
+or NEP force interface is changed.
+
+Run preflight rejects adaptive timesteps, periodic bead velocity corrections,
+unwrapped-position tracking, and actions not yet adapted. Integrate rejects
+fixed/moving groups and deformation. The initial supported action list is
+dump_thermo, dump_xyz, dump_netcdf (if compiled), dump_restart, compute_rdf,
+compute_adf, compute_angular_rdf and compute_orientorder. Wrapped dump_xyz now
+enables image/unwrapped tracking only when that quantity is explicitly requested;
+its earlier unconditional allocation would have blocked all rigid XYZ output.
+A new plain time_step command clears an earlier adaptive distance limit.
+
+Consecutive run commands retain the selection, but each run reconstructs a new
+rigid manager from bead x/v, as described above. Ordinary ensemble commands
+reset the rigid selection. Syntax and output conventions are documented in
+doc/gpumd/input_parameters/ensemble_standard.rst.
+
+For THIS input-connection change, only gpumd compilation/linking and diff
+whitespace checks were performed. No CTest, runtime simulation or submitted
+validation task was run, at the user's request. Earlier unit-test results apply
+to the previously implemented components, not acceptance of the newly wired
+run.in path. The executable is build/gpumd; the user will perform the runtime
+and physical tests.

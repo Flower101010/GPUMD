@@ -78,12 +78,13 @@ and GPU_Vector ownership rather than duplicate clear/free work.
 The proposed ensemble interfaces, reuse of molecule grouping, initialization
 ordering and staged implementation plan are in
 [`rigid_nve_interface_design.md`](rigid_nve_interface_design.md). That document
-is a design proposal, not an implemented run.in feature.
+records the implemented interfaces and the validation boundary.
 
 Ensemble_Rigid_NVE initialization, unified translational Verlet and both Miller
 integration stages are implemented and tested with an interacting free-particle /
 three-bead-triangle fixture. Temperature and KE use matched rigid DOF handling.
-run.in selection and full NEP-driven NVE validation remain separate work.
+run.in selection is connected via ensemble rigid_nve <grouping_method>.
+End-to-end input and full NEP-driven NVE validation remain separate work.
 The manager does not calculate interactions or select timestep/integration stages.
 The rigid ensemble now computes a separate per-body constraint virial and adds
 it to the six global thermo pressure components. The interaction force/virial
@@ -91,8 +92,8 @@ arrays remain unchanged. Per-atom constraint stress and observer/multiple-potent
 compatibility remain outside the implemented interface.
 
 Before the first MD step, initialize, reconstruct positions and projected
-velocities, evaluate bead forces, and aggregate body loads. No run.in
-rigid-ensemble keyword has been connected yet.
+velocities, evaluate bead forces, and aggregate body loads. Integrate initialization
+now performs the rigid setup before Run evaluates its initial forces.
 
 ## Upper-layer body labels
 

@@ -76,6 +76,7 @@ Run simulation according to the inputs in the run.in file.
 #include "utilities/read_file.cuh"
 #include "velocity.cuh"
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <exception>
 #include <sstream>
@@ -247,6 +248,33 @@ void Run::compute_force()
 
 void Run::perform_a_run()
 {
+  if (integrate.rigid_grouping_method >= 0) {
+    if (!std::isfinite(time_step) || time_step <= 0.0 || max_distance_per_step > 0.0) {
+      PRINT_INPUT_ERROR("rigid_nve requires a positive fixed time_step without max_distance_per_step.");
+    }
+    if (velocity.do_velocity_correction) {
+      PRINT_INPUT_ERROR("correct_velocity is not supported with rigid_nve; bead and body states would diverge.");
+    }
+    if (atom.unwrapped_position.size()) {
+      PRINT_INPUT_ERROR("rigid_nve does not track unwrapped positions; use wrapped trajectory output.");
+    }
+    for (const auto& potential : force.potentials) {
+      if (potential->nep_model_type == 3) {
+        PRINT_INPUT_ERROR("rigid_nve currently supports temperature-independent potentials only.");
+      }
+    }
+    // 首版只开放已知不会修改状态、重算 thermo 或依赖原子约束应力的输出/结构测量。
+    // 新 action 必须先审查，再加入此列表，避免无声覆盖刚体状态或约束压力。
+    for (const auto& action : measure.actions) {
+      const std::string& name = action->action_name;
+      if (name != "dump_thermo" && name != "dump_xyz" && name != "dump_netcdf" &&
+          name != "dump_restart" && name != "compute_rdf" && name != "compute_adf" &&
+          name != "compute_angular_rdf" && name != "compute_orientorder") {
+        printf("Unsupported action with rigid_nve: %s\n", name.c_str());
+        PRINT_INPUT_ERROR("This action has not been adapted to rigid_nve; use its supported outputs/structural measurements.");
+      }
+    }
+  }
   integrate.initialize(time_step, atom, box, group, thermo, number_of_steps);
   measure.pre_run(number_of_steps, time_step, integrate, group, atom, box, force);
 
@@ -710,6 +738,7 @@ void Run::parse_time_step(const char** param, int num_param)
   }
   printf("Time step for this run is %g fs.\n", time_step);
   time_step /= TIME_UNIT_CONVERSION;
+  max_distance_per_step = -1.0; // 新的固定步长命令取消先前的自适应设置
   if (num_param == 3) {
     if (!is_valid_real(param[2], &max_distance_per_step)) {
       PRINT_INPUT_ERROR("max distance per step should be a real number.\n");

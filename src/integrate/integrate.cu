@@ -29,6 +29,7 @@ The driver class for the various integrators.
 #include "ensemble_npt_qtb.cuh"
 #include "ensemble_npt_scr.cuh"
 #include "ensemble_nve.cuh"
+#include "ensemble_rigid_nve.cuh"
 #include "ensemble_pimd.cuh"
 #include "ensemble_qtb.cuh"
 #include "ensemble_ti.cuh"
@@ -45,6 +46,7 @@ The driver class for the various integrators.
 #include "utilities/gpu_macro.cuh"
 #include "utilities/read_file.cuh"
 #include <cstring>
+#include <exception>
 
 void Integrate::initialize(
   double time_step,
@@ -56,6 +58,11 @@ void Integrate::initialize(
 {
   this->total_steps = total_steps;
   int number_of_atoms = atom.number_of_atoms;
+  if (rigid_grouping_method >= 0 &&
+      (type != 0 || fixed_group >= 0 || move_group >= 0 || deform_x || deform_y ||
+       deform_z || deform_xy || deform_xz || deform_yz)) {
+    PRINT_INPUT_ERROR("rigid_nve requires fixed-box NVE without fix, move, or deform.");
+  }
   if (move_group >= 0) {
     if (fixed_group < 0) {
       PRINT_INPUT_ERROR("It is not allowed to have moving group but no fixed group.");
@@ -73,9 +80,15 @@ void Integrate::initialize(
   }
 
   // determine the integrator
+  Ensemble_Rigid_NVE* rigid_ensemble = nullptr;
   switch (type) {
     case 0: // NVE
-      ensemble.reset(new Ensemble_NVE(type));
+      if (rigid_grouping_method >= 0) {
+        rigid_ensemble = new Ensemble_Rigid_NVE(rigid_grouping_method);
+        ensemble.reset(rigid_ensemble);
+      } else {
+        ensemble.reset(new Ensemble_NVE(type));
+      }
       break;
     case 1: // NVT-Berendsen
       ensemble.reset(
@@ -304,10 +317,22 @@ void Integrate::initialize(
   ensemble->fixed_group = fixed_group;
   ensemble->fixed_grouping_method = fixed_grouping_method;
   ensemble->move_grouping_method = move_grouping_method;
+  if (rigid_ensemble) {
+    try {
+      rigid_ensemble->initialize(atom, box, group);
+    } catch (const std::exception& error) {
+      PRINT_INPUT_ERROR(error.what());
+    }
+    printf("Rigid NVE initialized: %d bodies, %d free particles, %d thermal DOF.\n",
+           rigid_ensemble->rigid_bodies().number_of_bodies(),
+           number_of_atoms - rigid_ensemble->rigid_bodies().number_of_members(),
+           rigid_ensemble->thermal_degrees_of_freedom());
+  }
 }
 
 void Integrate::finalize()
 {
+  // 如 type 一样保留 ensemble 选择；下一条 ensemble 命令才重置刚体模式。
   fixed_group = -1; // no group has an index of -1
   move_group = -1;
   fixed_grouping_method = 0;
@@ -376,6 +401,10 @@ void Integrate::parse_ensemble(
   std::vector<Group>& group,
   GPU_Vector<double>& thermo)
 {
+  if (num_param < 2) {
+    PRINT_INPUT_ERROR("ensemble requires an integrator name.");
+  }
+  rigid_grouping_method = -1;
   qtb_f_max = 200.0;
   qtb_n_f = 100;
   use_eco_pimd = false;
@@ -390,6 +419,17 @@ void Integrate::parse_ensemble(
     if (num_param != 2) {
       PRINT_INPUT_ERROR("ensemble nve should have 0 parameter.");
     }
+  } else if (strcmp(param[1], "rigid_nve") == 0) {
+    type = 0;
+    if (num_param != 3) {
+      PRINT_INPUT_ERROR("ensemble rigid_nve requires one molecule grouping-method index.");
+    }
+    if (!is_valid_int(param[2], &rigid_grouping_method) || rigid_grouping_method < 0 ||
+        static_cast<std::size_t>(rigid_grouping_method) >= group.size()) {
+      PRINT_INPUT_ERROR("rigid_nve requires a valid nonnegative molecule grouping-method index.");
+    }
+    // 该模式无温度目标/斜坡；固定这些字段，避免主循环读取未初始化值。
+    temperature = temperature1 = temperature2 = 0.0;
   } else if (strcmp(param[1], "nvt_ber") == 0) {
     type = 1;
     if (num_param != 5) {
@@ -1098,7 +1138,10 @@ void Integrate::parse_ensemble(
 
   switch (type) {
     case 0:
-      printf("Use NVE ensemble for this run.\n");
+      if (rigid_grouping_method >= 0)
+        printf("Use rigid NVE ensemble with molecule grouping method %d.\n", rigid_grouping_method);
+      else
+        printf("Use NVE ensemble for this run.\n");
       break;
     case 1:
       printf("Use NVT ensemble for this run.\n");
