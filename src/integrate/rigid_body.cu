@@ -77,30 +77,35 @@ struct Cell {
       require(std::isfinite(inv[i]), "Non-finite inverse box matrix.");
     }
   }
-  Vec3 fractional(Vec3 v) const
+  __host__ __device__ Vec3 fractional(Vec3 v) const
   {
     return {
       inv[0] * v.x + inv[1] * v.y + inv[2] * v.z,
       inv[3] * v.x + inv[4] * v.y + inv[5] * v.z,
       inv[6] * v.x + inv[7] * v.y + inv[8] * v.z};
   }
-  Vec3 cartesian(Vec3 v) const
+  __host__ __device__ Vec3 cartesian(Vec3 v) const
   {
     return {
       h[0] * v.x + h[1] * v.y + h[2] * v.z,
       h[3] * v.x + h[4] * v.y + h[5] * v.z,
       h[6] * v.x + h[7] * v.y + h[8] * v.z};
   }
-  void wrap(Vec3& v) const
+  __host__ __device__ Vec3 wrapped(Vec3 v) const
   {
     Vec3 f = fractional(v);
-    require(finite(f), "Non-finite fractional coordinate.");
-    const double k[3] = {
-      periodic[0] ? std::floor(f.x) : 0,
-      periodic[1] ? std::floor(f.y) : 0,
-      periodic[2] ? std::floor(f.z) : 0};
-    // 用包装后的分数坐标恢复 Cartesian 坐标，不保留跨盒计数。
-    v = cartesian({f.x - k[0], f.y - k[1], f.z - k[2]});
+    if (periodic[0])
+      f.x -= floor(f.x);
+    if (periodic[1])
+      f.y -= floor(f.y);
+    if (periodic[2])
+      f.z -= floor(f.z);
+    return cartesian(f);
+  }
+  void wrap(Vec3& v) const
+  {
+    require(finite(fractional(v)), "Non-finite fractional coordinate.");
+    v = wrapped(v);
     require(finite(v), "Non-finite wrapped coordinate.");
   }
 };
@@ -215,13 +220,74 @@ Quaternion axes_to_quaternion(const Vec3 axes[3])
   }
   return q;
 }
+// 运行时只在 DEVICE 上读写：每线程一个 body，成员范围互不重叠。
+__device__ Vec3 read_device_vec(const double* values, int i, int N)
+{
+  const std::size_t index = static_cast<std::size_t>(i), count = static_cast<std::size_t>(N);
+  return {values[index], values[index + count], values[index + 2 * count]};
+}
+__device__ void write_device_vec(double* values, int i, int N, Vec3 v)
+{
+  const std::size_t index = static_cast<std::size_t>(i), count = static_cast<std::size_t>(N);
+  values[index] = v.x;
+  values[index + count] = v.y;
+  values[index + 2 * count] = v.z;
+}
+__global__ void sum_body_loads(
+  RigidBodySystem::ConstDeviceView view, const double* forces, RigidBodySystem::BodyLoad* loads)
+{
+  const int b = blockIdx.x * blockDim.x + threadIdx.x;
+  if (b >= view.number_of_bodies)
+    return;
+  const auto& g = view.geometry[b];
+  const Quaternion q = view.state[b].quat;
+  Vec3 force{0, 0, 0}, torque{0, 0, 0};
+  for (int j = g.first_member; j < g.first_member + g.natoms; ++j) {
+    const Vec3 f = read_device_vec(forces, view.member_atoms[j], view.number_of_atoms);
+    const Vec3 r = rotate(q, view.member_displace[j]);
+    force = add(force, f);
+    torque = add(torque, cross(r, f));
+  }
+  loads[b] = {force, torque}; // 覆盖旧值，不累加上一时刻的载荷。
+}
+__global__ void wrap_body_centers(RigidBodySystem::DeviceView view, Cell cell)
+{
+  const int b = blockIdx.x * blockDim.x + threadIdx.x;
+  if (b < view.number_of_bodies)
+    view.state[b].xcm = cell.wrapped(view.state[b].xcm);
+}
+__global__ void
+reconstruct_positions(RigidBodySystem::ConstDeviceView view, Cell cell, double* positions)
+{
+  const int b = blockIdx.x * blockDim.x + threadIdx.x;
+  if (b >= view.number_of_bodies)
+    return;
+  const auto& g = view.geometry[b];
+  const auto& s = view.state[b];
+  for (int j = g.first_member; j < g.first_member + g.natoms; ++j) {
+    const Vec3 position = cell.wrapped(add(s.xcm, rotate(s.quat, view.member_displace[j])));
+    write_device_vec(positions, view.member_atoms[j], view.number_of_atoms, position);
+  }
+}
+__global__ void reconstruct_velocities(RigidBodySystem::ConstDeviceView view, double* velocities)
+{
+  const int b = blockIdx.x * blockDim.x + threadIdx.x;
+  if (b >= view.number_of_bodies)
+    return;
+  const auto& g = view.geometry[b];
+  const auto& s = view.state[b];
+  // conjugate(q)*p = (0,2*L_body)，直接求 omega，避免 L 在两个坐标系之间往返。
+  const Quaternion qp = multiply(conjugate(s.quat), s.conjqm);
+  const Vec3 omega =
+    rotate(s.quat, {0.5 * qp.x / g.inertia.x, 0.5 * qp.y / g.inertia.y, 0.5 * qp.z / g.inertia.z});
+  for (int j = g.first_member; j < g.first_member + g.natoms; ++j) {
+    const Vec3 r = rotate(s.quat, view.member_displace[j]);
+    write_device_vec(
+      velocities, view.member_atoms[j], view.number_of_atoms, add(s.vcm, cross(omega, r)));
+  }
+}
 } // namespace
 
-RigidBodySystem::RigidBodySystem() : initialized_(false), number_of_atoms_(0), number_of_bodies_(0)
-{
-}
-
-RigidBodySystem::~RigidBodySystem() { clear(); }
 void RigidBodySystem::clear()
 {
   geometry_.clear();
@@ -235,6 +301,8 @@ void RigidBodySystem::clear()
   number_of_atoms_ = 0;
   number_of_bodies_ = 0;
   number_of_members_ = 0;
+  initialized_box_ = {};
+  initialized_pbc_ = {};
 }
 void RigidBodySystem::initialize(
   const Atom& atom, const Box& box, const std::vector<int>& body_labels)
@@ -251,68 +319,37 @@ void RigidBodySystem::initialize(
   initialize_impl(atom, box, body_labels, &unwrapped_positions);
 }
 
-void RigidBodySystem::create_bodies(int number_of_atoms, const std::vector<int>& body_labels)
+RigidBodySystem::HostSnapshot RigidBodySystem::create_bodies(
+  int number_of_atoms, const std::vector<int>& body_labels, std::vector<int>& atom_to_body)
 {
-  // initialize 已检查长度和标签。收集 (外部 body 标签, Atom 索引)，忽略自由 bead。
   std::vector<std::pair<int, int>> labeled_atoms;
   labeled_atoms.reserve(number_of_atoms);
-  for (int i = 0; i < number_of_atoms; ++i) {
-    if (body_labels[i] >= 0) {
+  for (int i = 0; i < number_of_atoms; ++i)
+    if (body_labels[i] >= 0)
       labeled_atoms.emplace_back(body_labels[i], i);
-    }
-  }
-  // 标签升序，同一 body 内 Atom 索引升序；不按最大标签分配内存。
   std::sort(labeled_atoms.begin(), labeled_atoms.end());
 
-  const int number_of_members = static_cast<int>(labeled_atoms.size());
-  int number_of_bodies = 0;
-  for (int i = 0; i < number_of_members; ++i) {
-    if (i == 0 || labeled_atoms[i].first != labeled_atoms[i - 1].first) {
-      ++number_of_bodies;
+  HostSnapshot snapshot;
+  snapshot.member_atoms.reserve(labeled_atoms.size());
+  snapshot.member_displace.resize(labeled_atoms.size());
+  atom_to_body.assign(number_of_atoms, -1);
+  for (const auto& member : labeled_atoms) {
+    if (snapshot.bodies.empty() || member.first != snapshot.bodies.back().geometry.id) {
+      Body body{};
+      body.geometry.id = member.first;
+      body.geometry.first_member = static_cast<int>(snapshot.member_atoms.size());
+      snapshot.bodies.push_back(body);
     }
+    ++snapshot.bodies.back().geometry.natoms;
+    snapshot.member_atoms.push_back(member.second);
+    atom_to_body[member.second] = static_cast<int>(snapshot.bodies.size()) - 1;
   }
-
-  // natoms 从 0 开始计数；物理字段由后续静态初始化填写。
-  std::vector<BodyGeometry> geometry(number_of_bodies, BodyGeometry{});
-  std::vector<int> member_atoms(number_of_members);
-  std::vector<int> atom_to_body(number_of_atoms, -1);
-  int body = -1;
-  for (int i = 0; i < number_of_members; ++i) {
-    const auto& member = labeled_atoms[i];
-    if (i == 0 || member.first != labeled_atoms[i - 1].first) {
-      ++body;
-      geometry[body].id = member.first;
-      geometry[body].first_member = i;
-    }
-    ++geometry[body].natoms;
-    member_atoms[i] = member.second;
-    atom_to_body[member.second] = body;
-  }
-
-  // 单 bead 分子走普通积分；直接传入的非负标签不得形成单成员 body。
-  for (const auto& g : geometry) {
-    require(g.natoms > 1, "Single-bead molecules must use body label -1.");
-  }
-
-  // 统一分配；state/load/displace 尚未填入物理状态，当前不能读取其内容。
-  geometry_.resize(number_of_bodies);
-  state_.resize(number_of_bodies);
-  load_.resize(number_of_bodies);
-  member_atoms_.resize(number_of_members);
-  member_displace_.resize(number_of_members);
-  atom_to_body_.resize(number_of_atoms);
-  // 空数组跳过拷贝，避免空指针参与 GPU memcpy。
-  if (number_of_bodies > 0) {
-    geometry_.copy_from_host(geometry.data());
-    member_atoms_.copy_from_host(member_atoms.data());
-  }
-  if (number_of_atoms > 0) {
-    atom_to_body_.copy_from_host(atom_to_body.data());
-  }
-
+  for (const auto& body : snapshot.bodies)
+    require(body.geometry.natoms > 1, "Single-bead molecules must use body label -1.");
   number_of_atoms_ = number_of_atoms;
-  number_of_bodies_ = number_of_bodies;
-  number_of_members_ = number_of_members;
+  number_of_bodies_ = static_cast<int>(snapshot.bodies.size());
+  number_of_members_ = static_cast<int>(snapshot.member_atoms.size());
+  return snapshot;
 }
 
 void RigidBodySystem::initialize_impl(
@@ -343,58 +380,85 @@ void RigidBodySystem::initialize_impl(
         atom.position_per_atom.size() == 3 * count,
         "Rigid initialization requires current atom positions.");
     }
-    create_bodies(N, body_labels);
-    if (number_of_bodies_ == 0) {
-      initialized_ = true;
-      return;
-    }
+    std::vector<int> atom_to_body;
+    HostSnapshot snapshot = create_bodies(N, body_labels, atom_to_body);
 
-    std::vector<double> positions(3 * count);
-    std::vector<BodyGeometry> geometry(number_of_bodies_);
-    std::vector<int> members(number_of_members_);
-    geometry_.copy_to_host(geometry.data());// 存在重复的数据传输。考虑让 create_bodies() 直接返回或保留 CPU 端的拓扑数据，避免上传后立即下载
-    member_atoms_.copy_to_host(members.data());// 构造阶段，问题不大
-    if (supplied_positions) {
-      positions = *supplied_positions;
-    } else {
-      // 默认以参考 bead 最小镜像恢复紧凑分子的局部几何。
-      atom.position_per_atom.copy_to_host(positions.data());
-      for (int b = 0; b < number_of_bodies_; ++b) {
-        const auto& g = geometry[b];
-        const int reference = members[g.first_member];
-        const Vec3 anchor = read_vec(positions, reference, N);
-        require(finite(anchor), "Non-finite bead position.");
-        Vec3 low{0, 0, 0}, high{0, 0, 0};
-        for (int j = g.first_member; j < g.first_member + g.natoms; ++j) {
-          const int i = members[j];
-          const Vec3 position = read_vec(positions, i, N);
-          require(finite(position), "Non-finite bead position.");
-          Vec3 f = cell.fractional(subtract(position, anchor));
-          require(finite(f), "Non-finite relative bead coordinate.");
-          if (cell.periodic[0])
-            f.x -= std::floor(f.x + 0.5);
-          if (cell.periodic[1])
-            f.y -= std::floor(f.y + 0.5);
-          if (cell.periodic[2])
-            f.z -= std::floor(f.z + 0.5);
-          low = {std::min(low.x, f.x), std::min(low.y, f.y), std::min(low.z, f.z)};
-          high = {std::max(high.x, f.x), std::max(high.y, f.y), std::max(high.z, f.z)};
-          write_vec(positions, i, N, add(anchor, cell.cartesian(f)));
-        }
-        const double limit = 0.5 - 64 * std::numeric_limits<double>::epsilon();
-        require(
-          (!cell.periodic[0] || high.x - low.x < limit) &&
-            (!cell.periodic[1] || high.y - low.y < limit) &&
-            (!cell.periodic[2] || high.z - low.z < limit),
-          "Ambiguous/noncompact body: supply coherent unwrapped positions explicitly.");
+    if (number_of_bodies_ > 0) {
+      std::vector<double> positions(3 * count), masses(count), velocities(3 * count);
+      if (count > 0) {
+        atom.mass.copy_to_host(masses.data());
+        atom.velocity_per_atom.copy_to_host(velocities.data());
       }
+      const auto& members = snapshot.member_atoms;
+      if (supplied_positions) {
+        positions = *supplied_positions;
+      } else {
+        // 默认以参考 bead 最小镜像恢复紧凑分子的局部几何。
+        if (count > 0)
+          atom.position_per_atom.copy_to_host(positions.data());
+        for (int b = 0; b < number_of_bodies_; ++b) {
+          const auto& g = snapshot.bodies[b].geometry;
+          const int reference = members[g.first_member];
+          const Vec3 anchor = read_vec(positions, reference, N);
+          require(finite(anchor), "Non-finite bead position.");
+          Vec3 low{0, 0, 0}, high{0, 0, 0};
+          for (int j = g.first_member; j < g.first_member + g.natoms; ++j) {
+            const int i = members[j];
+            const Vec3 position = read_vec(positions, i, N);
+            require(finite(position), "Non-finite bead position.");
+            Vec3 f = cell.fractional(subtract(position, anchor));
+            require(finite(f), "Non-finite relative bead coordinate.");
+            if (cell.periodic[0])
+              f.x -= std::floor(f.x + 0.5);
+            if (cell.periodic[1])
+              f.y -= std::floor(f.y + 0.5);
+            if (cell.periodic[2])
+              f.z -= std::floor(f.z + 0.5);
+            low = {std::min(low.x, f.x), std::min(low.y, f.y), std::min(low.z, f.z)};
+            high = {std::max(high.x, f.x), std::max(high.y, f.y), std::max(high.z, f.z)};
+            write_vec(positions, i, N, add(anchor, cell.cartesian(f)));
+          }
+          const double limit = 0.5 - 64 * std::numeric_limits<double>::epsilon();
+          require(
+            (!cell.periodic[0] || high.x - low.x < limit) &&
+              (!cell.periodic[1] || high.y - low.y < limit) &&
+              (!cell.periodic[2] || high.z - low.z < limit),
+            "Ambiguous/noncompact body: supply coherent unwrapped positions explicitly.");
+        }
+      }
+      setup_bodies_static(snapshot, box, positions, masses);
+      setup_bodies_dynamic(snapshot, masses, velocities);
     }
-    setup_bodies_static(atom, box, positions);
 
-    setup_bodies_dynamic(atom);
-    // 使用 HOST 零载荷上传，完成后首次积分前仍需实际 NEP 力和力矩。
-    std::vector<BodyLoad> loads(number_of_bodies_, BodyLoad{});
-    load_.copy_from_host(loads.data());
+    // HOST 工作区到此才上传：静态/动态初始化之间没有重复 GPU 往返。
+    geometry_.resize(number_of_bodies_);
+    state_.resize(number_of_bodies_);
+    load_.resize(number_of_bodies_);
+    member_atoms_.resize(number_of_members_);
+    member_displace_.resize(number_of_members_);
+    atom_to_body_.resize(count);
+    if (number_of_bodies_ > 0) {
+      std::vector<BodyGeometry> geometry;
+      std::vector<BodyState> states;
+      std::vector<BodyLoad> loads;
+      geometry.reserve(number_of_bodies_);
+      states.reserve(number_of_bodies_);
+      loads.reserve(number_of_bodies_);
+      for (const auto& body : snapshot.bodies) {
+        geometry.push_back(body.geometry);
+        states.push_back(body.state);
+        loads.push_back(body.load); // Body{} 保证初始载荷为零。
+      }
+      geometry_.copy_from_host(geometry.data());
+      state_.copy_from_host(states.data());
+      load_.copy_from_host(loads.data());
+      member_atoms_.copy_from_host(snapshot.member_atoms.data());
+      member_displace_.copy_from_host(snapshot.member_displace.data());
+    }
+    if (count > 0)
+      atom_to_body_.copy_from_host(atom_to_body.data());
+    std::copy(box.cpu_h, box.cpu_h + 9, initialized_box_.begin());
+    initialized_pbc_ = {box.pbc_x, box.pbc_y, box.pbc_z};
     initialized_ = true;
   } catch (...) {
     clear();
@@ -403,21 +467,18 @@ void RigidBodySystem::initialize_impl(
 }
 
 void RigidBodySystem::setup_bodies_static(
-  const Atom& atom, const Box& box, const std::vector<double>& positions)
+  HostSnapshot& snapshot,
+  const Box& box,
+  const std::vector<double>& positions,
+  const std::vector<double>& masses)
 {
   const int N = number_of_atoms_;
   const Cell cell(box);
-  std::vector<double> masses(N);
-  atom.mass.copy_to_host(masses.data());
-  std::vector<BodyGeometry> geometry(number_of_bodies_);
-  std::vector<BodyState> states(number_of_bodies_, BodyState{});
-  std::vector<int> members(number_of_members_);
-  std::vector<Vec3> displace(number_of_members_);
-  geometry_.copy_to_host(geometry.data());
-  member_atoms_.copy_to_host(members.data());
+  const auto& members = snapshot.member_atoms;
+  auto& displace = snapshot.member_displace;
   for (int b = 0; b < number_of_bodies_; ++b) {
-    auto& g = geometry[b];
-    auto& state = states[b];
+    auto& g = snapshot.bodies[b].geometry;
+    auto& state = snapshot.bodies[b].state;
     const Vec3 anchor = read_vec(positions, members[g.first_member], N);
     require(finite(anchor), "Non-finite bead position.");
     Vec3 weighted{0, 0, 0};
@@ -462,28 +523,17 @@ void RigidBodySystem::setup_bodies_static(
     for (int k = 0; k < g.natoms; ++k)
       displace[g.first_member + k] = inverse_rotate(state.quat, relative[k]);
   }
-  geometry_.copy_from_host(geometry.data());
-  state_.copy_from_host(states.data());
-  member_displace_.copy_from_host(displace.data());
 }
 
-void RigidBodySystem::setup_bodies_dynamic(const Atom& atom)
+void RigidBodySystem::setup_bodies_dynamic(
+  HostSnapshot& snapshot, const std::vector<double>& masses, const std::vector<double>& velocities)
 {
   const int N = number_of_atoms_;
-  std::vector<double> masses(N), velocities(3 * static_cast<std::size_t>(N));
-  atom.mass.copy_to_host(masses.data());
-  atom.velocity_per_atom.copy_to_host(velocities.data());
-  std::vector<BodyGeometry> geometry(number_of_bodies_);
-  std::vector<BodyState> states(number_of_bodies_);
-  std::vector<int> members(number_of_members_);
-  std::vector<Vec3> displace(number_of_members_);
-  geometry_.copy_to_host(geometry.data());
-  state_.copy_to_host(states.data());
-  member_atoms_.copy_to_host(members.data());
-  member_displace_.copy_to_host(displace.data());
+  const auto& members = snapshot.member_atoms;
+  const auto& displace = snapshot.member_displace;
   for (int b = 0; b < number_of_bodies_; ++b) {
-    const auto& g = geometry[b];
-    auto& state = states[b];
+    const auto& g = snapshot.bodies[b].geometry;
+    auto& state = snapshot.bodies[b].state;
     Vec3 momentum{0, 0, 0};
     for (int j = g.first_member; j < g.first_member + g.natoms; ++j) {
       const int i = members[j];
@@ -506,7 +556,6 @@ void RigidBodySystem::setup_bodies_dynamic(const Atom& atom)
         std::isfinite(state.conjqm.y) && std::isfinite(state.conjqm.z),
       "Non-finite Miller conjugate momentum.");
   }
-  state_.copy_from_host(states.data());
 }
 
 bool RigidBodySystem::initialized() const { return initialized_; }
@@ -515,8 +564,7 @@ int RigidBodySystem::number_of_members() const { return number_of_members_; }
 
 RigidBodySystem::DeviceView RigidBodySystem::device_view()
 {
-  if (!initialized_)
-    throw std::logic_error("Rigid body system is not initialized.");
+  require_initialized();
   return {
     number_of_atoms_,
     number_of_bodies_,
@@ -530,8 +578,7 @@ RigidBodySystem::DeviceView RigidBodySystem::device_view()
 }
 RigidBodySystem::ConstDeviceView RigidBodySystem::device_view() const
 {
-  if (!initialized_)
-    throw std::logic_error("Rigid body system is not initialized.");
+  require_initialized();
   return {
     number_of_atoms_,
     number_of_bodies_,
@@ -545,8 +592,7 @@ RigidBodySystem::ConstDeviceView RigidBodySystem::device_view() const
 }
 void RigidBodySystem::copy_to_host(HostSnapshot& destination) const
 {
-  if (!initialized_)
-    throw std::logic_error("Rigid body system is not initialized.");
+  require_initialized();
   HostSnapshot snapshot;
   snapshot.bodies.resize(number_of_bodies_);
   snapshot.member_atoms.resize(number_of_members_);
@@ -564,4 +610,76 @@ void RigidBodySystem::copy_to_host(HostSnapshot& destination) const
     member_displace_.copy_to_host(snapshot.member_displace.data());
   }
   destination = std::move(snapshot);
+}
+
+void RigidBodySystem::require_initialized() const
+{
+  if (!initialized_)
+    throw std::logic_error("Rigid body system is not initialized.");
+}
+void RigidBodySystem::check_atom(const Atom& atom) const
+{
+  require_initialized();
+  require(
+    atom.number_of_atoms == number_of_atoms_,
+    "Atom count changed; rigid body membership must be reinitialized.");
+}
+void RigidBodySystem::check_box(const Box& box) const
+{
+  require_initialized();
+  require(
+    std::equal(initialized_box_.begin(), initialized_box_.end(), box.cpu_h) &&
+      initialized_pbc_ == std::array<int, 3>{box.pbc_x, box.pbc_y, box.pbc_z},
+    "Rigid bodies currently require the fixed box used at initialization.");
+}
+void RigidBodySystem::compute_forces_and_torques(const Atom& atom)
+{
+  check_atom(atom);
+  if (number_of_bodies_ == 0)
+    return;
+  require(
+    atom.force_per_atom.size() == 3 * static_cast<std::size_t>(number_of_atoms_),
+    "Rigid force reduction requires a 3N force array.");
+  const auto view = static_cast<const RigidBodySystem&>(*this).device_view();
+  sum_body_loads<<<(number_of_bodies_ + 127) / 128, 128>>>(
+    view, atom.force_per_atom.data(), load_.data());
+  GPU_CHECK_KERNEL
+}
+void RigidBodySystem::remap_centers(const Box& box)
+{
+  check_box(box);
+  if (number_of_bodies_ == 0)
+    return;
+  wrap_body_centers<<<(number_of_bodies_ + 127) / 128, 128>>>(device_view(), Cell(box));
+  GPU_CHECK_KERNEL
+}
+void RigidBodySystem::rebuild_positions(Atom& atom, const Box& box)
+{
+  check_atom(atom);
+  check_box(box);
+  if (number_of_bodies_ == 0)
+    return;
+  require(
+    atom.position_per_atom.size() == 3 * static_cast<std::size_t>(number_of_atoms_),
+    "Rigid reconstruction requires a 3N position array.");
+  require(
+    atom.unwrapped_position.size() == 0,
+    "Rigid bodies do not track continuous trajectories; unwrapped output is unsupported.");
+  const auto view = static_cast<const RigidBodySystem&>(*this).device_view();
+  reconstruct_positions<<<(number_of_bodies_ + 127) / 128, 128>>>(
+    view, Cell(box), atom.position_per_atom.data());
+  GPU_CHECK_KERNEL
+}
+void RigidBodySystem::rebuild_velocities(Atom& atom)
+{
+  check_atom(atom);
+  if (number_of_bodies_ == 0)
+    return;
+  require(
+    atom.velocity_per_atom.size() == 3 * static_cast<std::size_t>(number_of_atoms_),
+    "Rigid reconstruction requires a 3N velocity array.");
+  const auto view = static_cast<const RigidBodySystem&>(*this).device_view();
+  reconstruct_velocities<<<(number_of_bodies_ + 127) / 128, 128>>>(
+    view, atom.velocity_per_atom.data());
+  GPU_CHECK_KERNEL
 }

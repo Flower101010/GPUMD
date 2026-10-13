@@ -26,7 +26,12 @@ component scaling so finite very large or subnormal inputs can be normalized;
 zero and non-finite inputs fail without changing the input. Rotation functions
 require a unit quaternion and do not normalize it implicitly.
 
-RigidBodySystem initialization is implemented on the host, with GPU uploads.
+RigidBodySystem initialization is implemented on the host, followed by one
+upload of each completed array. The temporary HostSnapshot carries geometry,
+state and members through every initialization stage; there are no GPU
+round-trips between those stages. Masses and velocities are copied from DEVICE
+once. All-free systems skip physical initialization and upload only the reverse
+member map.
 It includes member construction, coherent coordinate preparation, principal
 inertia/orientation, fixed member geometry, and Miller momentum initialization.
 State accessors, device views and a self-contained host snapshot are implemented
@@ -34,16 +39,50 @@ so initialized values can be inspected. Failures clear the system and leave
 initialized() false. Successful initialization leaves all body loads zero and
 does not modify Atom's positions, velocities or images.
 
+## Runtime methods
+
+All declared RigidBodySystem methods are implemented. Each runtime operation
+uses one DEVICE thread per body and loops over its contiguous member range:
+
+- compute_forces_and_torques overwrites F=sum(f_i) and
+  tau=sum(R(q)*s_i cross f_i). It uses fixed member geometry, not differences
+  of wrapped bead positions. Forces must correspond to the current pose.
+- remap_centers wraps the center with the full box matrix, including negative
+  and multiple crossings, without storing crossing history.
+- rebuild_positions reconstructs and wraps xcm+R(q)*s_i for managed beads only.
+- rebuild_velocities uses conjugate(q)*p=(0,2*L_body), divides by positive
+  principal moments and rotates omega to space, then writes
+  v_i=V+omega cross R(q)*s_i for managed beads only.
+
+No atomics, runtime HOST snapshots or persistent omega/angmom caches are needed.
+Calls launch asynchronously on the default GPU stream and check launch errors.
+Device views must be used on that same stream (or externally synchronized).
+The caller/integrator maintains unit q and q dot p=0; runtime reconstruction
+does not secretly normalize or change the authoritative body state.
+
+Each call checks initialization and relevant array sizes. Atom count changes
+are rejected. remap_centers/rebuild_positions reject any change to H or periodic
+flags relative to initialization: this is a fixed-box implementation. Atom index
+reordering, changed membership or masses still require explicit reinitialization;
+those changes cannot be inferred from the count check alone. Missing pose/force
+synchronization is the caller's responsibility.
+
+The manager does not maintain image history. rebuild_positions explicitly
+rejects enabled Atom.unwrapped_position storage, so it cannot silently produce
+incorrect continuous trajectories. Atom image buffers themselves are untouched.
+The existing constructor/destructor now rely on member default initialization
+and GPU_Vector ownership rather than duplicate clear/free work.
+
 ## What remains to implement
 
-1. Variable-member force/torque reduction and bead reconstruction.
-2. Runtime center remapping after translational drift.
-3. Ensemble_Rigid_NVE's two integration stages and full NVE validation.
+Ensemble_Rigid_NVE's two Miller integration stages, run.in selection and full
+NEP-driven NVE validation remain separate work. The manager does not calculate
+interactions or select timestep/integration stages. Thermodynamic DOF and the
+constraint virial also need upper-layer treatment.
 
-These methods remain declarations. Initialization alone does not make rigid-body
-MD runnable: initial bead reconstruction/projection, a force evaluation and load
-aggregation are needed before the first step. No run.in rigid-ensemble keyword
-has been connected yet.
+Before the first MD step, initialize, reconstruct positions and projected
+velocities, evaluate bead forces, and aggregate body loads. No run.in
+rigid-ensemble keyword has been connected yet.
 
 ## Upper-layer body labels
 
@@ -94,17 +133,18 @@ Read the named methods in this order in src/integrate/rigid_body.cu:
 1. initialize_impl validates sizes, labels and the box, then calls create_bodies.
 2. create_bodies sorts (label, Atom index) pairs, builds contiguous member ranges
    and the reverse mapping, rejects single-member bodies before GPU allocation,
-   then allocates the body/member GPU arrays.
+   and returns a HOST snapshot. GPU allocation happens after physical validation.
 3. initialize_impl prepares coherent coordinates as described below.
-4. setup_bodies_static reads current DEVICE masses, computes M and the center
+4. setup_bodies_static uses the downloaded masses and HOST snapshot, computes M and the center
    relative to a reference bead, then builds the symmetric inertia tensor.
    principal_axes performs a scaled 3x3 Jacobi eigendecomposition, sorts moments,
    fixes eigenvector signs and enforces a right-handed basis. axes_to_quaternion
    stores the corresponding unit body-to-space quaternion. Member displacements
    are inverse-rotated relative positions. The center is wrapped into the primary box.
-5. setup_bodies_dynamic reads current DEVICE velocities, computes V and
+5. setup_bodies_dynamic uses the downloaded velocities and same HOST snapshot, computes V and
    L=sum(r_i cross m_i*(v_i-V)), then p=2*q*(0,R(q)^T*L).
-6. Zero loads are uploaded and initialized becomes true only after all checks.
+6. Completed arrays (including zero loads) are uploaded once; initialized becomes
+   true only after all checks.
 
 Static initialization rejects multi-bead geometries if the smallest principal
 moment is <= 1e-10 times the largest; coincident bodies are also rejected.
@@ -183,11 +223,11 @@ member geometry before wrapping the center. For a length-10 box, members at
 9.8 and 10.2 have center 10, stored as xcm=0 with fixed relative offsets -0.2
 and +0.2. Directly averaging wrapped positions 9.8 and 0.2 would still be wrong.
 
-After translational drift, remap_centers should compute f=H^-1*xcm, subtract
+After translational drift, remap_centers computes f=H^-1*xcm, subtract
 floor(f) in periodic components, and replace xcm with H*f. This also handles
 multiple-box and negative crossings without storing counts. It changes no
 velocity, quaternion, momentum or body-relative geometry and may be fused into
-the drift kernel. Runtime remapping is still a declaration, not an implemented
+the drift kernel by a future integrator. The current API launches its own GPU
 kernel.
 
 Rebuild each bead from y_i=xcm+R(q)*s_i, then wrap y_i using the same full box
@@ -197,7 +237,7 @@ image buffers; the existing Atom image feature remains available to other code.
 The rigid module does not provide coherent continuous trajectories or diffusion
 history. When wiring the future rigid ensemble, any unwrapped-output feature
 needs an explicit compatible tracking design before it can be used for rigid
-members.
+members. The current rebuild_positions method refuses that output mode.
 
 This version assumes a fixed box matrix and periodicity. Changing the box needs
 an explicit coordinate scaling policy. Nonperiodic coordinates may still grow;
@@ -255,23 +295,43 @@ normalization inputs, known rotations, nontrivial frame/momentum conventions,
 zero-inertia omega, and torque kicks. The host test also checks a complete
 kick-drift-kick sequence against the constant axial torque analytic solution.
 The GPU test calls the functions from a different translation unit without
-device separate compilation. RigidBodySystem dynamics and full-system NVE are
-not implemented or validated yet; the math tests do not establish linear-body
-integration correctness.
+device separate compilation. Runtime management is implemented and separately
+tested; full-system NEP-driven NVE is not implemented or validated yet. These
+tests do not establish linear-body integration correctness.
 
 The initialization test checks singleton-to-free label conversion, explicit
 singleton rejection and boundary-straddling three-bead bodies, known principal moments, unequal masses, triclinic/mixed PBC, rigid
 velocity projection, repeated eigenvalues, 24 spatial orientations, explicit
 large-body geometry, unmanaged/empty systems, invalid input, independence from
-Atom's image buffer and cleanup after failure. It reads back real GPU state and deliberately supplies
-incorrect CPU caches. Runtime remapping, bead reconstruction and force reduction
-remain unimplemented; their crossing/force-consistency tests and full-system
-NVE tests are still required.
+Atom's image buffer and cleanup after failure. It reads back real GPU state and
+intentionally supplies incorrect CPU caches.
+
+The runtime test exercises independent three- and four-member bodies with
+interleaved Atom indices plus free beads, arbitrary space angular velocities,
+known force/torque sums, overwriting loads, uniform mass-proportional forces,
+negative/multiple crossings, triclinic/mixed/nonperiodic boxes, and exact-boundary
+periodic equivalence. It verifies free beads are untouched, validates guards,
+and covers 257 bodies across multiple thread blocks. CUDA Compute Sanitizer
+memcheck reports zero errors for this test. The gpumd executable also builds
+and links; this is a build check, not an end-to-end rigid MD result.
+
+For calls from a future integration stage, the manager sequence is:
+
+```cpp
+// After the integrator updates body positions/orientations:
+rigid.remap_centers(box);
+rigid.rebuild_positions(atom, box);
+rigid.rebuild_velocities(atom); // if half-step velocities are needed here
+// The force module evaluates NEP bead forces at the reconstructed positions.
+rigid.compute_forces_and_torques(atom);
+// After the integrator's second half kick:
+rigid.rebuild_velocities(atom);
+```
 
 Run the implemented subset from the repository root:
 
 ```bash
 cmake -S . -B build -DBUILD_TESTING=ON
-cmake --build build --target test_quaternion test_quaternion_gpu test_rigid_body_initialization -j4
-ctest --test-dir build -R '^unit.test_(quaternion(_gpu)?|rigid_body_initialization)$' --output-on-failure
+cmake --build build --target test_quaternion test_quaternion_gpu test_rigid_body_initialization test_rigid_body_runtime -j4
+ctest --test-dir build -R '^unit.test_(quaternion(_gpu)?|rigid_body_(initialization|runtime))$' --output-on-failure
 ```
