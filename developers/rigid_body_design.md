@@ -75,6 +75,11 @@ and GPU_Vector ownership rather than duplicate clear/free work.
 
 ## What remains to implement
 
+The proposed ensemble interfaces, reuse of molecule grouping, initialization
+ordering and staged implementation plan are in
+[`rigid_nve_interface_design.md`](rigid_nve_interface_design.md). That document
+is a design proposal, not an implemented run.in feature.
+
 Ensemble_Rigid_NVE's two Miller integration stages, run.in selection and full
 NEP-driven NVE validation remain separate work. The manager does not calculate
 interactions or select timestep/integration stages. Thermodynamic DOF and the

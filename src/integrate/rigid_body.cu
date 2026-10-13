@@ -250,6 +250,16 @@ __global__ void sum_body_loads(
   }
   loads[b] = {force, torque}; // 覆盖旧值，不累加上一时刻的载荷。
 }
+// 优势：
+// 1. 不需要原子操作，避免原子累加竞争。
+// 2. 每个线程可以在寄存器中累加合力和力矩。
+// 3. 刚体之间完全独立，并行逻辑简单。
+// 4. 对大量小刚体非常合适。
+// 潜在问题：
+// 1. 如果刚体数量很少，GPU 的并行度可能不足。
+// 2. 如果刚体成员数量差别很大，同一个 Warp 内的线程可能出现负载不均。
+// 3. member_atoms[j] 可能是不连续的原子索引，因此相邻线程读取的 forces 不一定连续，影响合并访存效率。
+
 __global__ void wrap_body_centers(RigidBodySystem::DeviceView view, Cell cell)
 {
   const int b = blockIdx.x * blockDim.x + threadIdx.x;

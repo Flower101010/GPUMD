@@ -59,6 +59,10 @@ target_sources(test_rigid_body_initialization PRIVATE
 gpumd_add_unit_test(test_rigid_body_runtime test_rigid_body_runtime.cu)
 target_sources(test_rigid_body_runtime PRIVATE
     ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body.cu)
+gpumd_add_unit_test(test_rigid_body_translation test_rigid_body_translation.cu)
+target_sources(test_rigid_body_translation PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body.cu
+    ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body_integrator.cu)
 
 gpumd_add_unit_test(test_bonded_dataset test_bonded_dataset.cu)
 add_library(gpumd_nep_bonded_test_support STATIC
@@ -92,6 +96,7 @@ set_tests_properties(unit.test_bonded_nep_compiled PROPERTIES
     SKIP_REGULAR_EXPRESSION "^SKIP: no accessible GPU")
 
 set(GPUMD_GPU_UNIT_TESTS
+    unit.test_rigid_body_translation
     unit.test_rigid_body_initialization
     unit.test_rigid_body_runtime
     unit.test_quaternion_gpu

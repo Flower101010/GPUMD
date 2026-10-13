@@ -1,0 +1,366 @@
+# Rigid NVE: ensemble interface and execution contract
+
+Status: revised design, 2026-10-13. The unified translational Verlet helper and
+GPU entry point are implemented, and the ensemble header declares the intended
+interfaces. The ensemble stages and run.in wiring are not implemented; rigid MD
+is not enabled. This builds on `rigid_body_design.md` and current source interfaces.
+
+## Goal and first validation system
+
+Implement a small fixed-box rigid NVE integrator connected to GPUMD's existing
+bead-force interface, including NEP. The primary validation system is a mixture
+of free single-bead particles and nonlinear three-bead triangles. Artificial
+masses, geometry and interactions are acceptable, provided the reference model
+is physically consistent. Use asymmetric triangles with unequal masses to
+exercise the rotational equations. Agreement with physical invariants and
+timestep convergence matters more than trajectory-by-trajectory agreement with
+LAMMPS.
+
+The implementation remains incremental: interfaces, free-particle selection,
+integration stages, input wiring, and validation can be separate changes.
+
+## Reuse the molecule grouping, not the meaning of `fix`
+
+Use an existing XYZ grouping method dedicated to molecule membership. Its index
+is selected explicitly; no implicit `group[0]` assumption is introduced.
+
+```text
+ensemble rigid_nve 0
+```
+
+This proposed command takes exactly one parameter: the grouping-method index.
+Every nonempty multi-member group in that method becomes one rigid body. Every
+singleton becomes one free particle. A singleton must have its own group label;
+giving all free particles the same label would incorrectly create one body.
+Nonlinear geometry is still checked by `RigidBodySystem::initialize`.
+
+Reuse the existing XYZ reader, `Group`, integer/range validation conventions
+used by `parse_fix`, and `rigid_body_labels_from_group`. The adapter already
+copies `cpu_label` and maps singleton labels to -1 without changing `Group`.
+Retain the manager's compressed membership storage and GPU reverse map rather
+than making a second persistent member list in the ensemble.
+
+GPUMD's current `fix [grouping_method] group_id` means immobilize atoms. It does
+not select rigid molecules. Keep that command's grammar and semantics intact.
+The first rigid NVE version rejects combinations with `fix` or `move`; support
+for immobilized or driven whole bodies is a separate feature.
+
+## Ownership and interfaces
+
+`Ensemble_Rigid_NVE` derives directly from `Ensemble`, matching the organization
+of `Ensemble_NVE`. It owns one `RigidBodySystem` for the lifetime of a run. The
+manager owns geometry, membership, state and loads; the ensemble only chooses
+integration stages. `Force::compute` continues to own interaction evaluation.
+
+The proposed declaration is a design sketch, not a replacement for a live header:
+
+```cpp
+class Ensemble_Rigid_NVE : public Ensemble
+{
+public:
+  explicit Ensemble_Rigid_NVE(int molecule_grouping_method);
+
+  // Called once per run, before the first Force::compute.
+  // Projects managed bead velocities and reconstructs managed positions.
+  void initialize(Atom& atom, const Box& box, const std::vector<Group>& groups);
+
+  void compute1(double dt, const std::vector<Group>& groups,
+                Box& box, Atom& atom, GPU_Vector<double>& thermo) override;
+  void compute2(double dt, const std::vector<Group>& groups,
+                Box& box, Atom& atom, GPU_Vector<double>& thermo) override;
+
+  // Add override when the planned common DOF hook is implemented.
+  int thermal_degrees_of_freedom() const;
+  const RigidBodySystem& rigid_bodies() const { return rigid_; }
+
+private:
+  enum class Stage { uninitialized, full_step, half_step };
+  int molecule_grouping_method_;
+  int thermal_dof_ = 0;
+  Stage stage_ = Stage::uninitialized;
+  RigidBodySystem rigid_;
+
+  // Uses the existing rotation helpers, independent of translation.
+  void integrate_rotation(bool is_step1, double dt);
+};
+```
+
+`initialize` converts the selected group labels, initializes the manager,
+rebuilds positions and velocities, computes the supported DOF count, and enters
+`full_step`. It does not read atom forces: they have not been evaluated yet.
+The projected state, not the pre-projection random bead state, defines the
+initial energy for NVE diagnostics. Do not silently rescale after projection.
+
+`rigid_bodies()` is a read-only diagnostic interface. It allows the existing
+host-snapshot API to be used in tests without exposing mutable body state to
+unrelated modules. Device views are transient non-owning arguments, not stored
+as ensemble members. Existing default-stream ordering remains in force.
+
+The private rotation helper applies the existing math functions; it does not replace
+the manager's reconstruction or force aggregation methods. No general-purpose
+integrator hierarchy or new callback framework is needed.
+
+## One translational Verlet algorithm, overloaded for both representations
+
+The revised implementation leaves the existing ordinary ensemble kernels
+unchanged. `src/integrate/rigid_body_integrator.cuh` exposes three overloads in
+`rigid_integrator`:
+
+```cpp
+// Host/device arithmetic shared by particles and body centers.
+void velocity_verlet(bool step1, double dt, double mass,
+                     const Vec3& force, Vec3& position, Vec3& velocity);
+void velocity_verlet(bool step1, double dt,
+                     const RigidBodySystem::BodyGeometry& geometry,
+                     const RigidBodySystem::BodyLoad& load,
+                     RigidBodySystem::BodyState& state);
+// One GPU launch handles both representations.
+void velocity_verlet(bool step1, double dt, Atom& atom, RigidBodySystem& rigid);
+```
+
+The body overload delegates to exactly the same mass/force/x/v arithmetic as a
+free particle. A single launch has N_body + N_atom entries: the first entries
+update body centers; the remaining entries update atoms only when the existing
+`atom_to_body` map is -1. Membership still has to be consulted to prevent double
+integration, but there is no new free-member list and no selector added to the
+ordinary ensemble API. Managed bead buffers are untouched until reconstruction.
+
+The bulk overload validates initialized state, array sizes and finite dt, and
+returns without a launch for empty systems. It only advances translation; it
+does not aggregate loads, rotate, wrap, or reconstruct beads. These operations
+remain explicitly ordered by the ensemble. Negative dt is permitted for
+reversibility tests. Runtime integration will use the caller's chosen dt.
+
+Use this entry point from rigid NVE in both `USE_NEPCG` and ordinary builds.
+`velocity_verlet_cg` removes group COM velocity and leaves
+internal motion unconstrained; it cannot integrate freely translating rigid
+bodies or singleton particles. Do not route through `Ensemble_NVE::compute1/2`,
+which selects that CG method under `USE_NEPCG`.
+
+## State authority and stage order
+
+At a full-step boundary, body `xcm`, `vcm`, `quat`, and `conjqm` are authoritative.
+Managed bead positions and velocities are reconstructed views. Free-particle
+positions and velocities remain authoritative in `Atom`. Every particle has
+exactly one integrator.
+
+The existing main-loop force evaluation remains between the two stages:
+
+```text
+Integrate::initialize
+  create ensemble; attach existing Ensemble context pointers
+  rigid ensemble initialize: group adapter -> manager -> rebuild x and v
+Run::compute_force                          # initial bead forces
+
+repeat:
+  compute1
+    aggregate current bead forces/torques
+    unified translation step 1, free particles and body centers
+    body rotational half kick + full rotational drift
+    remap body centers; rebuild managed bead positions and velocities
+  existing force evaluation                 # NEP or another supported potential
+  compute2
+    aggregate newly evaluated bead forces/torques
+    unified translation step 2, free particles and body centers
+    body rotational second half kick
+    rebuild managed bead velocities
+    compute thermodynamic diagnostics
+```
+
+Aggregate loads at the start of both stages. The extra aggregation in later
+`compute1` calls is intentional for the first version: it avoids a special
+initial-force hook and dependence on cached-load readiness. For the intended
+short bodies the implementation is small and easy to audit. Removing redundant
+aggregation is a later measured optimization.
+
+`compute1` requires `full_step`, then enters `half_step`; `compute2` requires
+`half_step`, then returns to `full_step`. Both stages use the same dt for a step;
+the caller already passes GPUMD internal time units. No per-stage HOST snapshots
+or device synchronizations are needed for normal execution.
+
+The translation overload performs the first two translational lines below;
+the future rotation kernel performs the two rotational calls (pseudocode):
+
+```cpp
+state.vcm += (0.5 * dt / geometry.mass) * load.fcm;
+rigid_math::kick_rotation(state.quat, state.conjqm, load.torque, 0.5 * dt);
+state.xcm += dt * state.vcm;
+rigid_math::integrate_free_rotation(
+  state.quat, state.conjqm, geometry.inertia, dt);
+```
+
+Stage two updates `vcm` with the new half kick and calls `kick_rotation` with
+the new torque and dt/2. It does not drift positions or orientation again.
+`integrate_free_rotation` already implements Miller's symmetric five-axis flow.
+Do not add hidden quaternion normalization: monitor unit length and tangency,
+and diagnose a broken integration sequence rather than altering momenta silently.
+
+Rebuild half-step bead velocities in `compute1` as well as full-step velocities
+in `compute2`, because the current force/measurement interfaces receive Atom's
+velocity buffer. Only conservative, position-dependent forces are in the first
+physical validation contract; velocity-dependent forces need their own treatment.
+
+## Minimal input and lifecycle wiring
+
+Keep `Integrate::type == 0` for both ordinary and rigid NVE. This preserves the
+existing NVE temperature bookkeeping and avoids the special `type >= 31` PIMD
+branches in Run and measurements.
+
+Add `rigid_grouping_method = -1` to `Integrate`. `parse_ensemble` resets it before
+each new ensemble selection; `ensemble rigid_nve k` sets it after validation.
+`Integrate::finalize` also resets it. The case-0 construction chooses ordinary
+NVE for -1 and rigid NVE otherwise. Use a typed temporary owner to call the
+rigid initialization method, then transfer it to the existing
+`std::unique_ptr<Ensemble>`. A new virtual initialization hook on every ensemble
+is unnecessary.
+
+For each `run`, the current Integrate lifecycle constructs a fresh ensemble.
+The first version therefore reconstructs body state from current bead x/v at
+each run boundary. It is a fresh initialization, not exact continuation of the
+previous quaternion/principal-axis representation. Record the boundary and
+check segmented versus uninterrupted runs before claiming restart fidelity.
+The compact-coordinate assumptions apply again at each such initialization.
+
+Run-level preflight also checks features outside Integrate's knowledge:
+periodic velocity correction, enabled unwrapped storage, and active operations
+that change positions/velocities/box independently of the body state. Reject
+unsupported combinations before the first force evaluation; do not merely let
+reconstruction overwrite a requested correction. `velocity.correct_velocity`
+runs before every `compute1` in the current loop and would otherwise desynchronize
+the two representations. Membership, masses and atom order are fixed within a
+run. Whole-body corrections and continuous trajectory history remain future work.
+
+## Thermodynamic output: preserve energy when fixing temperature
+
+Reconstructed bead velocities give the correct total kinetic energy:
+
+```text
+K = sum_free 1/2 m v^2
+    + sum_bodies [1/2 M V^2 + 1/2 L_body dot I^-1 L_body].
+f = 3 N_free + 6 N_body                       # supported nonlinear bodies
+T = 2 K / (f k_B).
+```
+
+The first version reports this full-space DOF convention; do not automatically
+subtract global momentum DOFs. An ensemble with explicitly constrained total
+momentum needs a documented alternative convention.
+
+Add `virtual int thermal_degrees_of_freedom() const` to `Ensemble`, returning 0
+by default to mean legacy behavior. Rigid NVE returns its initialized f.
+`find_thermo` uses a positive override in its temperature denominator, otherwise
+retaining the current denominator. `Dump_Thermo` must use the same positive
+override when reconstructing KE from T, otherwise retaining its existing path.
+Record f and the rigid ensemble name in the output header.
+
+These changes must be made together: changing only T would make the current
+`KE = 1.5 N k_B T` output wrong and corrupt an apparent energy-drift check.
+Require positive f when reporting temperature. Independently verify bead KE
+against the body-state expression above.
+
+Existing atomic stress includes interaction virial and bead kinetic terms, but
+does not include the rigid constraint virial. Keep Atom's force/virial arrays
+unchanged for the interaction model and diagnostics. Until a constraint-stress
+implementation is separately derived and validated, the rigid output must
+explicitly mark stress as `interaction_plus_bead_kinetic_without_constraint`;
+it must not be used as physical pressure or as validation of an EOS. Energy,
+momentum and rigid geometry can already be validated without that feature.
+
+## Implementation order and acceptance
+
+1. Implement and validate the unified translation overloads. This part is now
+   implemented; its targeted test includes analytic acceleration with distinct
+   stage forces, interleaved membership, untouched managed bead buffers,
+   all-rigid/all-free/empty cases, harmonic reversibility and a canonical
+   determinant-one check. These tests do not establish full rigid NVE correctness.
+2. Implement the rigid ensemble initialization and rotational stage kernel;
+   test through compute1 -> controlled force evaluation -> compute2 without
+   depending on a new run.in command.
+3. Add paired temperature/KE handling, output metadata, input selection and
+   compatibility guards. Build and inspect the wired executable.
+4. Run the agreed free-particle/three-bead-mixture validation, then connect the
+   same ensemble to NEP for integration validation.
+
+The first dynamic tests should cover force-free translation, torque-free
+asymmetric rotation, and a controlled kick before interacting mixtures. The
+mixture should include unequal bead masses, interleaved atom indices, body
+rotation and periodic crossings. Use a smooth conservative test potential with
+known reference energy and forces; an inter-molecular pair-potential fixture may
+exclude intra-body pairs explicitly, but that does not imply arbitrary exclusions
+can be applied to a trained NEP.
+
+Before assigning numerical timestep and interaction parameters, choose the
+conservative test potential and its length/energy scales. Check at least three
+successively halved timesteps over the same physical duration. Acceptance
+requires rigid distances, unit quaternion and tangent momentum, total linear
+momentum, bounded energy error with convergence, and equality of the two KE
+calculations. Angular momentum is checked for an isolated body or an isolated
+nonperiodic interacting system; do not impose global angular momentum conservation
+on a general periodic cell. An all-free reference must use ordinary particle
+Verlet, not the COM-removing CG branch.
+
+Compilation and existing manager/math tests are necessary evidence but do not
+establish end-to-end rigid NVE correctness. Keep those evidence boundaries in
+the implementation report.
+
+## Planned source footprint
+
+| File | Planned responsibility |
+| --- | --- |
+| `src/model/rigid_body_input.cuh` | Reuse existing group-to-label adapter unchanged |
+| `src/integrate/rigid_body.cuh/.cu` | Reuse existing manager; preserve current user edits |
+| `src/utilities/math.cuh` | Reuse existing kick and free-rotation helpers |
+| `src/integrate/ensemble_rigid_nve.cuh/.cu` | New ensemble and body-stage kernels |
+| `src/integrate/rigid_body_integrator.cuh/.cu` | Implemented unified translation overloads and GPU launch |
+| `src/integrate/ensemble.cuh/.cu` | Planned temperature DOF hook; ordinary Verlet remains unchanged |
+| `src/integrate/integrate.cuh/.cu` | Parse option, select ensemble, initialize and reset |
+| `src/main_gpumd/run.cu` | Compatibility preflight using Run-owned feature settings |
+| `src/measure/dump_thermo.cu` | Matched KE denominator and diagnostic metadata |
+| Build definitions and new integration tests | Register new source/targets if required by the current build |
+
+No NEP descriptor, training code or force interface change is part of this design.
+
+## Ordering and symplectic structure
+
+For a fixed-box conservative system, the Hamiltonian separates as
+H = K_translation + K_rotation + U(X,q,x_free). The translational and rotational
+kinetic terms depend on different canonical variables, so their Poisson bracket
+is zero. Their free drifts commute. The rotational drift is approximated by the
+existing symmetric Miller 3-2-1-2-3 composition of single-axis Hamiltonian flows.
+
+The complete step is a potential half kick, translational and rotational free
+drifts, a new force/torque evaluation, and a potential half kick. Its symmetric
+composition is second order and symplectic on the rigid phase space in exact
+arithmetic, under the fixed-step, conservative-force assumptions. See Miller
+et al., [Symplectic quaternion scheme for biophysical molecular dynamics](https://authors.library.caltech.edu/records/4ap9g-14r38).
+
+Translation and rotation can be called in either order inside each stage when
+both use loads already evaluated at the SAME full-step pose. Translational
+operations do not change q/p, and rotational operations do not change X/V;
+with these stored loads the calls can be reordered into the common half-kick
+then drift structure. No force recomputation may be inserted between those
+calls. This statement does not authorize swapping an entire force-update cycle
+or evaluating torque on a partly advanced pose.
+
+In general, kicks and drifts do not commute, and the three rotational axis
+flows do not commute for an asymmetric body. Preserve the two outer half kicks
+and the internal Miller palindrome. Another symmetric axis ordering can define
+another valid splitting, but it is not the same numerical map and is outside
+this implementation's contract.
+
+Do not claim symplecticity with state-dependent adaptive timesteps, velocity
+rescaling/corrections, inconsistent force and torque poses, or unrelated
+quaternion renormalization/projection each step. The current adaptive-step
+option therefore needs to be rejected for the first validation mode. A chosen
+fixed dt, a conservative NEP energy gradient, consistent force reduction, and
+reconstruction from body state are the intended production contract. Finite
+precision and actual implementation still require runtime validation; the
+existing tests do not prove full-system symplecticity.
+
+## Verification of the implemented translation subset (2026-10-13)
+
+The gpumd target and the new translation test built successfully. CTest passed
+`unit.test_rigid_body_translation`, `unit.test_quaternion`, and
+`unit.test_quaternion_gpu` (3/3). CUDA Compute Sanitizer memcheck on the new
+translation test reported zero errors. The new ensemble header was included
+by the test and checked for inheritance and declarations of both pure-virtual
+stages, without instantiating the as-yet unimplemented ensemble.
