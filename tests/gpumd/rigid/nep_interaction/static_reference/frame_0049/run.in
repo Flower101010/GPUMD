@@ -1,0 +1,5 @@
+potential /home/flos/Documents/Project/GPUMDs/GPUMD/potentials/nep/C_2022_NEP4.txt
+ensemble nve
+time_step 0
+dump_xyz 1 reference.xyz precision double force potential
+run 1

@@ -1,4 +1,4 @@
 time_step_convergence/dt_*/
 trajectory.xyz
 *.out
-*.out
+*.log

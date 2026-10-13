@@ -1,0 +1,9 @@
+potential ../../../../potentials/nep/C_2022_NEP4.txt
+
+ensemble rigid_nve 0
+time_step 0.025
+
+dump_thermo 40
+dump_xyz 40 trajectory.xyz precision double velocity force potential group_labels
+
+run 4000
