@@ -1,0 +1,9 @@
+potential zero_lj.txt
+
+ensemble rigid_nve 0
+time_step 0.5
+
+dump_thermo 100
+dump_xyz 100 trajectory.xyz precision double velocity force group_labels
+
+run 10000
