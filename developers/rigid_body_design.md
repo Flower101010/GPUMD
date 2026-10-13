@@ -85,8 +85,10 @@ integration stages are implemented and tested with an interacting free-particle 
 three-bead-triangle fixture. Temperature and KE use matched rigid DOF handling.
 run.in selection and full NEP-driven NVE validation remain separate work.
 The manager does not calculate interactions or select timestep/integration stages.
-Constraint virial remains unimplemented; thermo headers mark stress as excluding
-that contribution.
+The rigid ensemble now computes a separate per-body constraint virial and adds
+it to the six global thermo pressure components. The interaction force/virial
+arrays remain unchanged. Per-atom constraint stress and observer/multiple-potential
+compatibility remain outside the implemented interface.
 
 Before the first MD step, initialize, reconstruct positions and projected
 velocities, evaluate bead forces, and aggregate body loads. No run.in

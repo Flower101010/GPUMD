@@ -64,7 +64,7 @@ void Dump_Thermo::pre_run(
   const int thermal_dof = integrate.ensemble->thermal_degrees_of_freedom();
   if (thermal_dof > 0) {
     fprintf(fid_, "# thermal_dof %d\n", thermal_dof);
-    fprintf(fid_, "# stress_definition interaction_plus_bead_kinetic_without_constraint\n");
+    fprintf(fid_, "# stress_definition interaction_plus_bead_kinetic_plus_rigid_constraint\n");
   }
   if (integrate.type >= 31) {
     fprintf(

@@ -2,7 +2,7 @@
 
 Status: implementation updated, 2026-10-13. Unified translational Verlet,
 ensemble initialization, both integration stages and paired temperature/KE
-DOF handling are implemented. Tests call the ensemble directly. run.in wiring
+DOF handling and global constraint virial are implemented. Tests call the ensemble directly. run.in wiring
 and full NEP-driven MD validation remain unimplemented. This builds on
 `rigid_body_design.md` and current source interfaces.
 
@@ -258,13 +258,12 @@ These changes must be made together: changing only T would make the current
 Require positive f when reporting temperature. Independently verify bead KE
 against the body-state expression above.
 
-Existing atomic stress includes interaction virial and bead kinetic terms, but
-does not include the rigid constraint virial. Keep Atom's force/virial arrays
-unchanged for the interaction model and diagnostics. Until a constraint-stress
-implementation is separately derived and validated, the rigid output must
-explicitly mark stress as `interaction_plus_bead_kinetic_without_constraint`;
-it must not be used as physical pressure or as validation of an EOS. Energy,
-momentum and rigid geometry can already be validated without that feature.
+Atom's force/virial arrays remain interaction-only. The rigid ensemble stores
+constraint virial separately and adds it to global thermo pressure after the
+existing interaction-plus-bead-kinetic reduction. The header now identifies this
+as `interaction_plus_bead_kinetic_plus_rigid_constraint`. This does not supply
+per-atom constraint stress or change NEP labels. Read the implementation and
+validation boundary below before using other measurement interfaces.
 
 ## Implementation order and acceptance
 
@@ -383,6 +382,69 @@ energy units, respectively: successive ratios are approximately 4. Torque-free
 rotation/translation at dt=0.02 had maximum energy error 1.91926e-8. These are
 artificial-fixture results, not a NEP-driven trajectory or a complete proof of
 symplecticity.
+
+## Implemented constraint virial (2026-10-13)
+
+The implementation follows LAMMPS `FixRigid::set_xv` / `set_v`, audited at local
+commit c71ef819ab3785bba81c31c0ef5fce84603608d3:
+
+```text
+fc_i = m_i * (v_after_i - v_before_i) / (dt/2) - f_interaction_i
+W_c  = 1/2 sum(r_old_i tensor fc_stage1_i)
+     + 1/2 sum(r_new_i tensor fc_stage2_i)
+```
+
+The first-stage rotation kernel saves the old quaternion. Constraint tallying
+runs after body integration but BEFORE managed bead velocities are overwritten.
+It reads the actual old bead velocity, reconstructs the new velocity with the
+same formula as the manager, and uses old orientation for stage-one position
+and current orientation for stage two. These are discrete impulse estimates,
+not an assertion of pointwise equality to analytic instantaneous constraint forces.
+
+Positions are COM-relative arms R(q)*s_i. For the supported freely moving bodies,
+sum(fc_i)=0 in each stage up to floating-point error, so shifting all body
+positions by a common center does not change total constraint virial. This is
+why coherent continuous trajectories/image histories are unnecessary for this
+GLOBAL pressure calculation. It is not the same per-atom partition as LAMMPS
+absolute-position stress/atom or its geometric-centroid stress.
+
+The ensemble owns a 6*B DEVICE array in SoA order xx,yy,zz,xy,xz,yz and B old
+quaternions. One thread per body loops over members. Stage one overwrites the
+previous step; stage two adds the second half. A separate six-component reduction
+adds sum_b W_c,b / volume to thermo[2:8] after find_thermo. Free particles require
+no constraint tally. The read-only constraint_virial_per_body accessor exposes
+the current stage result for diagnostics. Initialization clears it to zero;
+only the completed compute1/force/compute2 cycle defines a full-step value.
+No startup virial guesstimate is used.
+
+The implementation does not modify force/virial labels, forces, body momenta,
+or the integration sequence. It does not apply an empirical kinetic correction.
+The bead kinetic tensor remains in pressure, with the explicit constraint term
+accounting for the rigid kinematics.
+
+The test evaluates each stage independently from CPU bead position/velocity
+snapshots and checks all six components, both 1/2 factors, old versus new pose,
+sum(fc)=0, resetting between steps, and inclusion in pressure. The harmonic
+fixture now supplies its analytic interaction virial too. A second fixture
+compares two rotating unequal-mass triangles plus a singleton with coherent
+nonperiodic versus wrapped periodic inputs in a tilted box, checking the
+per-body tensors and global reduction. Interaction force/virial arrays are
+checked unchanged by the constraint tally.
+
+For torque-free rigid/free motion, the target scalar numerator is
+3PV = 2K_free + 2K_body_translation. At dt=0.08, 0.04, 0.02 the maximum residuals
+are 8.25054e-6, 2.06314e-6, 5.15845e-7 in internal energy units. Each halving
+reduces the finite-step residual by about four. The prior energy/reversibility
+checks still pass with the same energy errors. The gpumd executable builds;
+all six targeted CTests pass; Compute Sanitizer memcheck reports zero errors.
+
+Current boundary: global thermo pressure after compute2 is corrected; Atom
+per-atom virial is still the interaction contribution. Direct calls to the base
+find_thermo only perform its raw reduction. In particular dump_observer observe
+recomputes alternate model forces and raw thermo, so it is not compatible with
+cached main-model constraint virial. The future input/Run preflight must reject
+that combination until a model-specific observer design exists. run.in selection,
+NEP-driven pressure comparison, and per-atom constraint stress remain separate work.
 
 The updated gpumd executable builds and links. CTest passes the six targeted
 tests (quaternion host/GPU, rigid initialization/runtime/translation, and the
