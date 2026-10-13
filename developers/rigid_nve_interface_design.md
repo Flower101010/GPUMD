@@ -1,9 +1,10 @@
 # Rigid NVE: ensemble interface and execution contract
 
-Status: revised design, 2026-10-13. The unified translational Verlet helper and
-GPU entry point are implemented, and the ensemble header declares the intended
-interfaces. The ensemble stages and run.in wiring are not implemented; rigid MD
-is not enabled. This builds on `rigid_body_design.md` and current source interfaces.
+Status: implementation updated, 2026-10-13. Unified translational Verlet,
+ensemble initialization, both integration stages and paired temperature/KE
+DOF handling are implemented. Tests call the ensemble directly. run.in wiring
+and full NEP-driven MD validation remain unimplemented. This builds on
+`rigid_body_design.md` and current source interfaces.
 
 ## Goal and first validation system
 
@@ -69,8 +70,7 @@ public:
   void compute2(double dt, const std::vector<Group>& groups,
                 Box& box, Atom& atom, GPU_Vector<double>& thermo) override;
 
-  // Add override when the planned common DOF hook is implemented.
-  int thermal_degrees_of_freedom() const;
+  int thermal_degrees_of_freedom() const override;
   const RigidBodySystem& rigid_bodies() const { return rigid_; }
 
 private:
@@ -78,6 +78,7 @@ private:
   int molecule_grouping_method_;
   int thermal_dof_ = 0;
   Stage stage_ = Stage::uninitialized;
+  double step_time_step_ = 0.0;
   RigidBodySystem rigid_;
 
   // Uses the existing rotation helpers, independent of translation.
@@ -245,7 +246,7 @@ The first version reports this full-space DOF convention; do not automatically
 subtract global momentum DOFs. An ensemble with explicitly constrained total
 momentum needs a documented alternative convention.
 
-Add `virtual int thermal_degrees_of_freedom() const` to `Ensemble`, returning 0
+The implemented `virtual int thermal_degrees_of_freedom() const` in `Ensemble` returns 0
 by default to mean legacy behavior. Rigid NVE returns its initialized f.
 `find_thermo` uses a positive override in its temperature denominator, otherwise
 retaining the current denominator. `Dump_Thermo` must use the same positive
@@ -272,11 +273,14 @@ momentum and rigid geometry can already be validated without that feature.
    stage forces, interleaved membership, untouched managed bead buffers,
    all-rigid/all-free/empty cases, harmonic reversibility and a canonical
    determinant-one check. These tests do not establish full rigid NVE correctness.
-2. Implement the rigid ensemble initialization and rotational stage kernel;
+2. Rigid ensemble initialization and the rotational stage kernel are implemented;
    test through compute1 -> controlled force evaluation -> compute2 without
    depending on a new run.in command.
-3. Add paired temperature/KE handling, output metadata, input selection and
-   compatibility guards. Build and inspect the wired executable.
+3. Paired temperature/KE handling and output metadata are implemented. Ensemble
+   guards reject incorrect stage order, changed dt, fixed/moving groups, box
+   deformation, array mismatches and unsupported rigid unwrapped storage.
+   Input selection and Run-owned compatibility guards remain to implement.
+   Build and inspect the wired executable after those changes.
 4. Run the agreed free-particle/three-bead-mixture validation, then connect the
    same ensemble to NEP for integration validation.
 
@@ -311,7 +315,7 @@ the implementation report.
 | `src/utilities/math.cuh` | Reuse existing kick and free-rotation helpers |
 | `src/integrate/ensemble_rigid_nve.cuh/.cu` | New ensemble and body-stage kernels |
 | `src/integrate/rigid_body_integrator.cuh/.cu` | Implemented unified translation overloads and GPU launch |
-| `src/integrate/ensemble.cuh/.cu` | Planned temperature DOF hook; ordinary Verlet remains unchanged |
+| `src/integrate/ensemble.cuh/.cu` | Implemented temperature DOF hook; ordinary Verlet remains unchanged |
 | `src/integrate/integrate.cuh/.cu` | Parse option, select ensemble, initialize and reset |
 | `src/main_gpumd/run.cu` | Compatibility preflight using Run-owned feature settings |
 | `src/measure/dump_thermo.cu` | Matched KE denominator and diagnostic metadata |
@@ -361,6 +365,26 @@ existing tests do not prove full-system symplecticity.
 The gpumd target and the new translation test built successfully. CTest passed
 `unit.test_rigid_body_translation`, `unit.test_quaternion`, and
 `unit.test_quaternion_gpu` (3/3). CUDA Compute Sanitizer memcheck on the new
-translation test reported zero errors. The new ensemble header was included
-by the test and checked for inheritance and declarations of both pure-virtual
-stages, without instantiating the as-yet unimplemented ensemble.
+translation test reported zero errors. The translation test includes the
+ensemble header without instantiating it.
+
+The subsequent `test_ensemble_rigid_nve` directly instantiates the ensemble and
+uses a nonperiodic mixture of a free particle and an unequal-mass triangle.
+A conservative harmonic interaction between the free particle and one body
+member supplies both COM force and nonzero torque. It checks rigid distances,
+total linear momentum, quaternion norm/tangency, bead versus body kinetic energy,
+rigid DOF temperature, potential energy, and velocity-reversal return to the
+initial bead state. It also tests stage/input guards, ordinary legacy temperature,
+all-free integration, and an all-rigid triangle straddling a periodic boundary.
+
+At fixed physical duration 4 in GPUMD internal time units, maximum energy errors
+at dt=0.04, 0.02 and 0.01 were 6.15134e-5, 1.53784e-5 and 3.84460e-6 in internal
+energy units, respectively: successive ratios are approximately 4. Torque-free
+rotation/translation at dt=0.02 had maximum energy error 1.91926e-8. These are
+artificial-fixture results, not a NEP-driven trajectory or a complete proof of
+symplecticity.
+
+The updated gpumd executable builds and links. CTest passes the six targeted
+tests (quaternion host/GPU, rigid initialization/runtime/translation, and the
+new ensemble test). CUDA Compute Sanitizer memcheck on the new ensemble test
+reports zero errors.

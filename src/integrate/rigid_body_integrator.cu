@@ -1,6 +1,5 @@
 #include "integrate/rigid_body_integrator.cuh"
 #include "model/atom.cuh"
-#include "utilities/gpu_macro.cuh"
 #include <limits>
 #include <stdexcept>
 

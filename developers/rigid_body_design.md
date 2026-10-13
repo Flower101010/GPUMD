@@ -80,10 +80,13 @@ ordering and staged implementation plan are in
 [`rigid_nve_interface_design.md`](rigid_nve_interface_design.md). That document
 is a design proposal, not an implemented run.in feature.
 
-Ensemble_Rigid_NVE's two Miller integration stages, run.in selection and full
-NEP-driven NVE validation remain separate work. The manager does not calculate
-interactions or select timestep/integration stages. Thermodynamic DOF and the
-constraint virial also need upper-layer treatment.
+Ensemble_Rigid_NVE initialization, unified translational Verlet and both Miller
+integration stages are implemented and tested with an interacting free-particle /
+three-bead-triangle fixture. Temperature and KE use matched rigid DOF handling.
+run.in selection and full NEP-driven NVE validation remain separate work.
+The manager does not calculate interactions or select timestep/integration stages.
+Constraint virial remains unimplemented; thermo headers mark stress as excluding
+that contribution.
 
 Before the first MD step, initialize, reconstruct positions and projected
 velocities, evaluate bead forces, and aggregate body loads. No run.in

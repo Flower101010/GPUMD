@@ -22,8 +22,8 @@ public:
     double time_step, const std::vector<Group>& groups,
     Box& box, Atom& atom, GPU_Vector<double>& thermo) override;
 
-  // 3*N_free + 6*N_nonlinear_body；接入公共 thermo DOF hook 时再加 override。
-  int thermal_degrees_of_freedom() const;
+  // 3*N_free + 6*N_nonlinear_body，不自动扣除全体系动量自由度。
+  int thermal_degrees_of_freedom() const override;
   const RigidBodySystem& rigid_bodies() const { return rigid_; }
 
 private:
@@ -31,7 +31,10 @@ private:
   int molecule_grouping_method_;
   int thermal_dof_ = 0;
   Stage stage_ = Stage::uninitialized;
+  double step_time_step_ = 0.0; // 同一 run 内固定步长；两个半步必须一致
   RigidBodySystem rigid_;
+
+  void check_step(double time_step, const Atom& atom, const GPU_Vector<double>& thermo) const;
 
   // 调用已有 kick_rotation / integrate_free_rotation，不重写 Miller。
   // step1 半 kick + 五阶段自由旋转；step2 只有半 kick。

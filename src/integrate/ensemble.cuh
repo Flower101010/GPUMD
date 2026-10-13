@@ -29,6 +29,9 @@ public:
   Ensemble(void);
   virtual ~Ensemble(void);
 
+  // 0 保留既有 ensemble 的温度/动能约定；正值由受约束 ensemble 指定。
+  virtual int thermal_degrees_of_freedom() const { return 0; }
+
   virtual void compute1(
     const double time_step,
     const std::vector<Group>& group,
