@@ -30,6 +30,7 @@ The driver class for the various integrators.
 #include "ensemble_npt_scr.cuh"
 #include "ensemble_nve.cuh"
 #include "ensemble_rigid_nve.cuh"
+#include "ensemble_rigid_nvt.cuh"
 #include "ensemble_pimd.cuh"
 #include "ensemble_qtb.cuh"
 #include "ensemble_ti.cuh"
@@ -45,6 +46,7 @@ The driver class for the various integrators.
 #include "utilities/common.cuh"
 #include "utilities/gpu_macro.cuh"
 #include "utilities/read_file.cuh"
+#include <cmath>
 #include <cstring>
 #include <exception>
 
@@ -59,9 +61,9 @@ void Integrate::initialize(
   this->total_steps = total_steps;
   int number_of_atoms = atom.number_of_atoms;
   if (rigid_grouping_method >= 0 &&
-      (type != 0 || fixed_group >= 0 || move_group >= 0 || deform_x || deform_y ||
+      ((type != 0 && type != 2) || fixed_group >= 0 || move_group >= 0 || deform_x || deform_y ||
        deform_z || deform_xy || deform_xz || deform_yz)) {
-    PRINT_INPUT_ERROR("rigid_nve requires fixed-box NVE without fix, move, or deform.");
+    PRINT_INPUT_ERROR("Rigid ensembles require fixed-box NVE or NHC NVT without fix, move, or deform.");
   }
   if (move_group >= 0) {
     if (fixed_group < 0) {
@@ -81,6 +83,7 @@ void Integrate::initialize(
 
   // determine the integrator
   Ensemble_Rigid_NVE* rigid_ensemble = nullptr;
+  Ensemble_Rigid_NVT* rigid_nvt_ensemble = nullptr;
   switch (type) {
     case 0: // NVE
       if (rigid_grouping_method >= 0) {
@@ -95,14 +98,15 @@ void Integrate::initialize(
         new Ensemble_BER(type, move_group, move_velocity, temperature, temperature_coupling));
       break;
     case 2: // NVT-NHC
-      ensemble.reset(new Ensemble_NHC(
-        type,
-        move_group,
-        move_velocity,
-        number_of_atoms,
-        temperature,
-        temperature_coupling,
-        time_step));
+      if (rigid_grouping_method >= 0) {
+        rigid_nvt_ensemble = new Ensemble_Rigid_NVT(
+          rigid_grouping_method, temperature, temperature_coupling, time_step);
+        ensemble.reset(rigid_nvt_ensemble);
+      } else {
+        ensemble.reset(new Ensemble_NHC(
+          type, move_group, move_velocity, number_of_atoms,
+          temperature, temperature_coupling, time_step));
+      }
       break;
     case 3: // NVT-Langevin
       ensemble.reset(new Ensemble_LAN(type, number_of_atoms, temperature, temperature_coupling));
@@ -317,17 +321,21 @@ void Integrate::initialize(
   ensemble->fixed_group = fixed_group;
   ensemble->fixed_grouping_method = fixed_grouping_method;
   ensemble->move_grouping_method = move_grouping_method;
-  if (rigid_ensemble) {
+  const auto initialize_rigid = [&](auto* rigid, const char* name) {
     try {
-      rigid_ensemble->initialize(atom, box, group);
+      rigid->initialize(atom, box, group);
     } catch (const std::exception& error) {
       PRINT_INPUT_ERROR(error.what());
     }
-    printf("Rigid NVE initialized: %d bodies, %d free particles, %d thermal DOF.\n",
-           rigid_ensemble->rigid_bodies().number_of_bodies(),
-           number_of_atoms - rigid_ensemble->rigid_bodies().number_of_members(),
-           rigid_ensemble->thermal_degrees_of_freedom());
-  }
+    printf("Rigid %s initialized: %d bodies, %d free particles, %d thermal DOF.\n",
+           name, rigid->rigid_bodies().number_of_bodies(),
+           number_of_atoms - rigid->rigid_bodies().number_of_members(),
+           rigid->thermal_degrees_of_freedom());
+  };
+  if (rigid_ensemble)
+    initialize_rigid(rigid_ensemble, "NVE");
+  if (rigid_nvt_ensemble)
+    initialize_rigid(rigid_nvt_ensemble, "NVT");
 }
 
 void Integrate::finalize()
@@ -430,6 +438,15 @@ void Integrate::parse_ensemble(
     }
     // 该模式无温度目标/斜坡；固定这些字段，避免主循环读取未初始化值。
     temperature = temperature1 = temperature2 = 0.0;
+  } else if (strcmp(param[1], "rigid_nvt") == 0) {
+    type = 2;
+    if (num_param != 6) {
+      PRINT_INPUT_ERROR("ensemble rigid_nvt requires T_initial T_final T_coupling grouping_method.");
+    }
+    if (!is_valid_int(param[5], &rigid_grouping_method) || rigid_grouping_method < 0 ||
+        static_cast<std::size_t>(rigid_grouping_method) >= group.size()) {
+      PRINT_INPUT_ERROR("rigid_nvt requires a valid nonnegative molecule grouping-method index.");
+    }
   } else if (strcmp(param[1], "nvt_ber") == 0) {
     type = 1;
     if (num_param != 5) {
@@ -610,6 +627,12 @@ void Integrate::parse_ensemble(
         PRINT_INPUT_ERROR("Temperature coupling should >= 1.");
       }
     }
+  }
+
+  if (rigid_grouping_method >= 0 && type == 2 &&
+      (!std::isfinite(temperature1) || !std::isfinite(temperature2) ||
+       !std::isfinite(temperature_coupling))) {
+    PRINT_INPUT_ERROR("rigid_nvt requires finite temperatures and temperature coupling.");
   }
 
   // 2b. Optional parameters for QTB
@@ -1151,7 +1174,10 @@ void Integrate::parse_ensemble(
       printf("    tau_T is %g time_step.\n", temperature_coupling);
       break;
     case 2:
-      printf("Use NVT ensemble for this run.\n");
+      if (rigid_grouping_method >= 0)
+        printf("Use rigid NVT ensemble with molecule grouping method %d.\n", rigid_grouping_method);
+      else
+        printf("Use NVT ensemble for this run.\n");
       printf("    choose the Nose-Hoover chain method.\n");
       printf("    initial temperature is %g K.\n", temperature1);
       printf("    final temperature is %g K.\n", temperature2);

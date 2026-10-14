@@ -162,10 +162,21 @@ if(UNIX)
         TIMEOUT 120)
 endif()
 
+find_package(Python3 QUIET COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME integration.rigid_nvt_run_in
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_rigid_nvt_run_in.py
+            $<TARGET_FILE:gpumd> $<TARGET_FILE:test_gpu_vector> ${PROJECT_SOURCE_DIR})
+    set_tests_properties(integration.rigid_nvt_run_in PROPERTIES
+        LABELS "integration;gpu"
+        RESOURCE_LOCK gpu
+        SKIP_REGULAR_EXPRESSION "^SKIP: no accessible GPU"
+        TIMEOUT 120)
+endif()
 # Optional independent cross-validation against an installed GROMACS.  The
 # reference executable is also searched in the common per-user install prefix
 # because non-interactive shells do not necessarily source GMXRC or shell aliases.
-find_package(Python3 QUIET COMPONENTS Interpreter)
 find_program(GPUMD_GROMACS_EXECUTABLE
     NAMES gmx_d gmx_mpi_d gmx gmx_mpi
     HINTS "$ENV{HOME}/gromacs/bin"

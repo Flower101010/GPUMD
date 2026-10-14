@@ -32,7 +32,7 @@ This software is distributed under the GNU General Public License (GPL) version 
 
 ## Extensions in this repository / 本仓库新增功能
 
-This repository includes three extensions. Start with the documentation linked below
+This repository includes four extensions. Start with the documentation linked below
 when using, modifying, or continuing work on these features.
 
 | Feature  | Usage  | Documentation |
@@ -40,6 +40,7 @@ when using, modifying, or continuing work on these features.
 | Streaming training  | `stream_train 1` keeps only the current training batch on GPUs; parsed data stays on the CPU. Scratch space and validation data still occupy GPU memory.  | [stream_train](doc/nep/input_parameters/stream_train.rst) |
 | Pair-specific cutoffs  | `cross_cutoff i j radial angular` overrides the symmetric cutoff for a selected pair of different types; other pairs retain the default averaging rule. Indices start at 0 and follow the `type` order.  | [cutoff and cross_cutoff](doc/nep/input_parameters/cutoff.rst), [cluster build and usage](INSTALL_CLUSTER.md) |
 | Multi-bead CG  | Fixed harmonic bond/angle and periodic proper-dihedral terms plus a trainable residual NEP, with per-frame topology, shared parameters and complete model packages for MD.  | [build, training and MD tutorial ](examples/multibead_cg/README.md), [detailed guide](developers/multibead_cg_guide_zh.md) |
+| Rigid-body NVE/NVT | GPU integration of nonlinear multi-bead rigid bodies mixed with free particles, using Miller quaternion dynamics and a Nose-Hoover chain for NVT, under bead forces from a temperature-independent NEP or another supported potential. | [input syntax and restrictions](doc/gpumd/input_parameters/ensemble_standard.rst), [NVE design](developers/rigid_nve_interface_design.md), [NVT implementation and checks](developers/rigid_nvt.md) |
 
 For streaming, add `stream_train 1` to `nep.in` or `gnep.in`; the default is `0`.
 Pair-specific cutoffs belong in `nep.in` after `type` and `cutoff`, for example:
@@ -66,6 +67,44 @@ CUDA_VISIBLE_DEVICES=0 bash examples/multibead_cg/run_example.sh
 
 The example demonstrates the workflow. Scientific model quality is separate from
 the software correctness checks.
+
+### Rigid-body NVE/NVT / 刚体 NVE/NVT
+
+Use `ensemble rigid_nve <grouping_method>` for fixed-box NVE, or
+`ensemble rigid_nvt <T_initial> <T_final> <T_coupling> <grouping_method>` for
+fixed-box NVT. Bodies translate and rotate under the summed bead forces and
+torques while preserving their internal geometry. The NVT integrator reuses
+GPUMD's Nose-Hoover chain propagator and supports a linear target-temperature ramp.
+
+The zero-based grouping-method index selects molecule membership in `model.xyz`.
+Each multi-member group forms one rigid body; each singleton group is a free
+particle and must have its own label. Different bodies may have different bead
+counts; membership is not restricted to three beads. Initial bead velocities are
+projected onto rigid translation and rotation.
+
+For example, with molecule labels in grouping method `0`:
+
+```text
+potential nep.txt
+time_step 0.1
+ensemble rigid_nvt 300 300 1000 0
+dump_thermo 10
+dump_xyz 10 trajectory.xyz precision double velocity force group_labels
+run 1000
+```
+
+Temperatures are in kelvin; `T_coupling` is in integration steps, so `1000` with
+`time_step 0.1` means a coupling time of 100 fs. These values illustrate the syntax;
+choose the timestep and coupling for your system. Replace the ensemble command
+with `ensemble rigid_nve 0` to use NVE.
+
+Temperature and kinetic energy use `3*N_free + 6*N_body` degrees of freedom.
+Global pressure includes the rigid constraint virial; per-atom virials remain
+interaction-only. Current support requires a fixed box and nonlinear bodies;
+linear bodies and rigid NPT are not implemented. See the linked input documentation
+for supported outputs and action restrictions. Consecutive runs reconstruct the
+body state, and NVT reinitializes its thermostat chain at each run boundary;
+bead restart output is not an exact checkpoint of the extended dynamics.
 
 ## Tutorials
 

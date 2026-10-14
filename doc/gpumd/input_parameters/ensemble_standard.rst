@@ -83,6 +83,59 @@ The choice of :attr:`<T_coup>` is discussed :ref:`below <choice_of_parameters>`.
 ^^^^^^^^^^^^^^^
 If the first parameter is :attr:`nvt_nhc`, it is similar to the case of :attr:`nvt_ber`, but using the :ref:`Nose-Hoover chain method <nose_hoover_chain_thermostat>`.
 
+:attr:`rigid_nvt`
+^^^^^^^^^^^^^^^^^^
+The fixed-box rigid NVT integrator uses the same Nose-Hoover chain propagator
+as ``nvt_nhc`` and the same Miller rigid-body integration as ``rigid_nve``::
+
+    ensemble rigid_nvt <T_1> <T_2> <T_coup> <grouping_method>
+
+``T_1`` and ``T_2`` are positive finite target temperatures in kelvin. The
+target varies linearly during a run, following the ``nvt_nhc`` convention.
+For a constant target, set them equal. ``T_coup`` is a finite coupling time
+in units of integration steps and must be at least 1; the actual relaxation
+time is ``T_coup * time_step``. The final argument is the zero-based molecule
+grouping-method index, with the same membership and geometry rules as
+``rigid_nve``: singleton groups are free particles and multi-member groups
+are nonlinear rigid bodies.
+
+For example::
+
+    potential nep.txt
+    time_step 0.1
+    ensemble rigid_nvt 300 300 1000 0
+    dump_thermo 10
+    dump_xyz 10 trajectory.xyz precision double velocity force group_labels
+    run 1000
+
+Choose the timestep and coupling for your potential and system; the values
+above illustrate the syntax. Initialization projects bead velocities onto
+rigid translation/rotation without rescaling them to the target temperature.
+
+A single chain couples to all free-particle, body-translation and body-rotation
+degrees of freedom, using ``f = 3*N_free + 6*N_body``. Chain masses are
+``Q_0 = f*k_B*T_1*tau^2`` and ``Q_j = k_B*T_1*tau^2`` for subsequent links,
+with ``tau = T_coup * time_step``; they remain fixed during a temperature ramp.
+Each step applies a thermostat half-step before the physical rigid step and
+another afterwards. The thermostat scales free-particle velocities, body
+center-of-mass velocities and Miller conjugate momenta, then reconstructs
+bead velocities. Orientations are not scaled.
+
+The fixed-box, output and action restrictions of ``rigid_nve`` also apply.
+``thermo.out`` reports the actual instantaneous temperature and kinetic
+energy with the rigid DOF count, and identifies the ensemble as ``rigid_nvt``.
+Its global pressure includes the physical rigid constraint virial; thermostat
+scaling impulses are excluded from that constraint-force estimate.
+
+The selection persists across consecutive ``run`` commands. At each run
+boundary, body state is reconstructed from the current beads and the chain
+is initialized anew, using that run's timestep and initial target temperature.
+The temperature ramp also starts again for each run, as with ``nvt_nhc``.
+Reissue the desired output commands for each run, following the usual GPUMD
+measurement lifecycle.
+Bead restart output does not store thermostat-chain state, so it does not
+provide an exact continuation of the extended-system trajectory.
+
 :attr:`nvt_bdp`
 ^^^^^^^^^^^^^^^
 If the first parameter is :attr:`nvt_bdp`, it is similar to the case of :attr:`nvt_ber`, but using the :ref:`Bussi-Donadio-Parrinello method <bdp_thermostat>`.

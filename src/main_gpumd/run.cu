@@ -250,17 +250,17 @@ void Run::perform_a_run()
 {
   if (integrate.rigid_grouping_method >= 0) {
     if (!std::isfinite(time_step) || time_step <= 0.0 || max_distance_per_step > 0.0) {
-      PRINT_INPUT_ERROR("rigid_nve requires a positive fixed time_step without max_distance_per_step.");
+      PRINT_INPUT_ERROR("Rigid ensembles require a positive fixed time_step without max_distance_per_step.");
     }
     if (velocity.do_velocity_correction) {
-      PRINT_INPUT_ERROR("correct_velocity is not supported with rigid_nve; bead and body states would diverge.");
+      PRINT_INPUT_ERROR("correct_velocity is not supported with rigid ensembles; bead and body states would diverge.");
     }
     if (atom.unwrapped_position.size()) {
-      PRINT_INPUT_ERROR("rigid_nve does not track unwrapped positions; use wrapped trajectory output.");
+      PRINT_INPUT_ERROR("Rigid ensembles do not track unwrapped positions; use wrapped trajectory output.");
     }
     for (const auto& potential : force.potentials) {
       if (potential->nep_model_type == 3) {
-        PRINT_INPUT_ERROR("rigid_nve currently supports temperature-independent potentials only.");
+        PRINT_INPUT_ERROR("Rigid ensembles currently support temperature-independent potentials only.");
       }
     }
     // 首版只开放已知不会修改状态、重算 thermo 或依赖原子约束应力的输出/结构测量。
@@ -270,8 +270,8 @@ void Run::perform_a_run()
       if (name != "dump_thermo" && name != "dump_xyz" && name != "dump_netcdf" &&
           name != "dump_restart" && name != "compute_rdf" && name != "compute_adf" &&
           name != "compute_angular_rdf" && name != "compute_orientorder") {
-        printf("Unsupported action with rigid_nve: %s\n", name.c_str());
-        PRINT_INPUT_ERROR("This action has not been adapted to rigid_nve; use its supported outputs/structural measurements.");
+        printf("Unsupported action with rigid ensembles: %s\n", name.c_str());
+        PRINT_INPUT_ERROR("This action has not been adapted to rigid ensembles; use its supported outputs/structural measurements.");
       }
     }
   }

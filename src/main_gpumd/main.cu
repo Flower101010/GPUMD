@@ -21,8 +21,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
-#include <ctime>
+
 
 void print_welcome_information();
 
@@ -71,7 +70,7 @@ void print_welcome_information()
   printf("***************************************************************\n");
   printf("*                 Welcome to use GPUMD                        *\n");
   printf("*     (Graphics Processing Units Molecular Dynamics)          *\n");
-  printf("*                     version 5.8.flos                            *\n");
+  printf("*         Based on version 5.8   Modified by flos             *\n");
   printf("*              This is the gpumd executable                   *\n");
   printf("***************************************************************\n");
   printf("\n");
