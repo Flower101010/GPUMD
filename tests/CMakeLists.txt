@@ -64,10 +64,16 @@ target_sources(test_rigid_body_translation PRIVATE
     ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body.cu
     ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body_integrator.cu)
 gpumd_add_unit_test(test_ensemble_rigid_nve test_ensemble_rigid_nve.cu)
+gpumd_add_unit_test(test_rigid_body_operators test_rigid_body_operators.cu)
+target_sources(test_rigid_body_operators PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body.cu
+    ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body_integrator.cu
+    ${PROJECT_SOURCE_DIR}/src/integrate/rigid_thermo.cu)
 target_sources(test_ensemble_rigid_nve PRIVATE
     ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body.cu
     ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body_integrator.cu
     ${PROJECT_SOURCE_DIR}/src/integrate/ensemble.cu
+    ${PROJECT_SOURCE_DIR}/src/integrate/rigid_thermo.cu
     ${PROJECT_SOURCE_DIR}/src/integrate/ensemble_nve.cu
     ${PROJECT_SOURCE_DIR}/src/integrate/ensemble_rigid_nve.cu
     ${PROJECT_SOURCE_DIR}/src/model/box.cu
@@ -105,6 +111,7 @@ set_tests_properties(unit.test_bonded_nep_compiled PROPERTIES
     SKIP_REGULAR_EXPRESSION "^SKIP: no accessible GPU")
 
 set(GPUMD_GPU_UNIT_TESTS
+    unit.test_rigid_body_operators
     unit.test_ensemble_rigid_nve
     unit.test_rigid_body_translation
     unit.test_rigid_body_initialization

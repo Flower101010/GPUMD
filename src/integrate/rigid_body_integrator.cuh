@@ -10,19 +10,37 @@
 
 namespace rigid_integrator
 {
-// 共用平动公式：step1 半步 kick + 整步 drift；step2 只有半步 kick。
-// dt 使用 GPUMD 内部单位；调用者在两个阶段之间重新计算力。
+// h 是本操作实际执行的时间长度，使用 GPUMD 内部单位。
+RIGID_INTEGRATOR_HD inline void
+kick_translation(double h, double mass, const Vec3& force, Vec3& velocity)
+{
+  assert(std::isfinite(mass) && mass > 0.0);
+  assert(std::isfinite(h));
+  velocity = rigid_math::add(velocity, rigid_math::scale(force, h / mass));
+}
+RIGID_INTEGRATOR_HD inline void drift_translation(double h, Vec3& position, const Vec3& velocity)
+{
+  assert(std::isfinite(h));
+  position = rigid_math::add(position, rigid_math::scale(velocity, h));
+}
+
+// GPU 操作同时覆盖质心与自由粒子；受管理 bead 不重复积分。
+// 转动操作仅更新 quat/conjqm。均不计算力、包装坐标或重建 bead。
+// 默认 GPU stream；支持有限负 h，以便验证可逆性；空体系不 launch。
+void kick_translation(double h, Atom& atom, RigidBodySystem& rigid);
+void drift_translation(double h, Atom& atom, RigidBodySystem& rigid);
+void kick_rotation(double h, RigidBodySystem& rigid);
+void drift_rotation(double h, RigidBodySystem& rigid);
+
+// 保留原有 Verlet 接口：step1 半 kick + 整 drift，step2 只有半 kick。
+// GPU 版本仍将平动 kick/drift 融合为一次 launch；新 ensemble 可独立编排上述操作。
 RIGID_INTEGRATOR_HD inline void velocity_verlet(
   bool is_step1, double dt, double mass, const Vec3& force, Vec3& position, Vec3& velocity)
 {
-  assert(std::isfinite(mass) && mass > 0.0);
-  assert(std::isfinite(dt));
-  velocity = rigid_math::add(velocity, rigid_math::scale(force, 0.5 * dt / mass));
+  kick_translation(0.5 * dt, mass, force, velocity);
   if (is_step1)
-    position = rigid_math::add(position, rigid_math::scale(velocity, dt));
+    drift_translation(dt, position, velocity);
 }
-
-// 刚体质心只是质量为 M、受合力 F 的平动粒子；不更新 quat/conjqm。
 RIGID_INTEGRATOR_HD inline void velocity_verlet(
   bool is_step1,
   double dt,
@@ -32,11 +50,6 @@ RIGID_INTEGRATOR_HD inline void velocity_verlet(
 {
   velocity_verlet(is_step1, dt, geometry.mass, load.fcm, state.xcm, state.vcm);
 }
-
-// 一个 GPU launch 更新所有质心与自由粒子。受管理 bead 不单独积分。
-// 前置条件：rigid 已初始化；body loads 和 Atom forces 对应当前阶段。
-// 不汇总力、不更新转动、不 remap、不重建 bead；这些由 ensemble 排序。
-// 默认 GPU stream；允许有限的负 dt 以验证可逆性，空体系直接返回。
 void velocity_verlet(bool is_step1, double dt, Atom& atom, RigidBodySystem& rigid);
 } // namespace rigid_integrator
 

@@ -1,6 +1,7 @@
 #pragma once
 #include "ensemble.cuh"
 #include "rigid_body.cuh"
+#include "rigid_thermo.cuh"
 
 class Ensemble_Rigid_NVE : public Ensemble
 {
@@ -14,13 +15,19 @@ public:
 
   // 汇总旧力 -> 平动/转动半 kick -> 整步 drift -> remap/rebuild。
   void compute1(
-    double time_step, const std::vector<Group>& groups,
-    Box& box, Atom& atom, GPU_Vector<double>& thermo) override;
+    double time_step,
+    const std::vector<Group>& groups,
+    Box& box,
+    Atom& atom,
+    GPU_Vector<double>& thermo) override;
 
   // 中间 Force::compute 后：汇总新力 -> 后半 kick -> rebuild v -> thermo。
   void compute2(
-    double time_step, const std::vector<Group>& groups,
-    Box& box, Atom& atom, GPU_Vector<double>& thermo) override;
+    double time_step,
+    const std::vector<Group>& groups,
+    Box& box,
+    Atom& atom,
+    GPU_Vector<double>& thermo) override;
 
   // 3*N_free + 6*N_nonlinear_body，不自动扣除全体系动量自由度。
   int thermal_degrees_of_freedom() const override;
@@ -28,22 +35,18 @@ public:
   // 总压力诊断用的每体约束 virial，6*B SoA：xx,yy,zz,xy,xz,yz。
   // initialize 后为零；compute1 为第一半贡献，compute2 后为完整一步贡献。
   // 不等同于 LAMMPS 的每原子 stress 分配；Atom 的模型 virial 保持原值。
-  const GPU_Vector<double>& constraint_virial_per_body() const { return constraint_virial_; }
+  const GPU_Vector<double>& constraint_virial_per_body() const
+  {
+    return thermo_state_.constraint_virial_per_body();
+  }
 
 private:
   enum class Stage { uninitialized, full_step, half_step };
   int molecule_grouping_method_;
-  int thermal_dof_ = 0;
   Stage stage_ = Stage::uninitialized;
   double step_time_step_ = 0.0; // 同一 run 内固定步长；两个半步必须一致
   RigidBodySystem rigid_;
-  GPU_Vector<Quaternion> previous_quats_; // 第一阶段使用漂移前的相对坐标
-  GPU_Vector<double> constraint_virial_;
+  RigidThermo thermo_state_;
 
   void check_step(double time_step, const Atom& atom, const GPU_Vector<double>& thermo) const;
-
-  // 调用已有 kick_rotation / integrate_free_rotation，不重写 Miller。
-  // step1 半 kick + 五阶段自由旋转；step2 只有半 kick。
-  void integrate_rotation(bool is_step1, double time_step);
-  void tally_constraint_virial(bool is_step1, double time_step, const Atom& atom);
 };

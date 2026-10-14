@@ -1,12 +1,14 @@
 # Rigid NVE: ensemble interface and execution contract
 
-Status: implementation updated, 2026-10-13. Unified translational Verlet,
-ensemble initialization, both integration stages and paired temperature/KE
-DOF handling and global constraint virial are implemented. The run.in entry and
-compatibility guards are now connected, with compilation checked only; runtime
-validation of this input path is assigned to the user. Full NEP-driven MD
-validation remains pending. This builds on
-`rigid_body_design.md` and current source interfaces.
+Status: shared-operator/thermo refactor, 2026-10-14. The fixed-box rigid NVE
+implementation and run.in entry have been validated by the user, and the prior
+branch was merged into local master/tagged rigid-nve-v1. The current refactor
+preserves NVE's two-stage physical algorithm and public interface while
+extracting reusable integration operations and RigidThermo. Focused CTests,
+CUDA memory checks and the gpumd build are used for this change; the final-scale
+all_rigid_3000 and mixed_2700_300 simulations are not rerun. See the final
+section for current APIs and validation scope. Earlier dated sections retain
+the design history. This builds on rigid_body_design.md.
 
 ## Goal and first validation system
 
@@ -484,3 +486,89 @@ validation task was run, at the user's request. Earlier unit-test results apply
 to the previously implemented components, not acceptance of the newly wired
 run.in path. The executable is build/gpumd; the user will perform the runtime
 and physical tests.
+
+
+## Shared operations and thermo refactor (2026-10-14)
+
+The user-validated NVE baseline was merged into local master and tagged
+`rigid-nve-v1`. Refactoring continues on `codex/rigid-integrator-thermo`.
+This change separates reusable code without implementing a thermostat/barostat
+or changing the existing run.in selection and Ensemble compute1/compute2 API.
+
+Responsibilities are now:
+
+- RigidBodySystem owns body geometry/state, gathers model forces and reconstructs
+  beads. Its fixed-box and nonlinear-body contract is unchanged.
+- rigid_integrator owns explicit translation/rotation kick and drift operations.
+  Every operation receives its actual duration h in internal time units. There
+  is no hidden half-step factor: callers pass dt/2 to a half kick. Translation
+  covers COMs and free particles; rotation covers bodies only. No operation
+  reconstructs beads or computes thermo. Negative finite h is allowed for
+  reversibility tests. Drift does not require an Atom force buffer.
+- RigidThermo owns thermal DOFs, previous orientations and the per-body
+  constraint virial. It does not integrate or change model force/virial arrays.
+- Ensemble_Rigid_NVE retains selection, initialization, fixed-dt/stage checks
+  and the ordering of these operations. It no longer owns physics kernels.
+
+The legacy velocity_verlet overloads remain as small convenience wrappers for
+existing callers/tests. Their GPU translation kick/drift remains fused into one
+launch. NVE now calls the explicit operators, so their order is visible and can
+later be composed with thermostat operators. Separate launches may cost more
+than the former fused NVE kernels; no new performance claim is made here.
+
+The two-stage sequence is:
+
+```text
+compute1:
+  validate box; gather old forces
+  thermo.begin_step (save old orientations)
+  translation kick(dt/2), drift(dt)
+  rotation kick(dt/2), free drift(dt)
+  remap COMs; rebuild positions
+  thermo.record_first_half(dt/2)
+  rebuild half-step bead velocities
+
+force module: evaluate new interaction forces/virial
+
+compute2:
+  validate box; gather new forces
+  translation kick(dt/2), rotation kick(dt/2)
+  thermo.record_second_half(dt/2)
+  rebuild full-step bead velocities
+  existing find_thermo reduction
+  thermo.add_constraint_pressure
+```
+
+The two constraint samples retain the original NVE definition and weights:
+fc=m*(v_after-v_before)/h-f_interaction; each contributes 0.5*r tensor fc.
+The first sample uses the saved old orientation and overwrites the prior step;
+the second uses the new orientation and accumulates. Atom velocities must still
+be the velocities BEFORE the corresponding physical kick when a sample is
+recorded. Consequently each record precedes rebuild_velocities.
+
+RigidThermo enforces begin -> first -> second ordering and equal positive half
+step durations, checks topology/Atom arrays, and disallows pressure correction
+from incomplete samples. Pressure correction must be added once to a freshly
+reduced base thermo array. It is not an idempotent full-thermo calculation.
+
+This makes the physical sampling window explicit for future NVT, but does not
+prove that the current impulse formula can be reused unchanged for NPT or
+arbitrary thermostat placement. Bath/barostat impulses must not silently enter
+a constraint sample; pressure and kinetic energy time levels still need a
+separate design when those ensembles are implemented. Kinetic-energy partition
+and momentum rescaling are also future work, not part of this refactor.
+
+Validation: the six existing focused CTests pass, plus the new
+`test_rigid_body_operators`, which checks full operation durations, independent
+translation updates, known rotational impulse, analytic principal-axis rotation,
+negative-time reversal, and the thermo window guards. Compute Sanitizer memcheck
+passes both test_ensemble_rigid_nve and test_rigid_body_operators with zero errors.
+The gpumd target is compiled/linked separately. At the user's request, neither
+all_rigid_3000 nor mixed_2700_300 final-scale simulations is rerun; previous
+user validation belongs to the tagged baseline, not a new long-run measurement.
+
+```bash
+cmake -S . -B build -DBUILD_TESTING=ON
+cmake --build build --target test_ensemble_rigid_nve test_rigid_body_operators -j4
+ctest --test-dir build -R '^unit.test_(quaternion(_gpu)?|rigid_body_(initialization|runtime|translation|operators)|ensemble_rigid_nve)$' --output-on-failure
+```
