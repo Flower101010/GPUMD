@@ -7,6 +7,28 @@ namespace rigid_integrator
 {
 namespace
 {
+__global__ void scale_momenta_kernel(
+  double factor, RigidBodySystem::DeviceView view, double* velocity)
+{
+  const int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < view.number_of_bodies) {
+    auto& state = view.state[i];
+    state.vcm = rigid_math::scale(state.vcm, factor);
+    state.conjqm.w *= factor;
+    state.conjqm.x *= factor;
+    state.conjqm.y *= factor;
+    state.conjqm.z *= factor;
+    return;
+  }
+  const int a = i - view.number_of_bodies;
+  if (a >= view.number_of_atoms || view.atom_to_body[a] != -1)
+    return;
+  const std::size_t n = view.number_of_atoms, index = a;
+  velocity[index] *= factor;
+  velocity[index + n] *= factor;
+  velocity[index + 2 * n] *= factor;
+}
+
 // 编译期选择操作，避免重复 kernel 或在公开接口中用 bool 混合 kick/drift。
 template <bool Kick, bool Drift>
 __global__ void integrate_translation(
@@ -106,6 +128,24 @@ void launch_rotation(double h, RigidBodySystem& rigid)
   GPU_CHECK_KERNEL
 }
 } // namespace
+
+void scale_momenta(double factor, Atom& atom, RigidBodySystem& rigid)
+{
+  if (!std::isfinite(factor) || factor <= 0.0)
+    throw std::invalid_argument("Rigid momentum scaling requires a finite positive factor.");
+  const auto view = rigid.device_view();
+  const std::size_t n = view.number_of_atoms;
+  if (atom.number_of_atoms != view.number_of_atoms || atom.velocity_per_atom.size() != 3 * n)
+    throw std::invalid_argument("Rigid momentum scaling requires matching Atom velocities.");
+  if (view.number_of_atoms > std::numeric_limits<int>::max() - view.number_of_bodies - 127)
+    throw std::overflow_error("Too many momentum entries for the GPU launch.");
+  const int entries = view.number_of_atoms + view.number_of_bodies;
+  if (entries == 0)
+    return;
+  scale_momenta_kernel<<<(entries - 1) / 128 + 1, 128>>>(
+    factor, view, atom.velocity_per_atom.data());
+  GPU_CHECK_KERNEL
+}
 
 void kick_translation(double h, Atom& atom, RigidBodySystem& rigid)
 {

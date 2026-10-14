@@ -139,6 +139,33 @@ int main()
   rejects<std::invalid_argument>(
     [&] { rigid_integrator::kick_rotation(std::numeric_limits<double>::quiet_NaN(), rigid); });
 
+  // 恒温缩放只作用于独立动量；bead 由调用者重建，避免被重复缩放。
+  rigid.rebuild_velocities(atom);
+  const auto before_scale = download(atom.velocity_per_atom);
+  const auto before_body = body(rigid);
+  rigid_integrator::scale_momenta(1.7, atom, rigid);
+  const auto scaled_body = body(rigid);
+  near(scaled_body.state.xcm, before_body.state.xcm);
+  near(scaled_body.state.quat, before_body.state.quat);
+  near(scaled_body.state.vcm, scale(before_body.state.vcm, 1.7));
+  near(
+    conjqm_to_angular_momentum(scaled_body.state.quat, scaled_body.state.conjqm),
+    scale(conjqm_to_angular_momentum(before_body.state.quat, before_body.state.conjqm), 1.7));
+  near(dot(scaled_body.state.quat, scaled_body.state.conjqm), 0);
+  result = download(atom.velocity_per_atom);
+  for (int i : {0, 1, 2, 4, 5, 6, 8, 9, 10})
+    near(result[i], before_scale[i]);
+  rigid.rebuild_velocities(atom);
+  result = download(atom.velocity_per_atom);
+  for (std::size_t i = 0; i < result.size(); ++i)
+    near(result[i], 1.7 * before_scale[i]);
+  rigid_integrator::scale_momenta(1.0 / 1.7, atom, rigid);
+  rigid.rebuild_velocities(atom);
+  rejects<std::invalid_argument>([&] { rigid_integrator::scale_momenta(0, atom, rigid); });
+  rejects<std::invalid_argument>([&] {
+    rigid_integrator::scale_momenta(std::numeric_limits<double>::quiet_NaN(), atom, rigid);
+  });
+
   // 共用 thermo 明确拒绝乱序/未完成样本，错误调用不推进统计阶段。
   state.conjqm = {0, 0, 0, 0};
   CHECK(gpuMemcpy(rigid.device_view().state, &state, sizeof(state), gpuMemcpyHostToDevice));
@@ -178,5 +205,6 @@ int main()
   rigid_integrator::drift_translation(0.1, empty, empty_rigid);
   rigid_integrator::kick_rotation(0.1, empty_rigid);
   rigid_integrator::drift_rotation(0.1, empty_rigid);
+  rigid_integrator::scale_momenta(1.2, empty, empty_rigid);
   std::cout << "Rigid operators and thermo window checks passed.\n";
 }

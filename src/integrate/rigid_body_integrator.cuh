@@ -32,6 +32,10 @@ void drift_translation(double h, Atom& atom, RigidBodySystem& rigid);
 void kick_rotation(double h, RigidBodySystem& rigid);
 void drift_rotation(double h, RigidBodySystem& rigid);
 
+// 缩放自由粒子 v、刚体 vcm 和 Miller 共轭动量 p；不改变 xcm/quat。
+// 受管理 bead 不直接缩放；调用者随后 rebuild_velocities，使两层状态一致。
+void scale_momenta(double factor, Atom& atom, RigidBodySystem& rigid);
+
 // 保留原有 Verlet 接口：step1 半 kick + 整 drift，step2 只有半 kick。
 // GPU 版本仍将平动 kick/drift 融合为一次 launch；新 ensemble 可独立编排上述操作。
 RIGID_INTEGRATOR_HD inline void velocity_verlet(
