@@ -32,7 +32,8 @@ file(GLOB GPUMD_SOURCES
     src/measure/*.cu
     src/model/*.cu
     src/utilities/*.cu)
-add_executable(gpumd ${GPUMD_SOURCES})
+add_executable(gpumd ${GPUMD_SOURCES}
+    "src/integrate/ensemble_rigid_nvt.cu")
 target_include_directories(gpumd PRIVATE src)
 target_link_libraries(gpumd PRIVATE CUDA::cublas CUDA::cusolver CUDA::cufft)
 
