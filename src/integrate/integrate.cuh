@@ -70,6 +70,7 @@ public:
 
   // these data will be used to initialize ensemble
   int type; // ensemble type in a specific run
+  int rigid_grouping_method = -1; // type==0: -1 为普通 NVE，非负为刚体分子分组
   int source;
   int sink;
   int fixed_group = -1; // ID of the group in which the atoms will be fixed

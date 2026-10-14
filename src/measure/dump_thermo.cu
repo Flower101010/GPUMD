@@ -61,6 +61,12 @@ void Dump_Thermo::pre_run(
   fprintf(fid_, "# format_version 1\n");
   fprintf(fid_, "# num_atoms %d\n", atom.number_of_atoms);
   fprintf(fid_, "# dt_output %.10e fs\n", time_step * dump_interval_ * TIME_UNIT_CONVERSION);
+  const int thermal_dof = integrate.ensemble->thermal_degrees_of_freedom();
+  if (thermal_dof > 0) {
+    fprintf(fid_, "# ensemble rigid_nve\n");
+    fprintf(fid_, "# thermal_dof %d\n", thermal_dof);
+    fprintf(fid_, "# stress_definition interaction_plus_bead_kinetic_plus_rigid_constraint\n");
+  }
   if (integrate.type >= 31) {
     fprintf(
       fid_,
@@ -98,7 +104,8 @@ void Dump_Thermo::end_of_step(
     temperature = temperature_target;
   } else {
     const int number_of_atoms_moving = atom.number_of_atoms - number_of_atoms_fixed;
-    energy_kin = 1.5 * number_of_atoms_moving * K_B * thermo[0];
+    const int thermal_dof = integrate.ensemble->thermal_degrees_of_freedom();
+    energy_kin = (thermal_dof > 0 ? 0.5 * thermal_dof : 1.5 * number_of_atoms_moving) * K_B * thermo[0];
     temperature = thermo[0];
   }
 
