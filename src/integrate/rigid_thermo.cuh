@@ -7,9 +7,21 @@
 class RigidThermo
 {
 public:
+  struct KineticSample {
+    // 对应 FixRigidNHSmall 的 akin_t/akin_r（转换到内部能量单位后）。
+    // 我们的平动项额外包含自由粒子，LAMMPS 刚体 fix 本身只统计刚体。
+    double twice_translation; // 2K，自由粒子 + 刚体 COM；内部能量单位
+    double twice_rotation;    // 2K，刚体转动
+    double twice_total() const { return twice_translation + twice_rotation; }
+  };
   void initialize(const RigidBodySystem& rigid);
   void clear();
   int degrees_of_freedom() const { return degrees_of_freedom_; }
+  int translational_degrees_of_freedom() const { return 3 * (atoms_ - members_ + bodies_); }
+  int rotational_degrees_of_freedom() const { return 3 * bodies_; }
+  // GPU 归约独立状态，不要求 bead 速度已重建；仅将两个标量同步到 HOST。
+  // 不推进约束 virial 窗口。当前只支持初始化器接受的非线性刚体。
+  KineticSample sample_kinetic_energy(const RigidBodySystem& rigid, const Atom& atom);
   const GPU_Vector<double>& constraint_virial_per_body() const { return constraint_virial_; }
 
   // 整步开始，保存旧姿态；两个 record 均须在 rebuild_velocities 覆盖 bead 速度前调用。
@@ -32,6 +44,7 @@ private:
   double half_step_ = 0.0;
   GPU_Vector<Quaternion> previous_quats_;
   GPU_Vector<double> constraint_virial_;
+  GPU_Vector<double> kinetic_sample_; // 两个归约结果；initialize 时分配
 
   RigidBodySystem::ConstDeviceView checked_view(const RigidBodySystem& rigid) const;
   void check_sample(double h, const RigidBodySystem& rigid, const Atom& atom) const;

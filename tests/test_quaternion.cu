@@ -1,4 +1,4 @@
-#include "utilities/math.cuh"
+#include "utilities/rigid_math.cuh"
 #include <cassert>
 #include <cmath>
 #include <limits>

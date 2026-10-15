@@ -36,6 +36,39 @@ void drift_rotation(double h, RigidBodySystem& rigid);
 // 受管理 bead 不直接缩放；调用者随后 rebuild_velocities，使两层状态一致。
 void scale_momenta(double factor, Atom& atom, RigidBodySystem& rigid);
 
+// 平动（自由粒子 + 刚体 COM）与转动（Miller p）使用独立正因子。
+// 支持分开的 NHC 或 MTK 动量耦合；不选择耦合系数、不重建 bead 速度。
+void scale_momenta(
+  double translation_factor, double rotation_factor, Atom& atom, RigidBodySystem& rigid);
+
+struct IsotropicDriftFactors {
+  double box_scale;
+  double translation_time;
+};
+
+/**
+ * @brief 计算各向同性盒子伸缩时的盒长缩放系数和位置漂移系数。
+ *
+ * @param duration 漂移时长 h，使用 GPUMD 内部时间单位。
+ * @param dilation_rate 盒长相对变化率 nu = (dL/dt)/L，
+ *        单位为内部时间的倒数；正值表示膨胀，负值表示收缩。
+ *
+ * @return 两个系数：
+ *         - box_scale：盒长缩放倍数 exp(nu*h)。
+ *         - translation_time：速度项系数 expm1(nu*h)/nu；
+ *           nu=0 时为 h。
+ *
+ * @note 对应更新公式：
+ *       L_new = box_scale * L_old；
+ *       R_new = box_scale * R_old + translation_time * V。
+ *       假设本子步内 V 和 nu 保持不变，以坐标原点为伸缩中心。
+ *
+ * @note 仅计算系数，不修改状态或执行周期性包装。
+ *       适用于刚体质心和自由粒子，不缩放刚体内部相对坐标。
+ *       若拆分 remap/drift 子步，需根据调用顺序重新组合系数。
+ */
+IsotropicDriftFactors isotropic_drift_factors(double duration, double dilation_rate);
+
 // 保留原有 Verlet 接口：step1 半 kick + 整 drift，step2 只有半 kick。
 // GPU 版本仍将平动 kick/drift 融合为一次 launch；新 ensemble 可独立编排上述操作。
 RIGID_INTEGRATOR_HD inline void velocity_verlet(

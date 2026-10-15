@@ -8,25 +8,26 @@ namespace rigid_integrator
 namespace
 {
 __global__ void scale_momenta_kernel(
-  double factor, RigidBodySystem::DeviceView view, double* velocity)
+  double translation_factor, double rotation_factor,
+  RigidBodySystem::DeviceView view, double* velocity)
 {
   const int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i < view.number_of_bodies) {
     auto& state = view.state[i];
-    state.vcm = rigid_math::scale(state.vcm, factor);
-    state.conjqm.w *= factor;
-    state.conjqm.x *= factor;
-    state.conjqm.y *= factor;
-    state.conjqm.z *= factor;
+    state.vcm = rigid_math::scale(state.vcm, translation_factor);
+    state.conjqm.w *= rotation_factor;
+    state.conjqm.x *= rotation_factor;
+    state.conjqm.y *= rotation_factor;
+    state.conjqm.z *= rotation_factor;
     return;
   }
   const int a = i - view.number_of_bodies;
   if (a >= view.number_of_atoms || view.atom_to_body[a] != -1)
     return;
   const std::size_t n = view.number_of_atoms, index = a;
-  velocity[index] *= factor;
-  velocity[index + n] *= factor;
-  velocity[index + 2 * n] *= factor;
+  velocity[index] *= translation_factor;
+  velocity[index + n] *= translation_factor;
+  velocity[index + 2 * n] *= translation_factor;
 }
 
 // 编译期选择操作，避免重复 kernel 或在公开接口中用 bool 混合 kick/drift。
@@ -131,8 +132,15 @@ void launch_rotation(double h, RigidBodySystem& rigid)
 
 void scale_momenta(double factor, Atom& atom, RigidBodySystem& rigid)
 {
-  if (!std::isfinite(factor) || factor <= 0.0)
-    throw std::invalid_argument("Rigid momentum scaling requires a finite positive factor.");
+  scale_momenta(factor, factor, atom, rigid);
+}
+
+void scale_momenta(
+  double translation_factor, double rotation_factor, Atom& atom, RigidBodySystem& rigid)
+{
+  if (!std::isfinite(translation_factor) || translation_factor <= 0.0 ||
+      !std::isfinite(rotation_factor) || rotation_factor <= 0.0)
+    throw std::invalid_argument("Rigid momentum scaling requires finite positive factors.");
   const auto view = rigid.device_view();
   const std::size_t n = view.number_of_atoms;
   if (atom.number_of_atoms != view.number_of_atoms || atom.velocity_per_atom.size() != 3 * n)
@@ -143,8 +151,22 @@ void scale_momenta(double factor, Atom& atom, RigidBodySystem& rigid)
   if (entries == 0)
     return;
   scale_momenta_kernel<<<(entries - 1) / 128 + 1, 128>>>(
-    factor, view, atom.velocity_per_atom.data());
+    translation_factor, rotation_factor, view, atom.velocity_per_atom.data());
   GPU_CHECK_KERNEL
+}
+
+IsotropicDriftFactors isotropic_drift_factors(double duration, double dilation_rate)
+{
+  const double x = duration * dilation_rate;
+  if (!std::isfinite(duration) || !std::isfinite(dilation_rate) || !std::isfinite(x))
+    throw std::invalid_argument("Isotropic drift requires finite duration and dilation rate.");
+  // expm1 避免 nu*h 接近零时 exp(x)-1 的消减误差。
+  const IsotropicDriftFactors result{
+    std::exp(x), duration * (x == 0 ? 1.0 : std::expm1(x) / x)};
+  if (!std::isfinite(result.box_scale) || result.box_scale <= 0 ||
+      !std::isfinite(result.translation_time))
+    throw std::invalid_argument("Isotropic drift factors are outside the finite range.");
+  return result;
 }
 
 void kick_translation(double h, Atom& atom, RigidBodySystem& rigid)

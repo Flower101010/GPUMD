@@ -1,4 +1,4 @@
-#include "utilities/math.cuh"
+#include "utilities/rigid_math.cuh"
 #include "utilities/gpu_vector.cuh"
 #include <cassert>
 #include <cmath>
@@ -14,7 +14,7 @@ struct Result {
   bool normalized, normalized_q, invalid_unchanged;
 };
 
-// 故意在 math.cu 之外调用设备函数，防止 CPU 测试通过但设备链接失败。
+// 故意在 rigid_math.cu 之外调用设备函数，防止 CPU 测试通过但设备链接失败。
 static __global__ void evaluate(Result* output)
 {
   const int i = threadIdx.x;

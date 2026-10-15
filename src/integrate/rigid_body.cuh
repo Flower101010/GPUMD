@@ -1,7 +1,7 @@
 #pragma once
 
 #include "utilities/gpu_vector.cuh"
-#include "utilities/math.cuh"
+#include "utilities/rigid_math.cuh"
 #include <array>
 #include <vector>
 

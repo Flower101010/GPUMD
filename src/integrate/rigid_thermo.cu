@@ -5,6 +5,45 @@
 
 namespace
 {
+// 小体系采用一个 block；每个线程跨步累加，固定次序归约，无 double 原子操作。计算的是两倍平动和转动动能
+__global__ void reduce_kinetic_energy(
+  RigidBodySystem::ConstDeviceView view, const double* mass, const double* velocity,
+  double* result)
+{
+  __shared__ double translation[128];
+  __shared__ double rotation[128];
+  const int t = threadIdx.x;
+  double kt = 0, kr = 0;
+  for (std::size_t b = t; b < static_cast<std::size_t>(view.number_of_bodies); b += blockDim.x) {
+    const auto& s = view.state[b];
+    const auto& g = view.geometry[b];
+    kt += g.mass * rigid_math::norm_squared(s.vcm);
+    const Quaternion qp = rigid_math::multiply(rigid_math::conjugate(s.quat), s.conjqm);
+    kr += 0.25 * (qp.x * qp.x / g.inertia.x + qp.y * qp.y / g.inertia.y + qp.z * qp.z / g.inertia.z);
+  }
+  const std::size_t n = view.number_of_atoms;
+  for (std::size_t i = t; i < n; i += blockDim.x) {
+    if (view.atom_to_body[i] != -1)
+      continue;
+    const Vec3 v{velocity[i], velocity[i + n], velocity[i + 2 * n]};
+    kt += mass[i] * rigid_math::norm_squared(v);
+  }
+  translation[t] = kt;
+  rotation[t] = kr;
+  __syncthreads();
+  for (int stride = blockDim.x / 2; stride; stride /= 2) {
+    if (t < stride) {
+      translation[t] += translation[t + stride];
+      rotation[t] += rotation[t + stride];
+    }
+    __syncthreads();
+  }
+  if (t == 0) {
+    result[0] = translation[0];
+    result[1] = rotation[0];
+  }
+}
+
 __global__ void capture_body_positions(RigidBodySystem::ConstDeviceView view, Quaternion* previous)
 {
   const int b = blockIdx.x * blockDim.x + threadIdx.x;
@@ -79,6 +118,7 @@ void RigidThermo::clear()
 {
   previous_quats_.clear();
   constraint_virial_.clear();
+  kinetic_sample_.clear();
   atoms_ = bodies_ = members_ = degrees_of_freedom_ = 0;
   half_step_ = 0;
   stage_ = Stage::uninitialized;
@@ -95,6 +135,7 @@ void RigidThermo::initialize(const RigidBodySystem& rigid)
   previous_quats_.resize(view.number_of_bodies);
   constraint_virial_.resize(6 * static_cast<std::size_t>(view.number_of_bodies));
   constraint_virial_.fill(0.0);
+  kinetic_sample_.resize(2);
   atoms_ = view.number_of_atoms;
   bodies_ = view.number_of_bodies;
   members_ = view.number_of_members;
@@ -112,6 +153,21 @@ RigidBodySystem::ConstDeviceView RigidThermo::checked_view(const RigidBodySystem
     view.number_of_members != members_)
     throw std::invalid_argument("Rigid topology changed; reinitialize thermo.");
   return view;
+}
+
+RigidThermo::KineticSample RigidThermo::sample_kinetic_energy(
+  const RigidBodySystem& rigid, const Atom& atom)
+{
+  const auto view = checked_view(rigid);
+  const std::size_t n = view.number_of_atoms;
+  if (atom.number_of_atoms != view.number_of_atoms || atom.mass.size() != n ||
+      atom.velocity_per_atom.size() != 3 * n)
+    throw std::invalid_argument("Rigid kinetic sampling requires matching masses and velocities.");
+  reduce_kinetic_energy<<<1, 128>>>(view, atom.mass.data(), atom.velocity_per_atom.data(), kinetic_sample_.data());
+  GPU_CHECK_KERNEL
+  double sample[2];
+  kinetic_sample_.copy_to_host(sample);
+  return {sample[0], sample[1]};
 }
 
 void RigidThermo::begin_step(const RigidBodySystem& rigid)

@@ -64,6 +64,27 @@ int main()
   rigid_integrator::drift_translation(0.7, x, v);
   near(x, {1.56, 1.72, 3.91});
 
+  // LAMMPS FixRigidNHSmall::maclaurin_series 的 scale_v 对照（小 nu*h）。
+  for (double rate : {0.0, 1e-14, -1e-14, 0.3, -0.3}) {
+    const double duration = 0.2, z = duration * rate / 2, z2 = z * z;
+    const double series = 1 + z2 / 6 + z2 * z2 / 120 + z2 * z2 * z2 / 5040 +
+      z2 * z2 * z2 * z2 / 362880;
+    const auto factors = rigid_integrator::isotropic_drift_factors(duration, rate);
+    near(factors.translation_time, duration * std::exp(z) * series);
+    near(factors.box_scale, std::exp(2 * z));
+    const auto backward = rigid_integrator::isotropic_drift_factors(-duration, rate);
+    near(factors.box_scale * backward.box_scale, 1);
+    near(backward.box_scale * factors.translation_time + backward.translation_time, 0);
+  }
+  // expm1 比截断级数覆盖更大区间；解析值且不依赖同一公式作为期望。
+  const auto doubled = rigid_integrator::isotropic_drift_factors(std::log(2.0) / 2, 2);
+  near(doubled.box_scale, 2);
+  near(doubled.translation_time, 0.5);
+  rejects<std::invalid_argument>([] { rigid_integrator::isotropic_drift_factors(1, 1000); });
+  rejects<std::invalid_argument>([] {
+    rigid_integrator::isotropic_drift_factors(1, std::numeric_limits<double>::quiet_NaN());
+  });
+
   int devices = 0;
   if (gpuGetDeviceCount(&devices) != gpuSuccess || !devices) {
     std::cout << "SKIP: no accessible GPU\n";
@@ -143,6 +164,36 @@ int main()
   rigid.rebuild_velocities(atom);
   const auto before_scale = download(atom.velocity_per_atom);
   const auto before_body = body(rigid);
+  RigidThermo kinetic_stats;
+  kinetic_stats.initialize(rigid);
+  assert(kinetic_stats.translational_degrees_of_freedom() == 6);
+  assert(kinetic_stats.rotational_degrees_of_freedom() == 3);
+  const auto kinetic = kinetic_stats.sample_kinetic_energy(rigid, atom);
+  // 独立从重建后的 bead 速度求总动能，再减去平动；不使用共轭动量公式。
+  double twice_total = 0;
+  const auto mass = download(atom.mass);
+  for (int i = 0; i < 4; ++i)
+    for (int d = 0; d < 3; ++d)
+      twice_total += mass[i] * before_scale[i + 4 * d] * before_scale[i + 4 * d];
+  const Vec3 free_v{before_scale[3], before_scale[7], before_scale[11]};
+  const double twice_translation = mass[3] * dot(free_v, free_v) +
+    before_body.geometry.mass * dot(before_body.state.vcm, before_body.state.vcm);
+  near(kinetic.twice_translation, twice_translation);
+  near(kinetic.twice_rotation, twice_total - twice_translation);
+  near(kinetic.twice_total(), twice_total);
+
+  // scale_t 与 scale_r 独立施加；成员 bead 速度仍为旧值时统计也必须正确。
+  rigid_integrator::scale_momenta(1.3, 0.7, atom, rigid);
+  const auto separate = kinetic_stats.sample_kinetic_energy(rigid, atom);
+  near(separate.twice_translation, kinetic.twice_translation * 1.3 * 1.3);
+  near(separate.twice_rotation, kinetic.twice_rotation * 0.7 * 0.7);
+  near(kinetic_stats.sample_kinetic_energy(rigid, atom).twice_total(), separate.twice_total());
+  near(body(rigid).state.quat, before_body.state.quat);
+  near(dot(body(rigid).state.quat, body(rigid).state.conjqm), 0);
+  rigid_integrator::scale_momenta(1 / 1.3, 1 / 0.7, atom, rigid);
+  rejects<std::invalid_argument>([&] { rigid_integrator::scale_momenta(1, -1, atom, rigid); });
+  near(kinetic_stats.sample_kinetic_energy(rigid, atom).twice_total(), twice_total);
+
   rigid_integrator::scale_momenta(1.7, atom, rigid);
   const auto scaled_body = body(rigid);
   near(scaled_body.state.xcm, before_body.state.xcm);
@@ -206,5 +257,27 @@ int main()
   rigid_integrator::kick_rotation(0.1, empty_rigid);
   rigid_integrator::drift_rotation(0.1, empty_rigid);
   rigid_integrator::scale_momenta(1.2, empty, empty_rigid);
+  kinetic_stats.initialize(empty_rigid);
+  near(kinetic_stats.sample_kinetic_energy(empty_rigid, empty).twice_total(), 0);
+
+  // 纯自由粒子超过单个 block 的线程数，检查跨步归约和零转动自由度。
+  Atom free_atom;
+  free_atom.number_of_atoms = 259;
+  const int n = free_atom.number_of_atoms;
+  upload(free_atom.mass, std::vector<double>(n, 2));
+  upload(free_atom.position_per_atom, std::vector<double>(3 * n, 1));
+  upload(free_atom.velocity_per_atom, std::vector<double>(3 * n, 0.5));
+  RigidBodySystem free_rigid;
+  free_rigid.initialize(free_atom, box, std::vector<int>(n, -1));
+  kinetic_stats.initialize(free_rigid);
+  assert(kinetic_stats.translational_degrees_of_freedom() == 3 * n);
+  assert(kinetic_stats.rotational_degrees_of_freedom() == 0);
+  const auto free_ke = kinetic_stats.sample_kinetic_energy(free_rigid, free_atom);
+  near(free_ke.twice_translation, n * 1.5);
+  near(free_ke.twice_rotation, 0);
+  free_atom.mass.clear();
+  rejects<std::invalid_argument>([&] { kinetic_stats.sample_kinetic_energy(free_rigid, free_atom); });
+  kinetic_stats.clear();
+  rejects<std::logic_error>([&] { kinetic_stats.sample_kinetic_energy(free_rigid, free_atom); });
   std::cout << "Rigid operators and thermo window checks passed.\n";
 }
