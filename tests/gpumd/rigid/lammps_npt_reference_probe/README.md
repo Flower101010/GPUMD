@@ -184,6 +184,8 @@ GPUMD 的受控缩放只改盒、质心与自由粒子坐标，保留体内参�
 
 本次观测支持“本版 GPUMD 的盒伸缩没有改变刚体内部结构”；不单凭几何测试断言整个 NPT 采样分布正确。
 
+找到一个相关的讨论[Fluctuating bond lengths during rigid/npt fix](https://matsci.org/t/fluctuating-bond-lengths-during-rigid-npt-fix/44411)
+
 <details>
 <summary>此前的一步探针与多版本参考核验（保留历史参数）</summary>
 
