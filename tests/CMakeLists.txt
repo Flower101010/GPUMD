@@ -56,6 +56,9 @@ gpumd_add_unit_test(test_nose_hoover_chain test_nose_hoover_chain.cpp)
 target_sources(test_nose_hoover_chain PRIVATE
     ${PROJECT_SOURCE_DIR}/src/integrate/nose_hoover_chain.cu)
 set_tests_properties(unit.test_nose_hoover_chain PROPERTIES LABELS "unit;host")
+gpumd_add_unit_test(test_rigid_nh test_rigid_nh.cpp)
+target_sources(test_rigid_nh PRIVATE ${PROJECT_SOURCE_DIR}/src/integrate/rigid_nh.cu)
+set_tests_properties(unit.test_rigid_nh PROPERTIES LABELS "unit;host")
 gpumd_add_unit_test(test_quaternion_gpu test_quaternion_gpu.cu)
 gpumd_add_unit_test(test_rigid_body_initialization test_rigid_body_initialization.cu)
 target_sources(test_rigid_body_initialization PRIVATE
