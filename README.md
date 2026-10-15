@@ -32,8 +32,8 @@ This software is distributed under the GNU General Public License (GPL) version 
 
 ## Extensions in this repository / 本仓库新增功能
 
-This repository includes four extensions. Start with the documentation linked below
-when using, modifying, or continuing work on these features.
+This repository includes four extensions. Start with the user documentation linked
+below for supported inputs, usage and precautions.
 
 | Feature  | Usage  | Documentation |
 | --- | --- | --- |
@@ -87,15 +87,15 @@ For example, with molecule labels in grouping method `0`:
 
 ```text
 potential nep.txt
-time_step 0.1
-ensemble rigid_nvt 300 300 1000 0
-dump_thermo 10
+time_step 0.5
+ensemble rigid_nvt 300 300 200 0
+dump_thermo 20
 dump_xyz 10 trajectory.xyz precision double velocity force group_labels
 run 1000
 ```
 
-Temperatures are in kelvin; `T_coupling` is in integration steps, so `1000` with
-`time_step 0.1` means a coupling time of 100 fs. These values illustrate the syntax;
+Temperatures are in kelvin; `T_coupling` is in integration steps, so `200` with
+`time_step 0.5` means a coupling time of 100 fs. These values illustrate the syntax;
 choose the timestep and coupling for your system. Replace the ensemble command
 with `ensemble rigid_nve 0` to use NVE.
 
@@ -103,10 +103,16 @@ For an orthogonal, fully periodic box, use
 `ensemble rigid_npt <T_initial> <T_final> <T_coupling> <P> <P_coupling> <grouping_method>`.
 This version requires equal initial/final temperatures and a constant isotropic
 pressure in GPa. Both coupling times are in integration steps. For example,
-`ensemble rigid_npt 300 300 1000 0.0001 10000 0` selects separate translation,
+`ensemble rigid_npt 300 300 200 0.0001 2000 0` with `time_step 0.5` selects separate translation,
 rotation and piston NH chains following LAMMPS `FixRigidNHSmall`, with MTK terms.
-NPT has short software checks; equilibrium density and NPT sampling validation
-remain pending.
+Here 0.0001 GPa is 1 bar; the temperature and pressure coupling times are
+100 fs and 1 ps. Recalculate coupling step counts when changing the timestep.
+The mixed synthetic fixture has passed NVT timestep comparisons and a 200 ps
+NPT engineering test at 0.5 fs. These are tested settings for that fixture,
+not universal choices for every potential. At 2 fs, the same fixture showed
+noticeable temperature bias. Check timestep convergence and stationary
+volume/density as well as target temperature and pressure. See the
+[parameter and preparation guide](doc/gpumd/rigid_body_guide_zh.md) for details.
 
 Temperature and kinetic energy use `3*N_free + 6*N_body` degrees of freedom.
 Global pressure includes the rigid constraint virial; per-atom virials remain

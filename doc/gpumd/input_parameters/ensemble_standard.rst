@@ -26,8 +26,9 @@ bodies, including bead forces supplied by a temperature-independent NEP::
     ensemble rigid_nve <grouping_method>
 
 The required zero-based index selects an existing grouping method in
-``model.xyz`` dedicated to molecule membership. Every multi-member group is one
-rigid body; every singleton is a free particle. Assign each free particle a
+``model.xyz`` dedicated to molecule membership. Input labels must be integers
+from 0 to ``N_atoms-1``; ``-1`` is not a valid XYZ group label. Every multi-member
+group is one rigid body; every singleton is a free particle. Assign each free particle a
 unique group label. Do not select species or thermostat-region grouping.
 XYZ group labels remain nonnegative; the internal adapter maps singleton labels
 to -1. Linear, coincident and near-linear bodies are not supported in this version.
@@ -67,7 +68,8 @@ The selection persists across consecutive ``run`` commands until another
 ``ensemble`` command is read. A new rigid manager is initialized from bead
 positions and velocities at each run boundary. Bead restart output therefore
 provides fresh rigid initialization, not an exact checkpoint of quaternion and
-conjugate momentum. Runtime/physical validation of this input path is pending.
+conjugate momentum. Rigid NVE has runtime and energy-conservation checks;
+validate timestep accuracy for the actual potential and geometry being used.
 
 :attr:`nvt_ber`
 ^^^^^^^^^^^^^^^
@@ -103,9 +105,9 @@ are nonlinear rigid bodies.
 For example::
 
     potential nep.txt
-    time_step 0.1
-    ensemble rigid_nvt 300 300 1000 0
-    dump_thermo 10
+    time_step 0.5
+    ensemble rigid_nvt 300 300 200 0
+    dump_thermo 20
     dump_xyz 10 trajectory.xyz precision double velocity force group_labels
     run 1000
 
@@ -116,7 +118,7 @@ rigid translation/rotation without rescaling them to the target temperature.
 The translation chain controls free particles and body centers of mass with
 ``f_t = 3*(N_free+N_body)``; the rotation chain controls Miller momenta with
 ``f_r = 3*N_body``. Each chain has 10 links, one subcycle and the LAMMPS
-Yoshida order-3 setting. Purely free-particle systems skip the rotation chain.
+three-weight Yoshida setting. Purely free-particle systems skip the rotation chain.
 Including free particles in the translation chain is a mixed-system extension;
 a LAMMPS rigid fix itself thermostats only its rigid bodies.
 Masses are ``Q_t0=f_t*k_B*T*tau^2``, ``Q_r0=f_r*k_B*T*tau^2`` and
@@ -161,7 +163,40 @@ are finite numbers of integration steps, at least 1; actual relaxation times
 are the coupling values multiplied by ``time_step``. No elastic modulus is
 required. For example::
 
-    ensemble rigid_npt 300 300 1000 0.0001 10000 0
+    time_step 0.5
+    ensemble rigid_npt 300 300 200 0.0001 2000 0
+
+Here the target is 300 K and 1 bar (0.0001 GPa), with temperature and pressure
+coupling times of 100 fs and 1000 fs. Coupling values are step counts, not fs,
+scaling factors or output intervals. They set characteristic extended-system
+times, not a guaranteed duration to reach equilibrium.
+
+To keep these physical coupling times fixed while changing timestep:
+
+.. list-table:: Example coupling conversion
+   :header-rows: 1
+
+   * - Timestep (fs)
+     - ``T_coup`` (steps)
+     - ``P_coup`` (steps)
+   * - 0.5
+     - 200
+     - 2000
+   * - 1
+     - 100
+     - 1000
+   * - 2
+     - 50
+     - 500
+
+These are conversions, not an accuracy endorsement of every listed timestep.
+The tested synthetic mixed fixture showed a noticeable kinetic-temperature bias
+at 2 fs, which decreased with timestep reduction. NVT/NPT advance their chains
+using intermediate kinetic energies while thermo/XYZ report completed-step
+velocities. Check timestep convergence, kinetic partitions and volume/density
+stationarity; stability alone is insufficient. The chain length, subcycle count
+and Yoshida setting are currently fixed by the implementation and have no extra
+``run.in`` arguments.
 
 Choose the timestep and relaxation times for your system. Only fully periodic
 orthogonal boxes and isotropic dilation are supported. Bodies keep their
@@ -173,16 +208,20 @@ velocity correction and unwrapped storage are rejected.
 The physical translation chain includes all free particles and body centers
 of mass; a separate chain controls body rotation. The DOFs are
 ``f_t=3*(N_free+N_body)`` and ``f_r=3*N_body``. Each chain defaults to 10 links,
-one subcycle and the LAMMPS Yoshida order-3 setting. A purely free-particle
+one subcycle and the LAMMPS three-weight Yoshida setting. A purely free-particle
 system skips the rotation chain.
 
 Global thermo pressure includes the instantaneous mechanical constraint
 virial, without thermostat or piston friction impulses. Per-atom virials
 remain interaction-only. Each new ``run`` reconstructs the rigid state and
 resets all chains and the piston. Bead restart output is not an exact checkpoint
-of extended-system dynamics. Short implementation checks are available;
-equilibrium density and NPT distribution validation remain pending.
-See :doc:`../rigid_body_guide_zh` for usage examples and precautions.
+of extended-system dynamics. A synthetic mixed fixture (300 three-bead bodies
+and 2700 free particles) has passed a 200 ps NPT engineering test at 0.5 fs,
+including temperature, pressure, volume-drift, kinetic-partition, rigid-geometry
+and static-NEP checks. This does not establish material-specific equilibrium
+density or full NPT distribution accuracy for arbitrary systems.
+See the :download:`Chinese usage and parameter guide <../rigid_body_guide_zh.md>`
+for preparation, timestep checks and output precautions.
 
 :attr:`nvt_bdp`
 ^^^^^^^^^^^^^^^
