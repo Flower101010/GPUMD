@@ -136,6 +136,43 @@ measurement lifecycle.
 Bead restart output does not store thermostat-chain state, so it does not
 provide an exact continuation of the extended-system trajectory.
 
+:attr:`rigid_npt`
+^^^^^^^^^^^^^^^^^^
+Miller rigid-body dynamics with separate translation, rotation and piston
+Nose-Hoover chains and an isotropic MTK piston, following LAMMPS
+``FixRigidNHSmall``::
+
+    ensemble rigid_npt <T_1> <T_2> <T_coup> <P> <P_coup> <grouping_method>
+
+``T_1`` and ``T_2`` must be equal, positive finite temperatures in kelvin.
+``P`` is a constant finite hydrostatic pressure in GPa. Both coupling times
+are finite numbers of integration steps, at least 1; actual relaxation times
+are the coupling values multiplied by ``time_step``. No elastic modulus is
+required. For example::
+
+    ensemble rigid_npt 300 300 1000 0.0001 10000 0
+
+Choose the timestep and relaxation times for your system. Only fully periodic
+orthogonal boxes and isotropic dilation are supported. Bodies keep their
+internal geometry while centers of mass and free particles follow box dilation.
+The grouping, nonlinear-body, potential and output/action restrictions of
+``rigid_nve`` apply. Fixed/moving groups, external deformation, adaptive steps,
+velocity correction and unwrapped storage are rejected.
+
+The physical translation chain includes all free particles and body centers
+of mass; a separate chain controls body rotation. The DOFs are
+``f_t=3*(N_free+N_body)`` and ``f_r=3*N_body``. Each chain defaults to 10 links,
+one subcycle and the LAMMPS Yoshida order-3 setting. A purely free-particle
+system skips the rotation chain.
+
+Global thermo pressure includes the instantaneous mechanical constraint
+virial, without thermostat or piston friction impulses. Per-atom virials
+remain interaction-only. Each new ``run`` reconstructs the rigid state and
+resets all chains and the piston. Bead restart output is not an exact checkpoint
+of extended-system dynamics. Short implementation checks are available;
+equilibrium density and NPT distribution validation remain pending.
+See :doc:`../rigid_body_guide_zh` for usage examples and precautions.
+
 :attr:`nvt_bdp`
 ^^^^^^^^^^^^^^^
 If the first parameter is :attr:`nvt_bdp`, it is similar to the case of :attr:`nvt_ber`, but using the :ref:`Bussi-Donadio-Parrinello method <bdp_thermostat>`.

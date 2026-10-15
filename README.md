@@ -40,7 +40,7 @@ when using, modifying, or continuing work on these features.
 | Streaming training  | `stream_train 1` keeps only the current training batch on GPUs; parsed data stays on the CPU. Scratch space and validation data still occupy GPU memory.  | [stream_train](doc/nep/input_parameters/stream_train.rst) |
 | Pair-specific cutoffs  | `cross_cutoff i j radial angular` overrides the symmetric cutoff for a selected pair of different types; other pairs retain the default averaging rule. Indices start at 0 and follow the `type` order.  | [cutoff and cross_cutoff](doc/nep/input_parameters/cutoff.rst), [cluster build and usage](INSTALL_CLUSTER.md) |
 | Multi-bead CG  | Fixed harmonic bond/angle and periodic proper-dihedral terms plus a trainable residual NEP, with per-frame topology, shared parameters and complete model packages for MD.  | [build, training and MD tutorial ](examples/multibead_cg/README.md), [detailed guide](doc/gpumd/multibead_cg_guide_zh.md) |
-| Rigid-body NVE/NVT | GPU integration of nonlinear multi-bead rigid bodies mixed with free particles, using Miller quaternion dynamics and a Nose-Hoover chain for NVT, under bead forces from a temperature-independent NEP or another supported potential. | [input syntax and restrictions](doc/gpumd/input_parameters/ensemble_standard.rst), [NVE design](developers/rigid_nve_interface_design.md), [NVT implementation and checks](developers/rigid_nvt.md) |
+| Rigid-body NVE/NVT/NPT | GPU integration of nonlinear multi-bead rigid bodies mixed with free particles, using Miller quaternion dynamics, NHC for NVT, and separate NH chains with an isotropic MTK piston for NPT, under bead forces from a temperature-independent NEP or another supported potential. | [usage and precautions](doc/gpumd/rigid_body_guide_zh.md), [input parameters](doc/gpumd/input_parameters/ensemble_standard.rst) |
 
 For streaming, add `stream_train 1` to `nep.in` or `gnep.in`; the default is `0`.
 Pair-specific cutoffs belong in `nep.in` after `type` and `cutoff`, for example:
@@ -68,7 +68,7 @@ CUDA_VISIBLE_DEVICES=0 bash examples/multibead_cg/run_example.sh
 The example demonstrates the workflow. Scientific model quality is separate from
 the software correctness checks.
 
-### Rigid-body NVE/NVT / 刚体 NVE/NVT
+### Rigid-body NVE/NVT/NPT / 刚体 NVE/NVT/NPT
 
 Use `ensemble rigid_nve <grouping_method>` for fixed-box NVE, or
 `ensemble rigid_nvt <T_initial> <T_final> <T_coupling> <grouping_method>` for
@@ -98,12 +98,22 @@ Temperatures are in kelvin; `T_coupling` is in integration steps, so `1000` with
 choose the timestep and coupling for your system. Replace the ensemble command
 with `ensemble rigid_nve 0` to use NVE.
 
+For an orthogonal, fully periodic box, use
+`ensemble rigid_npt <T_initial> <T_final> <T_coupling> <P> <P_coupling> <grouping_method>`.
+This version requires equal initial/final temperatures and a constant isotropic
+pressure in GPa. Both coupling times are in integration steps. For example,
+`ensemble rigid_npt 300 300 1000 0.0001 10000 0` selects separate translation,
+rotation and piston NH chains following LAMMPS `FixRigidNHSmall`, with MTK terms.
+NPT has short software checks; equilibrium density and NPT sampling validation
+remain pending.
+
 Temperature and kinetic energy use `3*N_free + 6*N_body` degrees of freedom.
 Global pressure includes the rigid constraint virial; per-atom virials remain
-interaction-only. Current support requires a fixed box and nonlinear bodies;
-linear bodies and rigid NPT are not implemented. See the linked input documentation
+interaction-only. Current support requires nonlinear bodies; NVE/NVT use a fixed
+box, while NPT supports isotropic dilation of a fully periodic orthogonal box.
+See the linked input documentation
 for supported outputs and action restrictions. Consecutive runs reconstruct the
-body state, and NVT reinitializes its thermostat chain at each run boundary;
+body state, and NVT/NPT reinitialize their chains and piston at each run boundary;
 bead restart output is not an exact checkpoint of the extended dynamics.
 
 ## Tutorials
@@ -116,8 +126,6 @@ bead restart output is not an exact checkpoint of the extended dynamics.
 * For users and developers:
   * Latest released version: <https://gpumd.org/>
   * Development version: <https://gpumd.org/dev/>
-* For developers only:
-  * [The developer guide](developers/readme.md)
   
 ## Discussion
 

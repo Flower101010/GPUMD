@@ -31,6 +31,7 @@ The driver class for the various integrators.
 #include "ensemble_nve.cuh"
 #include "ensemble_rigid_nve.cuh"
 #include "ensemble_rigid_nvt.cuh"
+#include "ensemble_rigid_npt.cuh"
 #include "ensemble_pimd.cuh"
 #include "ensemble_qtb.cuh"
 #include "ensemble_ti.cuh"
@@ -61,9 +62,9 @@ void Integrate::initialize(
   this->total_steps = total_steps;
   int number_of_atoms = atom.number_of_atoms;
   if (rigid_grouping_method >= 0 &&
-      ((type != 0 && type != 2) || fixed_group >= 0 || move_group >= 0 || deform_x || deform_y ||
+      ((type != 0 && type != 2 && type != 13) || fixed_group >= 0 || move_group >= 0 || deform_x || deform_y ||
        deform_z || deform_xy || deform_xz || deform_yz)) {
-    PRINT_INPUT_ERROR("Rigid ensembles require fixed-box NVE or NHC NVT without fix, move, or deform.");
+    PRINT_INPUT_ERROR("Rigid ensembles require NVE, NHC NVT or isotropic NH NPT without fix, move, or deform.");
   }
   if (move_group >= 0) {
     if (fixed_group < 0) {
@@ -84,8 +85,9 @@ void Integrate::initialize(
   // determine the integrator
   Ensemble_Rigid_NVE* rigid_ensemble = nullptr;
   Ensemble_Rigid_NVT* rigid_nvt_ensemble = nullptr;
+  Ensemble_Rigid_NPT* rigid_npt_ensemble = nullptr;
   switch (type) {
-    case 0: // NVE
+    case 0: // Rigid_NVE
       if (rigid_grouping_method >= 0) {
         rigid_ensemble = new Ensemble_Rigid_NVE(rigid_grouping_method);
         ensemble.reset(rigid_ensemble);
@@ -97,7 +99,7 @@ void Integrate::initialize(
       ensemble.reset(
         new Ensemble_BER(type, move_group, move_velocity, temperature, temperature_coupling));
       break;
-    case 2: // NVT-NHC
+    case 2: // Rigid_NVT-NHC
       if (rigid_grouping_method >= 0) {
         rigid_nvt_ensemble = new Ensemble_Rigid_NVT(
           rigid_grouping_method, temperature, temperature_coupling, time_step);
@@ -121,6 +123,12 @@ void Integrate::initialize(
     case 6: // NVT-QTB
       ensemble.reset(new Ensemble_QTB(
         type, number_of_atoms, temperature, temperature_coupling, time_step, qtb_f_max, qtb_n_f));
+      break;
+    case 13: // Rigid NPT, Miller + NH chains + isotropic MTK piston
+      rigid_npt_ensemble = new Ensemble_Rigid_NPT(
+        rigid_grouping_method, temperature, temperature_coupling, target_pressure[0],
+        rigid_pressure_coupling, time_step);
+      ensemble.reset(rigid_npt_ensemble);
       break;
     case 11: // NPT-Berendsen
       ensemble.reset(new Ensemble_BER(
@@ -336,6 +344,8 @@ void Integrate::initialize(
     initialize_rigid(rigid_ensemble, "NVE");
   if (rigid_nvt_ensemble)
     initialize_rigid(rigid_nvt_ensemble, "NVT");
+  if (rigid_npt_ensemble)
+    initialize_rigid(rigid_npt_ensemble, "NPT");
 }
 
 void Integrate::finalize()
@@ -447,6 +457,22 @@ void Integrate::parse_ensemble(
         static_cast<std::size_t>(rigid_grouping_method) >= group.size()) {
       PRINT_INPUT_ERROR("rigid_nvt requires a valid nonnegative molecule grouping-method index.");
     }
+  } else if (strcmp(param[1], "rigid_npt") == 0) {
+    type = 13;
+    if (num_param != 8) {
+      PRINT_INPUT_ERROR("ensemble rigid_npt requires T_initial T_final T_coupling P P_coupling grouping_method.");
+    }
+    if (!is_valid_int(param[7], &rigid_grouping_method) || rigid_grouping_method < 0 ||
+        static_cast<std::size_t>(rigid_grouping_method) >= group.size()) {
+      PRINT_INPUT_ERROR("rigid_npt requires a valid nonnegative molecule grouping-method index.");
+    }
+    if (!is_valid_real(param[5], &target_pressure[0]) || !std::isfinite(target_pressure[0]) ||
+        !is_valid_real(param[6], &rigid_pressure_coupling) ||
+        !std::isfinite(rigid_pressure_coupling) || rigid_pressure_coupling < 1) {
+      PRINT_INPUT_ERROR("rigid_npt requires finite pressure and pressure coupling >= 1.");
+    }
+    target_pressure[0] /= PRESSURE_UNIT_CONVERSION;
+    num_target_pressure_components = 1;
   } else if (strcmp(param[1], "nvt_ber") == 0) {
     type = 1;
     if (num_param != 5) {
@@ -634,6 +660,11 @@ void Integrate::parse_ensemble(
        !std::isfinite(temperature_coupling))) {
     PRINT_INPUT_ERROR("rigid_nvt requires finite temperatures and temperature coupling.");
   }
+  if (type == 13 &&
+      (!std::isfinite(temperature1) || !std::isfinite(temperature2) ||
+       !std::isfinite(temperature_coupling) || temperature1 != temperature2)) {
+    PRINT_INPUT_ERROR("rigid_npt requires finite constant temperature (T_initial == T_final).");
+  }
 
   // 2b. Optional parameters for QTB
   if (type == 6) {
@@ -662,7 +693,7 @@ void Integrate::parse_ensemble(
   }
 
   // 3. Pressures and pressure_coupling (NPT)
-  if (type >= 11 && type < 20) {
+  if (type >= 11 && type < 20 && type != 13) {
     // pressures:
     if (num_param == 12) {
       for (int i = 0; i < 3; i++) {
@@ -1212,6 +1243,13 @@ void Integrate::parse_ensemble(
       printf("    tau_T is %g time_step.\n", temperature_coupling);
       printf("    f_max is %g ps^-1.\n", qtb_f_max);
       printf("    N_f is %d.\n", qtb_n_f);
+      break;
+    case 13:
+      printf("Use rigid NPT with Miller rotation, NH chains and an isotropic MTK piston.\n");
+      printf("    temperature is %g K; isotropic pressure is %g GPa.\n",
+             temperature1, target_pressure[0] * PRESSURE_UNIT_CONVERSION);
+      printf("    tau_T is %g time_step; tau_P is %g time_step.\n",
+             temperature_coupling, rigid_pressure_coupling);
       break;
     case 11:
       if (temperature_coupling <= 100000) {

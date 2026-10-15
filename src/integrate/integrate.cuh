@@ -70,7 +70,8 @@ public:
 
   // these data will be used to initialize ensemble
   int type; // ensemble type in a specific run
-  int rigid_grouping_method = -1; // -1 为普通积分；type 0/2 的非负值选择刚体分子分组
+  int rigid_grouping_method = -1; // -1 为普通积分；type 0/2/13 的非负值选择刚体分子分组
+  double rigid_pressure_coupling = 0; // NPT NH 的 tau_P/dt，不是 Berendsen/SCR 的压缩率
   int source;
   int sink;
   int fixed_group = -1; // ID of the group in which the atoms will be fixed

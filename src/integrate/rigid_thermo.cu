@@ -112,6 +112,38 @@ add_constraint_pressure(int bodies, const double* virial, double volume, double*
     sum += virial[c * bodies + b];
   thermo[2 + c] += sum / volume;
 }
+
+__global__ void instantaneous_constraint_virial(
+  RigidBodySystem::ConstDeviceView view, const double* mass, const double* force, double* virial)
+{
+  const int b = blockIdx.x * blockDim.x + threadIdx.x;
+  if (b >= view.number_of_bodies) return;
+  using namespace rigid_math;
+  const auto& g = view.geometry[b];
+  const auto& s = view.state[b];
+  const auto& load = view.load[b];
+  const Vec3 angular_momentum = inverse_rotate(s.quat, conjqm_to_angular_momentum(s.quat, s.conjqm));
+  const Vec3 omega_body{angular_momentum.x / g.inertia.x,
+    angular_momentum.y / g.inertia.y, angular_momentum.z / g.inertia.z};
+  const Vec3 torque = subtract(inverse_rotate(s.quat, load.torque), cross(omega_body, angular_momentum));
+  const Vec3 alpha = rotate(s.quat,
+    {torque.x / g.inertia.x, torque.y / g.inertia.y, torque.z / g.inertia.z});
+  const Vec3 omega = rotate(s.quat, omega_body);
+  const Vec3 acceleration_cm = scale(load.fcm, 1 / g.mass);
+  const std::size_t n = view.number_of_atoms;
+  double w[6]{};
+  for (int j = g.first_member; j < g.first_member + g.natoms; ++j) {
+    const int i = view.member_atoms[j];
+    const Vec3 r = rotate(s.quat, view.member_displace[j]);
+    const Vec3 acceleration = add(acceleration_cm, add(cross(alpha, r), cross(omega, cross(omega, r))));
+    const Vec3 fc = subtract(scale(acceleration, mass[i]), {force[i], force[i + n], force[i + 2 * n]});
+    w[0] += r.x * fc.x; w[1] += r.y * fc.y; w[2] += r.z * fc.z;
+    w[3] += 0.5 * (r.x * fc.y + r.y * fc.x);
+    w[4] += 0.5 * (r.x * fc.z + r.z * fc.x);
+    w[5] += 0.5 * (r.y * fc.z + r.z * fc.y);
+  }
+  for (int c = 0; c < 6; ++c) virial[c * view.number_of_bodies + b] = w[c];
+}
 } // namespace
 
 void RigidThermo::clear()
@@ -249,4 +281,20 @@ void RigidThermo::add_constraint_pressure(double volume, GPU_Vector<double>& the
     return;
   ::add_constraint_pressure<<<1, 32>>>(bodies_, constraint_virial_.data(), volume, thermo.data());
   GPU_CHECK_KERNEL
+}
+
+void RigidThermo::sample_constraint_virial(const RigidBodySystem& rigid, const Atom& atom)
+{
+  const auto view = checked_view(rigid);
+  if (stage_ != Stage::ready && stage_ != Stage::complete)
+    throw std::logic_error("Cannot replace an unfinished constraint virial window.");
+  const std::size_t n = atoms_;
+  if (atom.number_of_atoms != atoms_ || atom.mass.size() != n || atom.force_per_atom.size() != 3 * n)
+    throw std::invalid_argument("Instantaneous constraint virial requires matching masses and forces.");
+  if (bodies_) {
+    instantaneous_constraint_virial<<<(bodies_ - 1) / 128 + 1, 128>>>(
+      view, atom.mass.data(), atom.force_per_atom.data(), constraint_virial_.data());
+    GPU_CHECK_KERNEL
+  }
+  stage_ = Stage::complete;
 }

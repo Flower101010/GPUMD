@@ -72,6 +72,16 @@ target_sources(test_rigid_body_translation PRIVATE
     ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body_integrator.cu)
 gpumd_add_unit_test(test_ensemble_rigid_nve test_ensemble_rigid_nve.cu)
 gpumd_add_unit_test(test_ensemble_rigid_nvt test_ensemble_rigid_nvt.cu)
+gpumd_add_unit_test(test_ensemble_rigid_npt test_ensemble_rigid_npt.cu)
+target_sources(test_ensemble_rigid_npt PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body.cu
+    ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body_integrator.cu
+    ${PROJECT_SOURCE_DIR}/src/integrate/rigid_thermo.cu
+    ${PROJECT_SOURCE_DIR}/src/integrate/rigid_nh.cu
+    ${PROJECT_SOURCE_DIR}/src/integrate/ensemble.cu
+    ${PROJECT_SOURCE_DIR}/src/integrate/ensemble_rigid_npt.cu
+    ${PROJECT_SOURCE_DIR}/src/model/box.cu
+    ${PROJECT_SOURCE_DIR}/src/utilities/error.cu)
 target_sources(test_ensemble_rigid_nvt PRIVATE
     ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body.cu
     ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body_integrator.cu
@@ -138,6 +148,7 @@ set_tests_properties(unit.test_bonded_nep_compiled PROPERTIES
     SKIP_REGULAR_EXPRESSION "^SKIP: no accessible GPU")
 
 set(GPUMD_GPU_UNIT_TESTS
+    unit.test_ensemble_rigid_npt
     unit.test_ensemble_rigid_nvt
     unit.test_rigid_body_operators
     unit.test_ensemble_rigid_nve
@@ -175,6 +186,15 @@ endif()
 
 find_package(Python3 QUIET COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME integration.rigid_npt_run_in
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_rigid_npt_run_in.py
+            $<TARGET_FILE:gpumd> $<TARGET_FILE:test_gpu_vector> ${PROJECT_SOURCE_DIR})
+    set_tests_properties(integration.rigid_npt_run_in PROPERTIES
+        LABELS "integration;gpu"
+        RESOURCE_LOCK gpu
+        SKIP_REGULAR_EXPRESSION "^SKIP: no accessible GPU"
+        TIMEOUT 120)
     add_test(
         NAME integration.rigid_nvt_run_in
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_rigid_nvt_run_in.py
