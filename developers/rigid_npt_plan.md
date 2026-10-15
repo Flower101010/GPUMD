@@ -1,130 +1,147 @@
 # 刚体 NPT 实现方案与开发路径
 
-状态：设计建议，尚未实现。现有 Miller NVE、NHC NVT 及其运行行为保持不变。
+状态：方案讨论，尚未实现。2026-10-15 根据用户目标修订：以 LAMMPS 刚体
+NPT 的 Nose–Hoover/MTK 扩展系统为主要参考；首版支持非正交全周期盒的
+各向同性体积耦合。此前 SCR 优先的建议不再作为实施基线。
 
-## 第一版范围与算法
+现有 Miller NVE、单全局 NHC NVT 的实现和运行行为保持不变。
 
-建议先实现各向同性 SCR barostat + 现有 NHC thermostat + Miller 刚体积分：
+## 第一版范围与算法依据
 
-- 三维正交盒、三个方向均周期，只改变体积、保持盒形。
-- 自由单 bead 与任意成员数的非线性刚体混合；沿用现有分组适配。
-- 固定步长、恒定目标温度和静水压力；后续再扩展斜坡。
-- 一个全局 barostat；提供显式随机种子。
-- 不在首版加入各向异性、剪切、非周期压强耦合或新的 restart 系统。
+- 参考本地 LAMMPS `src/RIGID/fix_rigid_nh_small.cpp` 的刚体 NPT 方程、
+  MTK 修正、恒温链和算子顺序，结合 GPUMD 的力计算边界实现 GPU 版本。
+- 正交或非正交的三维全周期盒，只有一个各向同性体积自由度。
+- 保持盒形、角度与晶格向量长度比，不支持独立边长耦合或剪切。
+- 自由单 bead 与任意成员数的非线性刚体混合，沿用现有成员关系。
+- 首版固定步长、恒定目标 T/P；斜坡、部分膨胀、精确 checkpoint 后续再做。
+- 保留 Miller 自由转动原语；与参考 NPT 算子核对兼容性，不因为 NVE
+  已通过就假定整个 NPT 转动分裂自动正确。
 
-SCR 的依据是 Bernetti–Bussi 的随机盒缩放方法，目标包括正确的体积
-涨落，而不是仅把平均压力调到指定值。GPUMD 的 `Ensemble_NPT_SCR` 已有
-标量压力反馈、随机数和盒缩放的参考实现，但它还绑定了 BDP thermostat
-和原子级缩放，不能作为刚体 NPT 直接继承使用。
+重要边界：当前 LAMMPS `rigid/npt`、`rigid/nph` 及 small 版本明确不支持
+triclinic 盒；本地代码在 `pstat_flag` 分支主动报错。普通 `fix npt` 支持
+triclinic。我们参考刚体方程并扩展各向同性盒映射，不声称直接复制
+LAMMPS 已有的 triclinic 刚体 NPT 功能，也不承诺逐步轨迹与 LAMMPS 相同。
 
-MTK/MTTK 是可选的第二条路线。它延续 Nose–Hoover 扩展系统思想，但必须
-额外处理活塞动量、MTK 测度修正、平动/转动不同的动量耦合以及可能的
-活塞恒温链。若选择该路线，应单独推导，不能与 SCR 的映射规则混用。
-本地 LAMMPS `fix_rigid_nh_small.cpp` 的 `mtk_term1/2` 和 `scale_t/scale_r`
-说明转动动量也可能参与 MTK 修正，不能假定 barostat 永远不改变它。
+## 为什么改用 MTK 作为主线
 
-## 必须先确定的物理约定
+SCR 和 MTK 都有正确 NPT 分布的理论依据，离散实现仍需数值验收。
+不存在脱离体系、参数和实现的普遍优劣排序。
 
-### 1. 缩放分子位置，保持分子内部几何
+| 比较 | SCR | Nose–Hoover/MTK |
+| --- | --- | --- |
+| 体积演化 | 随机一阶、过阻尼型 | 带活塞惯性的扩展系统 |
+| 所需状态 | 体积相关标量、随机状态 | 体积变量/动量、质量、恒温链 |
+| 初始松弛 | 论文强调平滑、适合非平衡初态 | 耦合不当或初态过差时可能振荡 |
+| 参考实现 | GPUMD SCR、作者参考代码 | LAMMPS rigid/npt/small、GPUMD MTTK |
+| 本项目目标 | 合理的备选实现 | 与用户学习路线和 LAMMPS 功能目标更一致 |
 
-设 `s=(V_new/V_old)^(1/3)`，采用盒原点为缩放中心：
+此前 SCR 优先主要基于代码量和模块复用，不是基于它比 MTK 更准确。
+该理由不足以改变用户已明确的算法目标。SCR 保留为未来可选方案，
+不在首版并行实现两套 barostat。
 
-- `H <- s*H`；自由粒子位置和刚体 `xcm` 同比缩放。
-- 固定 body-frame 位移、质量、惯量和四元数保持不变。
-- 从新的 `xcm` 和原有姿态重建 bead；不直接缩放全部 bead 坐标。
-- 首选 SCR 的位置/平动动量互为逆缩放版本：自由粒子速度和刚体 `vcm`
-  乘 `1/s`；这个独立体积映射不缩放 Miller 共轭动量。
-- NHC 仍按原有规则同时缩放所有平动和转动动量。
+## 非正交盒的各向同性几何映射
 
-SCR 也有不缩放动量的版本，但其压力表达式不同。第一阶段必须明确选定
-一个版本并完成推导，不从不同实现中各取一半。
+设初始完整盒矩阵为 H0，eta = log(V/V0)/3，则 H = exp(eta)*H0。
+一次增量映射使用 s = exp(delta_eta)：
 
-### 2. 体积驱动力必须与上述缩放共轭
+- H_new = s*H_old，完整 9 个矩阵元素同比更新，包括非零倾斜分量。
+- H_new_inverse = H_old_inverse/s，V_new = s^3*V_old；刷新 Box 派生缓存。
+- 自由粒子位置与刚体 COM 围绕约定固定原点同比缩放。
+- 固定 body-frame 位移、质量和惯量不变，从质心和姿态重建 bead。
+- 几何缩放算子不改变姿态；自由转动子步仍正常推进四元数。
+- 分数坐标映射使用完整 H_inverse，不写仅适用于对角盒的分支。
 
-分别记录：
+这比正交盒增加的主要是完整矩阵和斜盒测试，不增加剪切自由度。
+复杂度主要来自 NPT 方程与时间层，而不是这个几何扩展。
 
-`N_objects = N_free + N_body`
+## 必须先审核的动力学约定
 
-`f_translation = 3*N_objects`
+### 平动、转动与活塞的不同耦合
 
-`f_thermal = 3*N_free + 6*N_body`
+保持计数明确：
 
-三者用途不同，不能统一替换成 bead 数或总热自由度。
+- N_objects = N_free + N_body。
+- f_translation = 3*N_objects。
+- f_rotation = 3*N_body；f_thermal = f_translation + f_rotation。
 
-对上述分子质心缩放，待验证的标量压力为：
+本地 LAMMPS 把刚体平动和转动动能分别送入两条恒温链，并另有活塞链。
+现有 NVT 是一条全局链，是有效的已有方案，但不是该参考的完整复刻。
+NPT 先按平动/转动/活塞分别列出方程；自由粒子归入平动部分，不能作为
+虚构的单成员旋转刚体。具体链组合和所控 DOF 在方程审核阶段定稿。
 
-`P_molecular = (2*K_translation + W_molecular)/(3*V)`
+逐项核对 `initial_integrate/final_integrate` 中的 `scale_t/scale_r`，
+以及 `nh_epsilon_dot()` 的 `mtk_term1/mtk_term2`。MTK 修正可影响 Miller
+共轭动量，不能沿用 SCR 方案中“体积映射不缩放转动动量”的规则。
+活塞质量、三个耦合轴归一化到单个 eta 的系数必须从参考定义推导；
+不能直接把轴质量相加，也不能照搬某个原子数公式。
 
-`W_molecular = W_bead - sum_over_rigid_members(rho_i dot force_i)`
+### 压力、约束 virial 和测度
 
-其中 `rho_i` 是空间中的 COM 相对位移；`W_bead` 是当前盒和坐标下的模型
-virial 的迹，符号按 GPUMD 约定。NEP 力、能量和原子 virial 数组不改写。
-此式须通过保持姿态/内部几何的体积微扰能量差分独立验证。
+在确定参考方程后，统一控制压力、输出压力与 MTK 修正项。
+当前 `RigidThermo` 是固定盒物理半步的离散约束冲量估计，不能将包含
+体积/恒温动量变化的速度差也解释为约束力。
 
-现在 `RigidThermo` 的约束 virial 是固定盒物理半步的离散速度差估计。
-它可作为已有诊断和交叉验证，不能未经论证就用上一整步结果驱动当前
-barostat。NPT 控制压力及输出标量压力应采用一致的定义和时间层。
-张量输出也须说明估计器，不能拼接不同盒体积、不同阶段的贡献。
+分子质心缩放的虚功关系仍应独立验证：
 
-### 3. 力、盒和坐标必须对应
+W_molecular = W_bead - sum_over_rigid_members(rho_i dot force_i)。
 
-缩放位置后，旧力和旧 virial 不再是新状态的力/virial。先按参考 SCR
-离散化确定算子顺序，再安排当前 `compute1 -> Force::compute -> compute2`
-边界，保证每次 kick 使用配套状态的力，输出对应最终状态。
-不能直接在 NVT 两端插入改变坐标的操作却继续沿用旧力；若正确的首版
-需要额外力计算，应明确实现和计时，再优化。
+它提供体积能量差分的验证途径；是否将其对应的分子压力用于控制，要与
+选定 MTK 方程一起确定。不能把 SCR 的控制压力、LAMMPS 的 MTK 修正和
+另一份约束 virial 直接拼接，造成遗漏或重复计数。
 
-## 代码职责
+全局 COM 约束、有限体系测度、热自由度与活塞驱动力中的计数，都须在
+解析理想气体测试前写清楚。NEP 的力、能量、原子 virial 不改写。
 
-| 模块 | 改动职责 |
+### 时间层与力计算
+
+按 LAMMPS 的 `setup -> initial_integrate -> final_integrate` 梳理标量方程，
+映射到 `compute1 -> Force::compute -> compute2`。每次 kick 使用配套
+位置和盒子的力；盒缩放后的势能/virial 不沿用旧状态。
+先列出完整算子顺序及输入输出，再优化 GPU kernel、归约与同步。
+
+## 模块职责
+
+| 模块 | 职责 |
 | --- | --- |
-| `RigidBodySystem` | 保留固定盒默认约束；增加显式授权的各向同性盒更新，校验 PBC/盒形、更新当前盒记录、remap/rebuild；几何不重新初始化 |
-| `rigid_body_integrator` | 新增质心/自由粒子缩放；动量缩放区分平动因子与转动因子，单因子 NHC 接口继续可用 |
-| 刚体压力统计 | GPU 汇总平动/转动 KE、分子 virial 与标量压力；不依赖历史约束冲量猜测当前压力 |
-| 共用刚体 NHC 操作 | 从 NVT 的恒温半步提取必要公共部分，继续调用已有 `nose_hoover_chain::propagate` |
-| SCR 标量推进 | 持有随机状态、耦合参数和体积推进；不依赖 Atom/刚体成员，不自行计算模型力 |
-| `Ensemble_Rigid_NPT` | 组合上述操作，安排时间层与同步；不复制整份 NVT，也不继承原子 NPT 的缩放路径 |
-| 输入、运行、输出 | 接入独立 `rigid_npt_scr` 入口；压力单位、压缩率/弹性模量及耦合时间约定写清；增加体积/密度及统计记录 |
+| RigidBodySystem | 保留固定盒默认检查，增加受控等比盒更新和完整 H remap/rebuild，不重新初始化几何 |
+| rigid_body_integrator | 区分平动/转动动量因子，实现带活塞耦合的 COM/自由粒子传播，保留 Miller 转动原语 |
+| 刚体热力学统计 | GPU 汇总分开的 KE、当前压力及正确时间层 virial，提供独立验证估计器 |
+| NHC 标量工具 | 尽量复用链推进，明确不同链的动量/摩擦系数表示和自由度 |
+| 各向同性 MTK 标量状态 | eta、活塞动量或速率、质量、修正项和活塞链，不管理 bead |
+| Ensemble_Rigid_NPT | 组合算子，安排力与统计阶段，不复制整份 NVT 或原子 MTTK |
+| 上层输入与输出 | 目标/耦合时间单位、体积/密度、扩展系统诊断和 run/restart 语义 |
 
-运行期成员遍历与归约保留在 GPU；CPU 只处理少量标量与一个全局随机过程。
-不为当前需求引入通用插件体系或提前实现完整六分量 barostat。
+运行期成员遍历与归约保留在 GPU，CPU 只处理少量全局标量。不引入
+六分量应力控制、MPI 迁移、动态成员或通用插件框架。
 
-## 分阶段交付
+## 开发顺序与验收
 
-1. **确定数学与接口契约。** 固定 SCR 变体、随机离散化、压力定义、
-   时间层、随机种子及输入单位；写出每个算子的输入/输出与目标分布。
-2. **可变盒几何原语。** 测试膨胀/压缩、跨周期边界、质量/惯量/内部
-   距离保持不变、动量缩放及重建一致性。NVE/NVT 继续拒绝意外盒变化。
-3. **分子压力。** 独立体积能量差分、理想刚体转动不贡献气体平动压力、
-   全自由粒子退化情况和 NEP 小体系。通过后才让压力进入反馈环。
-4. **独立 barostat 与组合积分。** 先验证随机推进、有限正体积、可复现
-   seed，再组合 NHC/Miller。验证关闭压力耦合退化为现有 NVT、每次力
-   计算与盒/坐标一致、缩放不混入约束冲量统计。
-5. **上层接入。** 初始化在首次 Force::compute 之前；检查盒变化后的
-   邻居表处理、thermo/XYZ 同步、连续 run 和 restart 的明确语义。
-6. **统计验收。** CPU/GPU 小测试与 smoke 先行；mixed 体系 long 由用户
-   运行；温度、压力、密度、体积及体积涨落均在明确平衡窗口内分析。
+1. **方程对照。** 记录 LAMMPS 变量、公式、DOF、时间层与我们的表示；
+   先审核单个 eta 的归一化、混合体系和 Miller 子步。
+2. **可变盒原语。** 正交、斜盒、非零倾斜量、膨胀/压缩和跨边界；
+   验证分数 COM 坐标、盒角保持、内部距离、惯量和重建速度。
+3. **压力与虚功。** 用固定内部几何的体积扰动差分检查 NEP 小体系，
+   区分约束/活塞/恒温项，验证压力与 MTK 修正的完整组合。
+4. **标量 MTK 与组合积分。** 验证链、活塞和修正项，冻结活塞退化到
+   已定义的 NVT 极限；检查可逆性、步长收敛及扩展系统能量诊断。
+   若 NPT 使用分开的物理链，极限比较对应方程，不要求逐步复现现有
+   单链 NVT 的轨迹。
+5. **上层接入。** 初始化、邻居表、整步 thermo/XYZ、连续 run 与明确的
+   restart 语义，既有 NVE/NVT 回归通过。
+6. **统计验收。** 小规模正交盒对照 LAMMPS；斜盒用体积虚功、等价
+   晶格基表示和解析理想分子气体检验，再做 mixed NEP smoke/long。
 
-## NPT 验收重点
+温压均值、动能分配、体积/密度、体积涨落和分块稳定性均在明确平衡
+窗口中检查。对照前统一链长、耦合参数、DOF/COM、压力定义和单位。
+不以平均压力达标替代 NPT 统计，不要求物理 K+U 或 K+U+PV 严格守恒。
+长测试由用户执行，不运行 3000 刚体大案例。
 
-- 不要求每帧压力等于目标；使用分块均值、误差和稳定性判据。
-- 不用单一 NEP 人工体系的未知真实压缩率硬判体积方差。
-- 使用有解析 NPT 体积分布的理想分子气体检查平均体积与体积涨落，
-  明确是否约束全局 COM，统一有限体系测度，验证 `N_objects` 而非 bead
-  数决定平动气体行为。
-- 体积方差和温压状态的联合分布才是 NPT 统计的重要补充；平均 P/T
-  达标不能替代它们。相互作用小体系可再与独立 NPT 参考比较。
-- 检查减半步长、改变压力耦合时间、不同随机种子的统计一致性。
-- NEP mixed 用例保留刚体约束、力/能量静态复算、温度分配及原始轨迹。
-- 不以物理系统 `K+U` 或 `K+U+P*V` 的严格守恒作为 NPT 验收条件。
-- 不执行 3000 刚体大案例；小规模全刚体/全自由粒子是单独的边界测试。
+## 参考
 
-## 参考资料
-
-- [Bernetti–Bussi SCR 原论文](https://arxiv.org/abs/2006.09250)
-- [作者参考实现](https://github.com/bussilab/crescale)
-- [GPUMD ensembles](https://gpumd.org/theory/ensembles.html)
-- [LAMMPS rigid NPT](https://docs.lammps.org/fix_rigid.html)
-- 本地 `src/integrate/ensemble_npt_scr.cu`、`ensemble_mttk.cu` 及 LAMMPS
-  `src/RIGID/fix_rigid_nh_small.cpp` 用于实现比对；不直接复制它们的原子
-  缩放、自由度计数或压力估计。
+- [LAMMPS rigid NPT 与 triclinic 限制](https://docs.lammps.org/fix_rigid.html)
+- [普通 fix npt 的 MTK 与 tilt scaling](https://docs.lammps.org/fix_nh.html)
+- 本地 `lammps/src/RIGID/fix_rigid_nh_small.cpp` 的 setup、initial_integrate、
+  final_integrate、compute_dof 和 nh_epsilon_dot。
+- GPUMD `src/integrate/ensemble_mttk.cu` 用于盒数据、单位和运行边界参考；
+  其原子缩放不能直接用于刚体。
+- [SCR 备选方案原论文](https://arxiv.org/abs/2006.09250)。
