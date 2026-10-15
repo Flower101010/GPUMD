@@ -1,7 +1,9 @@
 #pragma once
 #include "ensemble.cuh"
 #include "rigid_body.cuh"
+#include "rigid_nh.cuh"
 #include "rigid_thermo.cuh"
+#include <memory>
 
 class Ensemble_Rigid_NVT : public Ensemble
 {
@@ -16,7 +18,7 @@ public:
   // 每次 run 开始、首次 Force::compute 之前调用；不读取尚未计算的力。
   void initialize(Atom& atom, const Box& box, const std::vector<Group>& groups);
 
-  // 恒温半步 -> 汇总旧力 -> 平动/转动半 kick -> 整步 drift -> remap/rebuild。
+  // 旧力半 kick -> 独立平动/转动缩放 -> drift -> 中间动能推进双链整步。
   void compute1(
     double time_step,
     const std::vector<Group>& groups,
@@ -24,7 +26,7 @@ public:
     Atom& atom,
     GPU_Vector<double>& thermo) override;
 
-  // 中间 Force::compute 后：汇总新力 -> 后半 kick -> 恒温半步 -> thermo。
+  // 中间 Force::compute 后：独立缩放 -> 新力半 kick -> 机械约束压力/thermo。
   void compute2(
     double time_step,
     const std::vector<Group>& groups,
@@ -35,8 +37,9 @@ public:
   // 3*N_free + 6*N_nonlinear_body，不自动扣除全体系动量自由度。
   int thermal_degrees_of_freedom() const override;
   const RigidBodySystem& rigid_bodies() const { return rigid_; }
+  const RigidThermostat& thermostat() const;
   // 总压力诊断用的每体约束 virial，6*B SoA：xx,yy,zz,xy,xz,yz。
-  // initialize 后为零；compute1 为第一半贡献，compute2 后为完整一步贡献。
+  // initialize 后为零；compute2 更新为该完整时间层的瞬时机械约束贡献。
   // 不等同于 LAMMPS 的每原子 stress 分配；Atom 的模型 virial 保持原值。
   const GPU_Vector<double>& constraint_virial_per_body() const
   {
@@ -47,12 +50,11 @@ private:
   enum class Stage { uninitialized, full_step, half_step };
   int molecule_grouping_method_;
   Stage stage_ = Stage::uninitialized;
-  const double thermostat_time_step_; // 两个半步均须与恒温质量初始化使用的步长一致
+  const double thermostat_time_step_;
+  const double temperature_coupling_; // 固定 tau；温度斜坡中 Q 随当前目标温度更新
   RigidBodySystem rigid_;
   RigidThermo thermo_state_;
+  std::unique_ptr<RigidThermostat> thermostat_;
 
   void check_step(double time_step, const Atom& atom, const GPU_Vector<double>& thermo) const;
-  void thermostat_half_step(
-    double duration, const std::vector<Group>& groups, const Box& box, Atom& atom,
-    GPU_Vector<double>& thermo);
 };

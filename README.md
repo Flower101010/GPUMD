@@ -73,8 +73,9 @@ the software correctness checks.
 Use `ensemble rigid_nve <grouping_method>` for fixed-box NVE, or
 `ensemble rigid_nvt <T_initial> <T_final> <T_coupling> <grouping_method>` for
 fixed-box NVT. Bodies translate and rotate under the summed bead forces and
-torques while preserving their internal geometry. The NVT integrator reuses
-GPUMD's Nose-Hoover chain propagator and supports a linear target-temperature ramp.
+torques while preserving their internal geometry. The NVT integrator uses
+separate translation and rotation Nose-Hoover chains following LAMMPS
+`FixRigidNHSmall`, and supports a linear target-temperature ramp.
 
 The zero-based grouping-method index selects molecule membership in `model.xyz`.
 Each multi-member group forms one rigid body; each singleton group is a free

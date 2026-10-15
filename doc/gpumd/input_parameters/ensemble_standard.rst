@@ -85,8 +85,9 @@ If the first parameter is :attr:`nvt_nhc`, it is similar to the case of :attr:`n
 
 :attr:`rigid_nvt`
 ^^^^^^^^^^^^^^^^^^
-The fixed-box rigid NVT integrator uses the same Nose-Hoover chain propagator
-as ``nvt_nhc`` and the same Miller rigid-body integration as ``rigid_nve``::
+The fixed-box rigid NVT integrator uses independent translation and rotation
+Nose-Hoover chains following LAMMPS ``FixRigidNHSmall``, shared with rigid NPT,
+and the same Miller rigid-body operations as ``rigid_nve``::
 
     ensemble rigid_nvt <T_1> <T_2> <T_coup> <grouping_method>
 
@@ -112,24 +113,34 @@ Choose the timestep and coupling for your potential and system; the values
 above illustrate the syntax. Initialization projects bead velocities onto
 rigid translation/rotation without rescaling them to the target temperature.
 
-A single chain couples to all free-particle, body-translation and body-rotation
-degrees of freedom, using ``f = 3*N_free + 6*N_body``. Chain masses are
-``Q_0 = f*k_B*T_1*tau^2`` and ``Q_j = k_B*T_1*tau^2`` for subsequent links,
-with ``tau = T_coup * time_step``; they remain fixed during a temperature ramp.
-Each step applies a thermostat half-step before the physical rigid step and
-another afterwards. The thermostat scales free-particle velocities, body
-center-of-mass velocities and Miller conjugate momenta, then reconstructs
-bead velocities. Orientations are not scaled.
+The translation chain controls free particles and body centers of mass with
+``f_t = 3*(N_free+N_body)``; the rotation chain controls Miller momenta with
+``f_r = 3*N_body``. Each chain has 10 links, one subcycle and the LAMMPS
+Yoshida order-3 setting. Purely free-particle systems skip the rotation chain.
+Including free particles in the translation chain is a mixed-system extension;
+a LAMMPS rigid fix itself thermostats only its rigid bodies.
+Masses are ``Q_t0=f_t*k_B*T*tau^2``, ``Q_r0=f_r*k_B*T*tau^2`` and
+``Q_j=k_B*T*tau^2`` for later links. Here ``tau=T_coup*time_step`` is fixed
+within a run, while masses follow the current target temperature during a ramp.
+
+The first stage kicks momenta, scales them with the old independent chain
+rates, drifts positions/orientations and advances both chains over a full
+timestep using the intermediate kinetic energies. The second stage scales
+with the new chain rates before the final kick. Chain coordinates/rates start
+at zero. This replaces the previous common-chain GPUMD propagator;
+``rigid_nvt`` no longer follows the ordinary ``nvt_nhc`` trajectory even when
+all particles are free. Its command syntax remains unchanged.
 
 The fixed-box, output and action restrictions of ``rigid_nve`` also apply.
 ``thermo.out`` reports the actual instantaneous temperature and kinetic
 energy with the rigid DOF count, and identifies the ensemble as ``rigid_nvt``.
-Its global pressure includes the physical rigid constraint virial; thermostat
-scaling impulses are excluded from that constraint-force estimate.
+Its global pressure uses the instantaneous mechanical rigid constraint virial,
+shared with rigid NPT; thermostat friction impulses are excluded. The discrete
+constraint estimator in rigid NVE is unchanged.
 
 The selection persists across consecutive ``run`` commands. At each run
-boundary, body state is reconstructed from the current beads and the chain
-is initialized anew, using that run's timestep and initial target temperature.
+boundary, body state is reconstructed from the current beads and both chains
+are initialized anew, using that run's timestep and initial target temperature.
 The temperature ramp also starts again for each run, as with ``nvt_nhc``.
 Reissue the desired output commands for each run, following the usual GPUMD
 measurement lifecycle.

@@ -2,6 +2,48 @@
 
 #include <vector>
 
+// FixRigidNHSmall 的独立平动/转动恒温链；NVT/NPT 共用，不含活塞。
+// 时间和 kT 使用 GPUMD 内部单位。链状态为 xi，不是 GPUMD 旧 NHC 的 pi。
+class RigidThermostat
+{
+public:
+  struct Parameters {
+    int translation_dof;
+    int rotation_dof;
+    double kT;
+    double temperature_time;
+    int chain_length = 10;
+    int subcycles = 1;
+    int yoshida_order = 3;
+  };
+  struct ChainLink {
+    double coordinate = 0;   // eta
+    double rate = 0;         // eta_dot / xi，不是现有 NHC 工具的 pi=Q*xi
+    double mass = 0;         // Q
+    double acceleration = 0; // f_eta；缓存的链驱动力
+  };
+  using Chain = std::vector<ChainLink>;
+  struct MomentumScales {
+    double translation;
+    double rotation;
+  };
+
+  explicit RigidThermostat(const Parameters& parameters);
+  const Parameters& parameters() const { return parameters_; }
+  const Chain& translation_chain() const { return translation_; }
+  const Chain& rotation_chain() const { return rotation_; }
+  // duration 为实际时长；一次调用内 2K 固定，不在这里缩放物理动量。
+  void advance(double duration, double twice_translation, double twice_rotation);
+  // 温度斜坡：按当前 kT 重算 Q，保留 eta/xi；失败不提交质量或链状态。
+  void advance(double duration, double twice_translation, double twice_rotation, double kT);
+  MomentumScales momentum_scales(double duration) const;
+
+private:
+  Parameters parameters_;
+  Chain translation_, rotation_;
+  std::vector<double> weights_;
+};
+
 // FixRigidNHSmall 的三维、各向同性、恒定 T/P 标量部分。
 // CPU 只处理链和活塞；动能/压力由调用方在正确时间层提供。
 // 全部使用 GPUMD 内部单位：kT 为能量，pressure*volume 为能量。
@@ -20,13 +62,8 @@ public:
     int subcycles = 1;
     int yoshida_order = 3; // 与 LAMMPS 一致，只允许 3 或 5
   };
-  struct ChainLink {
-    double coordinate = 0;   // eta
-    double rate = 0;         // eta_dot / xi，不是现有 NHC 工具的 pi=Q*xi
-    double mass = 0;         // Q
-    double acceleration = 0; // f_eta；缓存的链驱动力
-  };
-  using Chain = std::vector<ChainLink>;
+  using ChainLink = RigidThermostat::ChainLink;
+  using Chain = RigidThermostat::Chain;
   struct Piston {
     double rate = 0; // nu=epsilon_dot_x=y=z，即盒长的对数变化率
     double mass = 0; // LAMMPS 每轴 epsilon_mass；不当作另一个标量正则质量
@@ -35,15 +72,12 @@ public:
     double energy; // mtk_term1=(2K_t+2K_r)/g
     double rate;   // mtk_term2=3*nu/g
   };
-  struct MomentumScales {
-    double translation;
-    double rotation;
-  };
+  using MomentumScales = RigidThermostat::MomentumScales;
 
   explicit RigidNH(const Parameters& parameters);
   const Parameters& parameters() const { return parameters_; }
-  const Chain& translation_chain() const { return translation_; }
-  const Chain& rotation_chain() const { return rotation_; }
+  const Chain& translation_chain() const { return thermostat_.translation_chain(); }
+  const Chain& rotation_chain() const { return thermostat_.rotation_chain(); }
   const Chain& piston_chain() const { return piston_chain_; }
   const Piston& piston() const { return piston_; }
 
@@ -64,12 +98,10 @@ public:
 
 private:
   const Parameters parameters_;
-  Chain translation_, rotation_, piston_chain_;
+  RigidThermostat thermostat_;
+  Chain piston_chain_;
   Piston piston_;
   std::vector<double> weights_;
   double degrees_of_freedom() const;
   void check_kinetic(double twice_translation, double twice_rotation) const;
-  void advance_chain(
-    Chain& chain, double duration, double twice_kinetic, double target_dof,
-    double damping) const;
 };

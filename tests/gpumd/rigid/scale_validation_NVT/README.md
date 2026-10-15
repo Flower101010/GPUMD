@@ -1,9 +1,14 @@
 # Mixed rigid NVT — NEP acceptance test
 
-This suite exercises fixed-box Miller rigid dynamics with the shared Nose-Hoover
-chain thermostat. It is a synthetic software/thermostat acceptance fixture,
+This suite exercises fixed-box Miller rigid dynamics with separate translation
+and rotation Nose-Hoover chains following LAMMPS rigid dynamics.
+It is a synthetic software/thermostat acceptance fixture,
 not a calibrated water/methanol model. All beads have a `C` symbol to match the
 bundled `potentials/nep/C_2022_NEP4.txt` potential.
+
+The former common-chain implementation has been replaced. Existing long-run
+results belong to the binary that produced them; rerun long validation before
+accepting the new two-chain implementation. The command syntax is unchanged.
 
 Only `mixed_2700_300` is supported: **300 three-bead rigid bodies + 2700 free
 single beads**, giving 3600 beads, 3000 molecule labels and 9900 thermal DOFs.

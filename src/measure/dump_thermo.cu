@@ -67,8 +67,10 @@ void Dump_Thermo::pre_run(
             (integrate.type == 2 ? "rigid_nvt" : "rigid_nve"));
     fprintf(fid_, "# thermal_dof %d\n", thermal_dof);
     fprintf(fid_, "# stress_definition interaction_plus_bead_kinetic_plus_rigid_constraint\n");
-    if (integrate.type == 13)
+    if (integrate.type == 2 || integrate.type == 13) {
       fprintf(fid_, "# rigid_constraint_estimator instantaneous_mechanical\n");
+      fprintf(fid_, "# rigid_thermostat separate_translation_rotation\n");
+    }
   }
   if (integrate.type >= 31) {
     fprintf(

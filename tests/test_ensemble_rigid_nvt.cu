@@ -1,7 +1,5 @@
-#include "integrate/ensemble_nhc.cuh"
-#include "integrate/ensemble_rigid_nve.cuh"
 #include "integrate/ensemble_rigid_nvt.cuh"
-#include "integrate/nose_hoover_chain.cuh"
+#include "fixtures/rigid_nh_reference.h"
 #include "utilities/common.cuh"
 #include <cassert>
 #include <cmath>
@@ -43,13 +41,6 @@ double twice_kinetic(const Atom& atom)
   for (std::size_t i = 0; i < v.size(); ++i)
     result += m[i % m.size()] * v[i] * v[i];
   return result;
-}
-void scale_bead_velocities(Atom& atom, double factor)
-{
-  auto v = download(atom.velocity_per_atom);
-  for (auto& value : v)
-    value *= factor;
-  upload(atom.velocity_per_atom, v);
 }
 struct Fixture {
   Atom atom;
@@ -99,90 +90,152 @@ struct Fixture {
   }
 };
 
-void test_free_particles_match_existing_nhc()
+
+void compare_chain(const RigidThermostat::Chain& chain, const std::vector<double>& mass,
+  const std::vector<double>& position, const std::vector<double>& rate)
 {
-  Fixture a(false), b(false);
-  Ensemble_Rigid_NVT rigid(0, target, coupling, dt);
-  double move_velocity[3] = {0, 0, 0};
-  Ensemble_NHC ordinary(2, -1, move_velocity, 4, target, coupling, dt);
-  rigid.initialize(a.atom, a.box, a.groups);
-  assert(rigid.thermal_degrees_of_freedom() == 12);
-  for (int n = 0; n < 100; ++n) {
-    if (n == 50) { rigid.temperature = ordinary.temperature = 350; }
-    a.forces(); b.forces();
-    rigid.compute1(dt, a.groups, a.box, a.atom, a.thermo);
-    ordinary.compute1(dt, b.groups, b.box, b.atom, b.thermo);
-    near(download(a.atom.position_per_atom), download(b.atom.position_per_atom));
-    near(download(a.atom.velocity_per_atom), download(b.atom.velocity_per_atom));
-    a.forces(); b.forces();
-    rigid.compute2(dt, a.groups, a.box, a.atom, a.thermo);
-    ordinary.compute2(dt, b.groups, b.box, b.atom, b.thermo);
-    near(download(a.atom.velocity_per_atom), download(b.atom.velocity_per_atom));
-    for (int i = 0; i < NOSE_HOOVER_CHAIN_LENGTH; ++i) {
-      near(rigid.pos_nhc1[i], ordinary.pos_nhc1[i]);
-      near(rigid.vel_nhc1[i], ordinary.vel_nhc1[i]);
-    }
-    near(download(a.thermo)[0], twice_kinetic(a.atom) / (12 * K_B));
+  assert(chain.size() == mass.size());
+  for (std::size_t i = 0; i < chain.size(); ++i) {
+    near(chain[i].mass, mass[i]);
+    near(chain[i].coordinate, position[i]);
+    near(chain[i].rate, rate[i]);
   }
 }
 
-void test_mixed_splitting_and_constraint_window()
+// Host physical step with the literal LAMMPS kick/scale/drift/chain/scale/kick
+// ordering. The chain body is the independent, extracted LAMMPS implementation.
+void test_lammps_splitting(int mode)
 {
-  Fixture actual(true), reference(true);
+  Fixture actual(mode != 0);
+  if (mode == 2) actual.groups[0].cpu_label = {7, 7, 7, 7};
   Ensemble_Rigid_NVT nvt(0, target, coupling, dt);
   nvt.initialize(actual.atom, actual.box, actual.groups);
-  assert(nvt.thermal_degrees_of_freedom() == 9);
-  double eta[4]{}, pi[4] = {0.015, -0.01, 0.02, -0.005}, q[4];
-  for (int i = 0; i < 4; ++i) {
-    nvt.vel_nhc1[i] = pi[i];
-    q[i] = nvt.mas_nhc1[i];
-    near(q[i], K_B * target * (dt * coupling) * (dt * coupling) * (i == 0 ? 9 : 1));
+  RigidBodySystem::HostSnapshot host;
+  nvt.rigid_bodies().copy_to_host(host);
+  auto x = download(actual.atom.position_per_atom), v = download(actual.atom.velocity_per_atom);
+  const auto mass = download(actual.atom.mass);
+  const int ft = mode == 0 ? 12 : (mode == 1 ? 6 : 3), fr = mode == 0 ? 0 : 3;
+  assert(nvt.thermal_degrees_of_freedom() == ft + fr);
+  // Source rotation equations require nonzero nf_r. For the free-only extension
+  // use an unused independent reference rotation chain, comparing translation only.
+  lammps_reference::Reference ref({ft, fr == 0 ? 3 : fr, K_B*target, dt*coupling, 1, 0});
+  std::vector<bool> member(4, false);
+  for (int i : host.member_atoms) member[i] = true;
+  auto forces = [&] {
+    std::vector<double> f(12);
+    for (int i = 0; i < 12; ++i) f[i] = -0.2*(x[i]-5);
+    return f;
+  };
+  auto rebuild = [&] {
+    for (const auto& body : host.bodies) {
+      const auto& g = body.geometry;
+      const auto& s = body.state;
+      const auto L = rigid_math::conjqm_to_angular_momentum(s.quat, s.conjqm);
+      const auto omega = rigid_math::angular_momentum_to_omega(s.quat, L, g.inertia);
+      for (int j = g.first_member; j < g.first_member+g.natoms; ++j) {
+        const int i = host.member_atoms[j];
+        const auto r = rigid_math::rotate(s.quat, host.member_displace[j]);
+        const auto p = rigid_math::add(s.xcm, r);
+        const auto u = rigid_math::add(s.vcm, rigid_math::cross(omega, r));
+        x[i] = p.x; x[i+4] = p.y; x[i+8] = p.z;
+        v[i] = u.x; v[i+4] = u.y; v[i+8] = u.z;
+      }
+    }
+  };
+  auto kick = [&](const std::vector<double>& f) {
+    for (int i = 0; i < 4; ++i) if (!member[i])
+      for (int c = 0; c < 3; ++c) v[i+4*c] += dt/2*f[i+4*c]/mass[i];
+    for (auto& body : host.bodies) {
+      Vec3 force{}, torque{};
+      auto& s = body.state;
+      const auto& g = body.geometry;
+      for (int j = g.first_member; j < g.first_member+g.natoms; ++j) {
+        const int i = host.member_atoms[j];
+        const Vec3 fi{f[i], f[i+4], f[i+8]};
+        force = rigid_math::add(force, fi);
+        torque = rigid_math::add(torque,
+          rigid_math::cross(rigid_math::rotate(s.quat, host.member_displace[j]), fi));
+      }
+      s.vcm = rigid_math::add(s.vcm, rigid_math::scale(force, dt/(2*g.mass)));
+      const auto torque_body = rigid_math::inverse_rotate(s.quat, torque);
+      const auto fquat = rigid_math::multiply(s.quat, {0, torque_body.x, torque_body.y, torque_body.z});
+      s.conjqm.w += dt*fquat.w; s.conjqm.x += dt*fquat.x;
+      s.conjqm.y += dt*fquat.y; s.conjqm.z += dt*fquat.z;
+    }
+  };
+  auto scale = [&] {
+    const double st = std::exp(-dt/2*ref.eta_dot_t[0]);
+    const double sr = std::exp(-dt/2*ref.eta_dot_r[0]);
+    for (int i = 0; i < 4; ++i) if (!member[i])
+      for (int c = 0; c < 3; ++c) v[i+4*c] *= st;
+    for (auto& body : host.bodies) {
+      body.state.vcm = rigid_math::scale(body.state.vcm, st);
+      auto& p = body.state.conjqm;
+      p.w *= sr; p.x *= sr; p.y *= sr; p.z *= sr;
+    }
+  };
+  for (int step = 0; step < 100; ++step) {
+    nvt.temperature = target + step; // Exercise source mass updates under a ramp.
+    const auto f = forces();
+    actual.forces();
+    kick(f); scale();
+    for (int i = 0; i < 4; ++i) if (!member[i])
+      for (int c = 0; c < 3; ++c) x[i+4*c] += dt*v[i+4*c];
+    for (auto& body : host.bodies) {
+      auto& s = body.state;
+      s.xcm = rigid_math::add(s.xcm, rigid_math::scale(s.vcm, dt));
+      rigid_math::integrate_free_rotation(s.quat, s.conjqm, body.geometry.inertia, dt);
+    }
+    rebuild();
+    double kt = 0, kr = 0;
+    for (int i = 0; i < 4; ++i) if (!member[i])
+      for (int c = 0; c < 3; ++c) kt += mass[i]*v[i+4*c]*v[i+4*c];
+    for (const auto& body : host.bodies) {
+      kt += body.geometry.mass*rigid_math::norm_squared(body.state.vcm);
+      const auto L = rigid_math::conjqm_to_angular_momentum(body.state.quat, body.state.conjqm);
+      const auto omega = rigid_math::angular_momentum_to_omega(body.state.quat, L, body.geometry.inertia);
+      kr += rigid_math::dot(L, omega);
+    }
+    ref.set_duration(dt);
+    ref.t_target = K_B*nvt.temperature;
+    ref.akin_t = kt; ref.akin_r = fr == 0 ? 3*ref.t_target : kr;
+    ref.nhc_temp_integrate();
+    nvt.compute1(dt, actual.groups, actual.box, actual.atom, actual.thermo);
+    near(download(actual.atom.position_per_atom), x);
+    near(download(actual.atom.velocity_per_atom), v);
+    compare_chain(nvt.thermostat().translation_chain(), ref.q_t, ref.eta_t, ref.eta_dot_t);
+    if (fr) compare_chain(nvt.thermostat().rotation_chain(), ref.q_r, ref.eta_r, ref.eta_dot_r);
+    else assert(nvt.thermostat().rotation_chain().empty());
+    actual.forces();
+    const auto new_force = forces();
+    scale(); kick(new_force); rebuild();
+    nvt.compute2(dt, actual.groups, actual.box, actual.atom, actual.thermo);
+    near(download(actual.atom.velocity_per_atom), v);
+    const auto t = download(actual.thermo);
+    near(t[0], twice_kinetic(actual.atom)/((ft+fr)*K_B));
+    // Continuous mechanical pressure trace, independently using relative arms.
+    double internal = 0;
+    for (const auto& body : host.bodies)
+      for (int j = body.geometry.first_member; j < body.geometry.first_member+body.geometry.natoms; ++j) {
+        const int i = host.member_atoms[j];
+        const auto r = rigid_math::rotate(body.state.quat, host.member_displace[j]);
+        internal += r.x*new_force[i]+r.y*new_force[i+4]+r.z*new_force[i+8];
+      }
+    double final_kt = 0;
+    for (int i = 0; i < 4; ++i) if (!member[i])
+      for (int c = 0; c < 3; ++c) final_kt += mass[i]*v[i+4*c]*v[i+4*c];
+    for (const auto& body : host.bodies)
+      final_kt += body.geometry.mass*rigid_math::norm_squared(body.state.vcm);
+    near((t[2]+t[3]+t[4])*actual.box.get_volume(), final_kt-internal);
+    if (fr && step == 0)
+      assert(std::abs(ref.eta_dot_t[0]-ref.eta_dot_r[0]) > 1e-5);
   }
-  const double first_scale = nose_hoover_chain::propagate(
-    4, eta, pi, q, twice_kinetic(actual.atom), K_B * target, 9, dt / 2);
-  // Independent reference: scale all bead velocities on the host BEFORE
-  // initializing NVE, then run its existing physical step unchanged.
-  scale_bead_velocities(reference.atom, first_scale);
-  Ensemble_Rigid_NVE nve(0);
-  nve.initialize(reference.atom, reference.box, reference.groups);
-  actual.forces(); reference.forces();
-  nvt.compute1(dt, actual.groups, actual.box, actual.atom, actual.thermo);
-  nve.compute1(dt, reference.groups, reference.box, reference.atom, reference.thermo);
-  near(download(actual.atom.position_per_atom), download(reference.atom.position_per_atom));
-  near(download(actual.atom.velocity_per_atom), download(reference.atom.velocity_per_atom));
-  near(download(nvt.constraint_virial_per_body()), download(nve.constraint_virial_per_body()));
-  actual.forces(); reference.forces();
-  nve.compute2(dt, reference.groups, reference.box, reference.atom, reference.thermo);
-  const double last_scale = nose_hoover_chain::propagate(
-    4, eta, pi, q, twice_kinetic(reference.atom), K_B * target, 9, dt / 2);
-  scale_bead_velocities(reference.atom, last_scale);
-  nvt.compute2(dt, actual.groups, actual.box, actual.atom, actual.thermo);
-  near(download(actual.atom.velocity_per_atom), download(reference.atom.velocity_per_atom));
-  near(download(nvt.constraint_virial_per_body()), download(nve.constraint_virial_per_body()));
-  for (int i = 0; i < 4; ++i) {
-    near(nvt.pos_nhc1[i], eta[i]);
-    near(nvt.vel_nhc1[i], pi[i]);
-  }
-  const auto thermo = download(actual.thermo);
-  near(thermo[0], twice_kinetic(actual.atom) / (9 * K_B));
-  // Output pressure uses final thermostatted velocities and physical-only virial.
-  const auto v = download(reference.atom.velocity_per_atom), m = download(reference.atom.mass);
-  const auto w = download(nve.constraint_virial_per_body());
-  const int row[6] = {0, 1, 2, 0, 0, 1}, col[6] = {0, 1, 2, 1, 2, 2};
-  for (int c = 0; c < 6; ++c) {
-    double pressure = w[c];
-    for (int i = 0; i < 4; ++i)
-      pressure += m[i] * v[i + 4 * row[c]] * v[i + 4 * col[c]];
-    near(thermo[2 + c], pressure / actual.box.get_volume());
-  }
-  // Each run resets the chain; a changed time step is rejected before integration.
+  // Reset is per-run, and changed dt is rejected before any dynamics.
   nvt.initialize(actual.atom, actual.box, actual.groups);
-  for (int i = 0; i < 4; ++i) {
-    near(nvt.pos_nhc1[i], 0);
-    near(nvt.vel_nhc1[i], i % 2 == 0 ? 1 : -1);
-  }
+  for (const auto* chain : {&nvt.thermostat().translation_chain(), &nvt.thermostat().rotation_chain()})
+    for (const auto& link : *chain) { near(link.coordinate, 0); near(link.rate, 0); }
   bool rejected = false;
-  try { nvt.compute1(2 * dt, actual.groups, actual.box, actual.atom, actual.thermo); }
+  try { nvt.compute1(2*dt, actual.groups, actual.box, actual.atom, actual.thermo); }
   catch (const std::invalid_argument&) { rejected = true; }
   assert(rejected);
 }
@@ -195,7 +248,6 @@ int main()
     std::cout << "SKIP: no accessible GPU\n";
     return 0;
   }
-  test_free_particles_match_existing_nhc();
-  test_mixed_splitting_and_constraint_window();
-  std::cout << "Rigid NVT scaling and thermostat splitting checks passed.\n";
+  for (int mode : {0, 1, 2}) test_lammps_splitting(mode);
+  std::cout << "Rigid NVT independent chains, LAMMPS splitting, ramps and pressure checks passed.\n";
 }

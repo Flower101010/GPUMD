@@ -83,11 +83,12 @@ def main():
         return
     root = Path(tempfile.mkdtemp(prefix="gpumd-rigid-nvt-"))
 
-    def run(name, commands, *, free=False, nep=False, error=None):
+    def run(name, commands, *, free=False, nep=False, error=None,
+            lattice="30 0 0 0 30 0 0 0 30"):
         case = root / name
         case.mkdir()
         labels = [0, 1, 2, 3] if free else [0, 1, 0, 0]
-        model = ['4', 'Lattice="30 0 0 0 30 0 0 0 30" pbc="T T T" '
+        model = ['4', f'Lattice="{lattice}" pbc="T T T" '
                  'Properties=species:S:1:pos:R:3:mass:R:1:vel:R:3:group:I:1']
         for i, (x, y, z) in enumerate(POSITIONS):
             # A common rigid translation + rotation for the triangle.
@@ -122,18 +123,21 @@ def main():
 
         a, _ = run("free_rigid", "ensemble rigid_nvt 250 450 1000 0\ntime_step 0.1\n" +
                    output + "run 30", free=True)
-        b, _ = run("free_ordinary", "ensemble nvt_nhc 250 450 1000\ntime_step 0.1\n" +
-                   output + "run 30", free=True)
-        check_output(a, 12, 30, rigid=False)
-        # Ordinary NHC leaves thermo at the pre-final-thermostat snapshot.
-        # Compare actual phase-space states; rigid NVT output is checked above
-        # against the final velocities, not that legacy thermo snapshot.
-        assert len(thermo_rows(b / "thermo.out")) == 30
-        for af, bf in zip(frames(a / "trajectory.xyz"), frames(b / "trajectory.xyz")):
-            for aa, ba in zip(af, bf):
-                for key in ("pos", "vel"):
-                    for av, bv in zip(aa[key], ba[key]):
-                        close(av, bv)
+        rows = check_output(a, 12, 30, rigid=False)
+        for row in rows:
+            close(sum(row[3:6])/3, 2*row[1]/(3*30**3)*160.2177)
+        # Source setup starts xi=0, so the first force-free drift is ballistic.
+        for atom, (x, y, z) in zip(frames(a / "trajectory.xyz")[0], POSITIONS):
+            initial_velocity = (0.003 + 0.001*(z-12) - 0.002*(y-12),
+                                -0.002 + 0.002*(x-12) - 0.0015*(z-12),
+                                0.001 + 0.0015*(y-12) - 0.001*(x-12))
+            for position, origin, velocity in zip(atom["pos"], (x, y, z), initial_velocity):
+                close(position, origin + 0.1*velocity)
+        assert "# rigid_thermostat separate_translation_rotation" in (a / "thermo.out").read_text()
+
+        case, _ = run("triclinic", "ensemble rigid_nvt 300 300 1000 0\ntime_step 0.1\n" +
+                      output + "run 10", lattice="30 0 0 2 30 0 0 0 30")
+        check_output(case, 9, 10)
 
         case, log = run("switch", "time_step 0.1\n" +
                         "ensemble rigid_nvt 300 300 1000 0\n" + output + "run 3\n" +

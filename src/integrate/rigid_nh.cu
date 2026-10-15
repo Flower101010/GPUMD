@@ -30,78 +30,58 @@ double maclaurin(double x)
   const double x2 = x * x, x4 = x2 * x2;
   return 1 + x2 / 6 + x4 / 120 + x2 * x4 / 5040 + x4 * x4 / 362880;
 }
-RigidNH::Chain make_chain(int length, double first_mass, double other_mass, double kT)
+RigidThermostat::Chain make_chain(int length, double first_mass, double other_mass, double kT)
 {
-  RigidNH::Chain chain(length);
+  require(positive(first_mass) && positive(other_mass),
+    "Rigid NH masses are outside the finite positive range.");
+  RigidThermostat::Chain chain(length);
   for (int i = 0; i < length; ++i) {
     chain[i].mass = i == 0 ? first_mass : other_mass;
     if (i > 0) chain[i].acceleration = -kT / other_mass;
   }
   return chain;
 }
-void require_finite(const RigidNH::Chain& chain)
+void require_finite(const RigidThermostat::Chain& chain)
 {
   for (const auto& link : chain)
     if (!std::isfinite(link.rate) || !std::isfinite(link.coordinate) ||
         !std::isfinite(link.acceleration))
       throw std::overflow_error("Rigid NH chain overflow; reduce time step or check the state.");
 }
-}
 
-RigidNH::RigidNH(const Parameters& parameters) : parameters_(parameters)
+std::vector<double> yoshida_weights(int order)
 {
-  const auto& p = parameters_;
-  require(p.translation_dof > 0 && p.rotation_dof >= 0 &&
-      static_cast<long long>(p.translation_dof) + p.rotation_dof <= std::numeric_limits<int>::max(),
-    "Invalid rigid NH degrees of freedom.");
-  require(positive(p.kT) && positive(p.temperature_time) && positive(p.pressure_time) &&
-      std::isfinite(p.target_pressure), "Invalid rigid NH target or coupling time.");
-  require(p.chain_length >= 1 && p.piston_chain_length >= 1 && p.subcycles >= 1 &&
-      (p.yoshida_order == 3 || p.yoshida_order == 5), "Invalid rigid NH chain integration settings.");
-  const double qt = p.kT * p.temperature_time * p.temperature_time;
-  const double qb = p.kT * p.pressure_time * p.pressure_time;
-  const double mt = p.translation_dof * qt, mr = p.rotation_dof * qt;
-  piston_.mass = (degrees_of_freedom() + 3) * qb;
-  require(positive(qt) && positive(qb) && positive(mt) &&
-      (p.rotation_dof == 0 || positive(mr)) && positive(9 * qb) && positive(piston_.mass),
-    "Rigid NH masses are outside the finite positive range.");
-  translation_ = make_chain(p.chain_length, mt, qt, p.kT);
-  if (p.rotation_dof) rotation_ = make_chain(p.chain_length, mr, qt, p.kT);
-  piston_chain_ = make_chain(p.piston_chain_length, 9 * qb, qb, p.kT);
-  require_finite(translation_);
-  require_finite(rotation_);
-  require_finite(piston_chain_);
-  if (p.yoshida_order == 3) {
+  if (order == 3) {
     const double w = 1 / (2 - std::pow(2.0, 1.0 / 3));
-    weights_ = {w, 1 - 2 * w, w};
-  } else {
-    const double w = 1 / (4 - std::pow(4.0, 1.0 / 3));
-    weights_ = {w, w, 1 - 4 * w, w, w};
+    return {w, 1 - 2 * w, w};
   }
+  const double w = 1 / (4 - std::pow(4.0, 1.0 / 3));
+  return {w, w, 1 - 4 * w, w, w};
 }
-
-double RigidNH::degrees_of_freedom() const
+void set_thermostat_masses(RigidThermostat::Chain& chain, int dof, double kT, double tau)
 {
-  return static_cast<double>(parameters_.translation_dof) + parameters_.rotation_dof;
+  const double mass = kT * tau * tau;
+  require(positive(mass) && positive(dof * mass),
+    "Rigid thermostat masses are outside the finite positive range.");
+  for (std::size_t i = 0; i < chain.size(); ++i) chain[i].mass = i == 0 ? dof * mass : mass;
 }
-void RigidNH::check_kinetic(double kt, double kr) const
+void check_kinetic_energy(double kt, double kr, int rotation_dof)
 {
   require(std::isfinite(kt) && kt >= 0 && std::isfinite(kr) && kr >= 0 &&
-      (parameters_.rotation_dof != 0 || kr == 0), "Invalid rigid NH twice-kinetic energies.");
+      (rotation_dof != 0 || kr == 0), "Invalid rigid NH twice-kinetic energies.");
 }
-
-void RigidNH::advance_chain(
-  Chain& chain, double duration, double kinetic, double target_dof, double damping) const
+void advance_chain(
+  RigidThermostat::Chain& chain, double duration, double kinetic, double target_dof,
+  double damping, double kT, int subcycles, const std::vector<double>& weights)
 {
-  const double kT = parameters_.kT;
   chain[0].acceleration = (kinetic - target_dof * kT) / chain[0].mass;
   for (std::size_t i = 1; i < chain.size(); ++i) {
     const auto& previous = chain[i - 1];
     chain[i].acceleration = (previous.mass * previous.rate * previous.rate - kT) / chain[i].mass;
   }
-  for (int subcycle = 0; subcycle < parameters_.subcycles; ++subcycle) {
-    for (double weight : weights_) {
-      const double step = weight * duration / parameters_.subcycles;
+  for (int subcycle = 0; subcycle < subcycles; ++subcycle) {
+    for (double weight : weights) {
+      const double step = weight * duration / subcycles;
       const double half = 0.5 * step, quarter = 0.25 * step;
       auto update_rate = [&](std::size_t i) {
         const double x = quarter * chain[i + 1].rate;
@@ -124,17 +104,81 @@ void RigidNH::advance_chain(
   require_finite(chain);
 }
 
-void RigidNH::advance_thermostats(double duration, double kt, double kr)
+} // namespace
+
+RigidThermostat::RigidThermostat(const Parameters& p) : parameters_(p)
+{
+  require(p.translation_dof > 0 && p.rotation_dof >= 0 &&
+      static_cast<long long>(p.translation_dof) + p.rotation_dof <= std::numeric_limits<int>::max(),
+    "Invalid rigid NH degrees of freedom.");
+  require(positive(p.kT) && positive(p.temperature_time), "Invalid rigid thermostat target or coupling time.");
+  require(p.chain_length >= 1 && p.subcycles >= 1 && (p.yoshida_order == 3 || p.yoshida_order == 5),
+    "Invalid rigid NH chain integration settings.");
+  const double mass = p.kT * p.temperature_time * p.temperature_time;
+  translation_ = make_chain(p.chain_length, p.translation_dof * mass, mass, p.kT);
+  if (p.rotation_dof) rotation_ = make_chain(p.chain_length, p.rotation_dof * mass, mass, p.kT);
+  require_finite(translation_);
+  require_finite(rotation_);
+  weights_ = yoshida_weights(p.yoshida_order);
+}
+
+void RigidThermostat::advance(double duration, double kt, double kr)
+{
+  advance(duration, kt, kr, parameters_.kT);
+}
+void RigidThermostat::advance(double duration, double kt, double kr, double kT)
 {
   check_duration(duration);
-  check_kinetic(kt, kr);
+  check_kinetic_energy(kt, kr, parameters_.rotation_dof);
+  require(positive(kT), "Rigid thermostat requires finite positive kT.");
   if (duration == 0) return;
-  // 小规模 CPU 标量状态先在副本中推进，数值溢出时不破坏原有链。
   auto translation = translation_, rotation = rotation_;
-  advance_chain(translation, duration, kt, parameters_.translation_dof, 1.0);
-  if (!rotation.empty()) advance_chain(rotation, duration, kr, parameters_.rotation_dof, 1.0);
+  set_thermostat_masses(translation, parameters_.translation_dof, kT, parameters_.temperature_time);
+  if (!rotation.empty()) set_thermostat_masses(rotation, parameters_.rotation_dof, kT, parameters_.temperature_time);
+  advance_chain(translation, duration, kt, parameters_.translation_dof, 1, kT, parameters_.subcycles, weights_);
+  if (!rotation.empty())
+    advance_chain(rotation, duration, kr, parameters_.rotation_dof, 1, kT, parameters_.subcycles, weights_);
   translation_.swap(translation);
   rotation_.swap(rotation);
+  parameters_.kT = kT;
+}
+RigidThermostat::MomentumScales RigidThermostat::momentum_scales(double duration) const
+{
+  check_duration(duration);
+  const MomentumScales scales{std::exp(-duration * translation_[0].rate),
+    rotation_.empty() ? 1 : std::exp(-duration * rotation_[0].rate)};
+  if (!positive(scales.translation) || !positive(scales.rotation))
+    throw std::overflow_error("Rigid thermostat momentum scales are outside the finite positive range.");
+  return scales;
+}
+
+RigidNH::RigidNH(const Parameters& p)
+  : parameters_(p), thermostat_({p.translation_dof, p.rotation_dof, p.kT, p.temperature_time,
+      p.chain_length, p.subcycles, p.yoshida_order})
+{
+  require(positive(p.pressure_time) && std::isfinite(p.target_pressure), "Invalid rigid NH target or coupling time.");
+  require(p.piston_chain_length >= 1, "Invalid rigid NH piston chain length.");
+  const double qb = p.kT * p.pressure_time * p.pressure_time;
+  piston_.mass = (degrees_of_freedom() + 3) * qb;
+  require(positive(qb) && positive(9 * qb) && positive(piston_.mass),
+    "Rigid NH masses are outside the finite positive range.");
+  piston_chain_ = make_chain(p.piston_chain_length, 9 * qb, qb, p.kT);
+  require_finite(piston_chain_);
+  weights_ = yoshida_weights(p.yoshida_order);
+}
+
+double RigidNH::degrees_of_freedom() const
+{
+  return static_cast<double>(parameters_.translation_dof) + parameters_.rotation_dof;
+}
+void RigidNH::check_kinetic(double kt, double kr) const
+{
+  check_kinetic_energy(kt, kr, parameters_.rotation_dof);
+}
+
+void RigidNH::advance_thermostats(double duration, double kt, double kr)
+{
+  thermostat_.advance(duration, kt, kr);
 }
 void RigidNH::advance_piston_thermostat(double duration)
 {
@@ -142,7 +186,8 @@ void RigidNH::advance_piston_thermostat(double duration)
   if (duration == 0) return;
   auto chain = piston_chain_;
   // LAMMPS: sum_i(M_i*nu_i²)/pdim = M*nu²；第一节目标是 kT，不是 9*kT。
-  advance_chain(chain, duration, piston_.mass * piston_.rate * piston_.rate, 1.0, 0.5);
+  advance_chain(chain, duration, piston_.mass * piston_.rate * piston_.rate, 1.0, 0.5,
+    parameters_.kT, parameters_.subcycles, weights_);
   piston_chain_.swap(chain);
 }
 RigidNH::MTKTerms RigidNH::mtk_terms(double kt, double kr) const
@@ -173,8 +218,8 @@ RigidNH::MomentumScales RigidNH::momentum_scales(double duration) const
   check_duration(duration);
   const double correction = (3 / degrees_of_freedom()) * piston_.rate;
   const MomentumScales scales{
-    std::exp(-duration * (translation_[0].rate + piston_.rate + correction)),
-    rotation_.empty() ? 1.0 : std::exp(-duration * (rotation_[0].rate + 3 * correction))};
+    std::exp(-duration * (translation_chain()[0].rate + piston_.rate + correction)),
+    rotation_chain().empty() ? 1.0 : std::exp(-duration * (rotation_chain()[0].rate + 3 * correction))};
   if (!positive(scales.translation) || !positive(scales.rotation))
     throw std::overflow_error("Rigid NH momentum scales are outside the finite positive range.");
   return scales;

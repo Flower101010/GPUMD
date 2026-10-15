@@ -1,6 +1,5 @@
 #include "ensemble_rigid_nvt.cuh"
 #include "integrate/rigid_body_integrator.cuh"
-#include "integrate/nose_hoover_chain.cuh"
 #include "model/atom.cuh"
 #include "model/box.cuh"
 #include "model/rigid_body_input.cuh"
@@ -9,7 +8,8 @@
 
 Ensemble_Rigid_NVT::Ensemble_Rigid_NVT(
   int molecule_grouping_method, double target_temperature, double coupling, double dt)
-  : molecule_grouping_method_(molecule_grouping_method), thermostat_time_step_(dt)
+  : molecule_grouping_method_(molecule_grouping_method), thermostat_time_step_(dt),
+    temperature_coupling_(coupling)
 {
   if (molecule_grouping_method < 0)
     throw std::invalid_argument("Rigid NVT requires a nonnegative molecule grouping method.");
@@ -26,6 +26,7 @@ void Ensemble_Rigid_NVT::initialize(Atom& atom, const Box& box, const std::vecto
   if (stage_ == Stage::half_step)
     throw std::logic_error("Cannot reinitialize rigid NVT between its two integration stages.");
   stage_ = Stage::uninitialized;
+  thermostat_.reset();
   rigid_.clear();
   thermo_state_.clear();
   if (atom.number_of_atoms <= 0)
@@ -45,17 +46,9 @@ void Ensemble_Rigid_NVT::initialize(Atom& atom, const Box& box, const std::vecto
     rigid_.rebuild_positions(atom, box);
     rigid_.rebuild_velocities(atom);
     thermo_state_.initialize(rigid_);
-    const double tau = thermostat_time_step_ * temperature_coupling;
-    const double chain_mass = K_B * temperature * tau * tau;
-    const double first_mass = thermal_degrees_of_freedom() * chain_mass;
-    if (!std::isfinite(chain_mass) || chain_mass <= 0.0 ||
-        !std::isfinite(first_mass) || first_mass <= 0.0)
-      throw std::invalid_argument("Rigid NVT thermostat masses must be finite and positive.");
-    for (int i = 0; i < NOSE_HOOVER_CHAIN_LENGTH; ++i) {
-      pos_nhc1[i] = 0.0;
-      vel_nhc1[i] = i % 2 == 0 ? 1.0 : -1.0;
-      mas_nhc1[i] = i == 0 ? first_mass : chain_mass;
-    }
+    thermostat_.reset(new RigidThermostat({
+      thermo_state_.translational_degrees_of_freedom(), thermo_state_.rotational_degrees_of_freedom(),
+      K_B * temperature, thermostat_time_step_ * temperature_coupling_}));
     stage_ = Stage::full_step;
   } catch (...) {
     rigid_.clear();
@@ -95,27 +88,14 @@ void Ensemble_Rigid_NVT::check_step(
       "Rigid NVT does not support unwrapped trajectories for rigid members.");
 }
 
-void Ensemble_Rigid_NVT::thermostat_half_step(
-  double duration, const std::vector<Group>& groups, const Box& box, Atom& atom,
-  GPU_Vector<double>& thermo)
+const RigidThermostat& Ensemble_Rigid_NVT::thermostat() const
 {
-  // bead v 已与刚体状态一致，其动能恰为自由粒子 + 质心 + 转动动能。
-  find_thermo(
-    true, box.get_volume(), groups, atom.mass, atom.potential_per_atom,
-    atom.velocity_per_atom, atom.virial_per_atom, thermo);
-  double instantaneous_temperature;
-  thermo.copy_to_host(&instantaneous_temperature, 1);
-  const double dof = thermal_degrees_of_freedom();
-  const double twice_kinetic_energy = instantaneous_temperature * dof * K_B;
-  const double factor = nose_hoover_chain::propagate(
-    NOSE_HOOVER_CHAIN_LENGTH, pos_nhc1, vel_nhc1, mas_nhc1,
-    twice_kinetic_energy, K_B * temperature, dof, duration);
-  rigid_integrator::scale_momenta(factor, atom, rigid_);
-  rigid_.rebuild_velocities(atom);
+  if (!thermostat_) throw std::logic_error("Rigid NVT must be initialized.");
+  return *thermostat_;
 }
 
 void Ensemble_Rigid_NVT::compute1(
-  double dt, const std::vector<Group>& groups, Box& box, Atom& atom, GPU_Vector<double>& thermo)
+  double dt, const std::vector<Group>& /*groups*/, Box& box, Atom& atom, GPU_Vector<double>& thermo)
 {
   if (stage_ != Stage::full_step)
     throw std::logic_error(
@@ -123,18 +103,20 @@ void Ensemble_Rigid_NVT::compute1(
   check_step(dt, atom, thermo);
   // 先验证固定盒；此处 remap 对已包装质心只改变可能的舍入误差。
   rigid_.remap_centers(box);
-  // 恒温缩放必须在约束冲量统计窗口外；重建后的 bead v 才是物理 kick 的起点。
-  thermostat_half_step(0.5 * dt, groups, box, atom, thermo);
   rigid_.compute_forces_and_torques(atom);
-  thermo_state_.begin_step(rigid_);
+  // FixRigidNHSmall::initial_integrate：先 kick，再用旧链速率独立缩放。
+  const auto scales = thermostat_->momentum_scales(dt / 2);
   rigid_integrator::kick_translation(0.5 * dt, atom, rigid_);
-  rigid_integrator::drift_translation(dt, atom, rigid_);
   rigid_integrator::kick_rotation(0.5 * dt, rigid_);
+  rigid_integrator::scale_momenta(scales.translation, scales.rotation, atom, rigid_);
+  rigid_integrator::drift_translation(dt, atom, rigid_);
   rigid_integrator::drift_rotation(dt, rigid_);
   rigid_.remap_centers(box);
   rigid_.rebuild_positions(atom, box);
-  thermo_state_.record_first_half(0.5 * dt, rigid_, atom);
   rigid_.rebuild_velocities(atom);
+  const auto kinetic = thermo_state_.sample_kinetic_energy(rigid_, atom);
+  // 源码在中间动能时间层推进一次 dt；斜坡时按当前 kT 更新两条链质量。
+  thermostat_->advance(dt, kinetic.twice_translation, kinetic.twice_rotation, K_B * temperature);
   stage_ = Stage::half_step;
 }
 
@@ -146,11 +128,12 @@ void Ensemble_Rigid_NVT::compute2(
   check_step(dt, atom, thermo);
   rigid_.remap_centers(box);
   rigid_.compute_forces_and_torques(atom);
+  // FixRigidNHSmall::final_integrate：先用新链速率缩放，再 kick。
+  const auto scales = thermostat_->momentum_scales(dt / 2);
+  rigid_integrator::scale_momenta(scales.translation, scales.rotation, atom, rigid_);
   rigid_integrator::kick_translation(0.5 * dt, atom, rigid_);
   rigid_integrator::kick_rotation(0.5 * dt, rigid_);
-  thermo_state_.record_second_half(0.5 * dt, rigid_, atom);
   rigid_.rebuild_velocities(atom);
-  thermostat_half_step(0.5 * dt, groups, box, atom, thermo);
   find_thermo(
     false,
     box.get_volume(),
@@ -160,6 +143,8 @@ void Ensemble_Rigid_NVT::compute2(
     atom.velocity_per_atom,
     atom.virial_per_atom,
     thermo);
+  // 同 NPT：机械约束估计不包含恒温摩擦冲量；NVE 的离散窗口保持不变。
+  thermo_state_.sample_constraint_virial(rigid_, atom);
   thermo_state_.add_constraint_pressure(box.get_volume(), thermo);
   stage_ = Stage::full_step;
 }

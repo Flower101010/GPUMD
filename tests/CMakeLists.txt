@@ -87,9 +87,7 @@ target_sources(test_ensemble_rigid_nvt PRIVATE
     ${PROJECT_SOURCE_DIR}/src/integrate/rigid_body_integrator.cu
     ${PROJECT_SOURCE_DIR}/src/integrate/rigid_thermo.cu
     ${PROJECT_SOURCE_DIR}/src/integrate/ensemble.cu
-    ${PROJECT_SOURCE_DIR}/src/integrate/ensemble_nhc.cu
-    ${PROJECT_SOURCE_DIR}/src/integrate/nose_hoover_chain.cu
-    ${PROJECT_SOURCE_DIR}/src/integrate/ensemble_rigid_nve.cu
+    ${PROJECT_SOURCE_DIR}/src/integrate/rigid_nh.cu
     ${PROJECT_SOURCE_DIR}/src/integrate/ensemble_rigid_nvt.cu
     ${PROJECT_SOURCE_DIR}/src/model/box.cu
     ${PROJECT_SOURCE_DIR}/src/utilities/error.cu)

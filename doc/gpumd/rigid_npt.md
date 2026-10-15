@@ -77,7 +77,7 @@ GPUMD 的盒以原点为缩放中心；LAMMPS 的盒围绕中心缩放，且源�
 
 ## 压力定义
 
-已有 NVE/NVT 用两个离散约束冲量统计 virial；NPT 的变盒/动量缩放不能
+NVE 用两个离散约束冲量统计 virial；NVT/NPT 的动量缩放不能
 直接塞进这个窗口，否则会把控制器冲量算进压力。
 `RigidThermo::sample_constraint_virial` 改从当前状态计算物理约束力：
 
