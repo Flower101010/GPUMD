@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -336,6 +337,158 @@ static void many_bodies()
       near(read_vec(result_v, i, N), velocity[i]);
     }
   }
+  // 新变盒 kernel 同时跨越多个 block，最后一个 block 非满。
+  rigid.rescale_box(atom, box, 1.25);
+  const auto scaled_x = download(atom.position_per_atom);
+  RigidBodySystem::HostSnapshot scaled;
+  rigid.copy_to_host(scaled);
+  for (int b = 0; b < B; ++b) {
+    near_position(box, scaled.bodies[b].state.xcm, scale(snapshot.bodies[b].state.xcm, 1.25));
+    for (int k = 0; k < 4; ++k) {
+      const int i = 4 * b + k;
+      Vec3 expected = scale(x[i], 1.25);
+      if (k != 3) {
+        const Vec3 original_center{b + 1 + 0.2 / 3, 1 + 0.2 / 3, 1};
+        expected = add(scale(original_center, 1.25), subtract(x[i], original_center));
+      }
+      near_position(box, read_vec(scaled_x, i, N), expected);
+    }
+  }
+}
+
+// 独立用晶格列向量和 Cramer 法则求分数坐标，覆盖非上三角盒。
+static Vec3 fractional_general(const Box& box, Vec3 r)
+{
+  const Vec3 a{box.cpu_h[0], box.cpu_h[3], box.cpu_h[6]};
+  const Vec3 b{box.cpu_h[1], box.cpu_h[4], box.cpu_h[7]};
+  const Vec3 c{box.cpu_h[2], box.cpu_h[5], box.cpu_h[8]};
+  const double determinant = dot(a, cross(b, c));
+  return {dot(r, cross(b, c)) / determinant,
+          dot(r, cross(c, a)) / determinant,
+          dot(r, cross(a, b)) / determinant};
+}
+static void equivalent_position(const Box& box, Vec3 actual, Vec3 expected)
+{
+  const Vec3 f = fractional_general(box, actual);
+  assert(f.x >= -1e-12 && f.x < 1 + 1e-12);
+  assert(f.y >= -1e-12 && f.y < 1 + 1e-12);
+  assert(f.z >= -1e-12 && f.z < 1 + 1e-12);
+  Vec3 error = fractional_general(box, subtract(actual, expected));
+  error.x -= std::nearbyint(error.x);
+  error.y -= std::nearbyint(error.y);
+  error.z -= std::nearbyint(error.z);
+  near(error, {0, 0, 0});
+}
+
+static void exercise_rescaling(Box box, bool all_free = false)
+{
+  const int N = 4;
+  const Box original_box = box;
+  Atom atom;
+  atom.number_of_atoms = N;
+  const Vec3 center = h_times(box, {0.99, 0.98, 0.97});
+  const std::vector<Vec3> x{
+    add(center, {-0.2, -0.1, 0}), add(center, {0.4, -0.1, 0}),
+    add(center, {-0.2, 0.3, 0.1}), h_times(box, {2.2, -3.3, 4.4})};
+  upload(atom.mass, {1, 2, 3, 4});
+  upload(atom.position_per_atom, soa(x));
+  upload(atom.velocity_per_atom, soa({{1, 2, 3}, {-1, 0, 2}, {0, 1, -2}, {4, -5, 6}}));
+  upload(atom.force_per_atom, soa({{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}}));
+  atom.position_image.resize(3 * N, 17);
+  RigidBodySystem rigid;
+  rigid.initialize(atom, box, all_free ? std::vector<int>(N, -1) : std::vector<int>{7, 7, 7, -1}, soa(x));
+  rigid.rebuild_positions(atom, box);
+  rigid.rebuild_velocities(atom);
+  rigid.compute_forces_and_torques(atom);
+  const auto velocities = download(atom.velocity_per_atom);
+  const auto forces = download(atom.force_per_atom);
+  RigidBodySystem::HostSnapshot initial;
+  rigid.copy_to_host(initial);
+  if (!all_free) {
+    // 当前 COM 尚未 remap，调用变盒时必须同时处理多次跨界。
+    initial.bodies[0].state.xcm = add(initial.bodies[0].state.xcm, h_times(box, {2, -3, 4}));
+    const auto state = initial.bodies[0].state;
+    CHECK(gpuMemcpy(rigid.device_view().state, &state, sizeof(state), gpuMemcpyHostToDevice));
+  }
+  const auto view = rigid.device_view();
+  double cumulative = 1;
+  for (double factor : {1.0, 1.2, 0.7, 1.0 / (1.2 * 0.7)}) {
+    rigid.rescale_box(atom, box, factor);
+    cumulative *= factor;
+    for (int k = 0; k < 9; ++k)
+      near(box.cpu_h[k], cumulative * original_box.cpu_h[k]);
+    for (int row = 0; row < 3; ++row)
+      for (int col = 0; col < 3; ++col) {
+        double product = 0;
+        for (int k = 0; k < 3; ++k)
+          product += box.cpu_h[3 * row + k] * box.cpu_h[9 + 3 * k + col];
+        near(product, row == col ? 1 : 0);
+      }
+    for (int k = 0; k < 18; ++k)
+      assert(box.float_h[k] == static_cast<float>(box.cpu_h[k]));
+    near(box.get_volume(), original_box.get_volume() * cumulative * cumulative * cumulative);
+    near(box.thickness_x, box.get_volume() / box.get_area(0));
+    near(box.thickness_y, box.get_volume() / box.get_area(1));
+    near(box.thickness_z, box.get_volume() / box.get_area(2));
+    assert(box.is_orthogonal == (original_box.cpu_h[1] == 0));
+    assert(download(atom.velocity_per_atom) == velocities);
+    assert(download(atom.force_per_atom) == forces);
+    std::vector<int> images(3 * N);
+    atom.position_image.copy_to_host(images.data());
+    assert(images == std::vector<int>(3 * N, 17));
+    const auto positions = download(atom.position_per_atom);
+    for (int i = all_free ? 0 : 3; i < N; ++i)
+      equivalent_position(box, read_vec(positions, i, N), scale(x[i], cumulative));
+    RigidBodySystem::HostSnapshot current;
+    rigid.copy_to_host(current);
+    assert(current.member_atoms == initial.member_atoms);
+    assert(rigid.device_view().state == view.state);
+    assert(rigid.device_view().geometry == view.geometry);
+    for (std::size_t j = 0; j < initial.member_displace.size(); ++j)
+      near(current.member_displace[j], initial.member_displace[j]);
+    if (!all_free) {
+      const auto& before = initial.bodies[0];
+      const auto& after = current.bodies[0];
+      near(after.geometry.mass, before.geometry.mass);
+      near(after.geometry.inertia, before.geometry.inertia);
+      near(after.state.quat, before.state.quat);
+      near(after.state.conjqm, before.state.conjqm);
+      near(after.state.vcm, before.state.vcm);
+      equivalent_position(box, after.state.xcm, scale(before.state.xcm, cumulative));
+      for (int j = 0; j < 3; ++j) {
+        const int i = initial.member_atoms[j];
+        const Vec3 lever = rotate(before.state.quat, initial.member_displace[j]);
+        equivalent_position(box, read_vec(positions, i, N), add(after.state.xcm, lever));
+      }
+    }
+    // 新盒已被明确接纳；旧运行接口在新盒继续工作。
+    rigid.remap_centers(box);
+    rigid.rebuild_positions(atom, box);
+    rigid.rebuild_velocities(atom);
+    assert(download(atom.velocity_per_atom) == velocities);
+  }
+
+  const auto before = download(atom.position_per_atom);
+  const Box accepted = box;
+  for (double bad : {0.0, -1.0, std::numeric_limits<double>::infinity(),
+                     std::numeric_limits<double>::quiet_NaN(), 1e200, 1e-200}) {
+    rejects<std::invalid_argument>([&] { rigid.rescale_box(atom, box, bad); });
+    for (int k = 0; k < 18; ++k)
+      assert(box.cpu_h[k] == accepted.cpu_h[k]);
+    assert(download(atom.position_per_atom) == before);
+  }
+  Box external = box;
+  external.cpu_h[1] += 0.1;
+  rejects<std::invalid_argument>([&] { rigid.rescale_box(atom, external, 1.1); });
+  rejects<std::invalid_argument>([&] { rigid.remap_centers(external); });
+  external = box;
+  external.pbc_z = 0;
+  rejects<std::invalid_argument>([&] { rigid.rescale_box(atom, external, 1.1); });
+  atom.unwrapped_position.resize(3 * N);
+  rejects<std::invalid_argument>([&] { rigid.rescale_box(atom, box, 1.1); });
+  atom.unwrapped_position.clear();
+  atom.position_per_atom.resize(1);
+  rejects<std::invalid_argument>([&] { rigid.rescale_box(atom, box, 1.1); });
 }
 
 int main()
@@ -348,11 +501,19 @@ int main()
   Box box{};
   box.cpu_h[0] = box.cpu_h[4] = box.cpu_h[8] = 10;
   exercise(box);
+  exercise_rescaling(box);
+  exercise_rescaling(box, true);
   box.cpu_h[1] = 2;
   box.cpu_h[2] = 1;
   box.cpu_h[4] = 9;
   box.cpu_h[5] = 0.5;
   box.cpu_h[8] = 8;
+  exercise_rescaling(box);
+  Box dense = box;
+  dense.cpu_h[3] = 0.4;
+  dense.cpu_h[6] = -0.2;
+  dense.cpu_h[7] = 0.3;
+  exercise_rescaling(dense);
   box.pbc_z = 0;
   exercise(box);
   box.pbc_x = box.pbc_y = 0;
@@ -366,7 +527,9 @@ int main()
   rejects<std::logic_error>([&] { rigid.remap_centers(box); });
   rejects<std::logic_error>([&] { rigid.rebuild_positions(atom, box); });
   rejects<std::logic_error>([&] { rigid.rebuild_velocities(atom); });
+  rejects<std::logic_error>([&] { rigid.rescale_box(atom, box, 1.1); });
   rigid.initialize(atom, box, {});
+  rejects<std::invalid_argument>([&] { rigid.rescale_box(atom, box, 1.1); });
   rigid.compute_forces_and_torques(atom);
   rigid.remap_centers(box);
   rigid.rebuild_positions(atom, box);
@@ -382,5 +545,10 @@ int main()
   rigid.rebuild_velocities(atom);
   assert(download(atom.position_per_atom) == std::vector<double>({1, 2, 3}));
   assert(download(atom.velocity_per_atom) == std::vector<double>({4, 5, 6}));
+  Atom empty;
+  box.pbc_x = box.pbc_y = box.pbc_z = 1;
+  rigid.initialize(empty, box, {});
+  rigid.rescale_box(empty, box, 1.1);
+  rigid.remap_centers(box);
   std::cout << "Rigid body GPU runtime checks passed.\n";
 }

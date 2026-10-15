@@ -95,6 +95,14 @@ target_sources(test_ensemble_rigid_nve PRIVATE
     ${PROJECT_SOURCE_DIR}/src/model/box.cu
     ${PROJECT_SOURCE_DIR}/src/utilities/error.cu)
 
+# RigidBodySystem's controlled box scaling refreshes the shared Box caches.
+foreach(test_name IN ITEMS test_rigid_body_initialization test_rigid_body_runtime
+                           test_rigid_body_translation test_rigid_body_operators)
+    target_sources(${test_name} PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/model/box.cu
+        ${PROJECT_SOURCE_DIR}/src/utilities/error.cu)
+endforeach()
+
 gpumd_add_unit_test(test_bonded_dataset test_bonded_dataset.cu)
 add_library(gpumd_nep_bonded_test_support STATIC
     ${PROJECT_SOURCE_DIR}/src/main_nep/bonded_baseline.cu

@@ -266,6 +266,19 @@ __global__ void wrap_body_centers(RigidBodySystem::DeviceView view, Cell cell)
   if (b < view.number_of_bodies)
     view.state[b].xcm = cell.wrapped(view.state[b].xcm);
 }
+__global__ void rescale_centers_and_free_positions(
+  RigidBodySystem::DeviceView view, Cell old_cell, Cell new_cell,
+  double factor, double* positions)
+{
+  const int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < view.number_of_bodies)
+    view.state[i].xcm = new_cell.wrapped(scale(old_cell.wrapped(view.state[i].xcm), factor));
+  if (i < view.number_of_atoms && view.atom_to_body[i] < 0) {
+    // 先包装可避免跨越许多周期的坐标在乘 factor 时溢出。
+    const Vec3 position = old_cell.wrapped(read_device_vec(positions, i, view.number_of_atoms));
+    write_device_vec(positions, i, view.number_of_atoms, new_cell.wrapped(scale(position, factor)));
+  }
+}
 __global__ void
 reconstruct_positions(RigidBodySystem::ConstDeviceView view, Cell cell, double* positions)
 {
@@ -311,7 +324,7 @@ void RigidBodySystem::clear()
   number_of_atoms_ = 0;
   number_of_bodies_ = 0;
   number_of_members_ = 0;
-  initialized_box_ = {};
+  current_box_ = {};
   initialized_pbc_ = {};
 }
 void RigidBodySystem::initialize(
@@ -467,7 +480,7 @@ void RigidBodySystem::initialize_impl(
     }
     if (count > 0)
       atom_to_body_.copy_from_host(atom_to_body.data());
-    std::copy(box.cpu_h, box.cpu_h + 9, initialized_box_.begin());
+    std::copy(box.cpu_h, box.cpu_h + 9, current_box_.begin());
     initialized_pbc_ = {box.pbc_x, box.pbc_y, box.pbc_z};
     initialized_ = true;
   } catch (...) {
@@ -638,9 +651,9 @@ void RigidBodySystem::check_box(const Box& box) const
 {
   require_initialized();
   require(
-    std::equal(initialized_box_.begin(), initialized_box_.end(), box.cpu_h) &&
+    std::equal(current_box_.begin(), current_box_.end(), box.cpu_h) &&
       initialized_pbc_ == std::array<int, 3>{box.pbc_x, box.pbc_y, box.pbc_z},
-    "Rigid bodies currently require the fixed box used at initialization.");
+    "Rigid box changed externally; use rescale_box for controlled isotropic changes.");
 }
 void RigidBodySystem::compute_forces_and_torques(const Atom& atom)
 {
@@ -662,6 +675,51 @@ void RigidBodySystem::remap_centers(const Box& box)
     return;
   wrap_body_centers<<<(number_of_bodies_ + 127) / 128, 128>>>(device_view(), Cell(box));
   GPU_CHECK_KERNEL
+}
+void RigidBodySystem::rescale_box(Atom& atom, Box& box, double factor)
+{
+  check_atom(atom);
+  check_box(box);
+  require(std::isfinite(factor) && factor > 0, "Box scale must be finite and positive.");
+  require(
+    box.pbc_x == 1 && box.pbc_y == 1 && box.pbc_z == 1,
+    "Isotropic rigid box scaling requires three periodic directions.");
+  require(
+    atom.position_per_atom.size() == 3 * static_cast<std::size_t>(number_of_atoms_),
+    "Rigid box scaling requires a 3N position array.");
+  require(
+    atom.unwrapped_position.size() == 0,
+    "Rigid box scaling does not support unwrapped position storage.");
+
+  // 先在临时盒中验证所有派生量，失败时不改变 HOST 盒或 DEVICE 状态。
+  const Cell old_cell(box);
+  Box next = box;
+  for (int i = 0; i < 9; ++i)
+    next.cpu_h[i] *= factor;
+  const Cell new_cell(next);
+  std::copy(new_cell.inv, new_cell.inv + 9, next.cpu_h + 9);
+  const double volume = next.get_volume();
+  require(std::isfinite(volume) && volume > 0, "Invalid scaled box volume.");
+  next.thickness_x = volume / next.get_area(0);
+  next.thickness_y = volume / next.get_area(1);
+  next.thickness_z = volume / next.get_area(2);
+  require(
+    std::isfinite(next.thickness_x) && next.thickness_x > 0 &&
+      std::isfinite(next.thickness_y) && next.thickness_y > 0 &&
+      std::isfinite(next.thickness_z) && next.thickness_z > 0,
+    "Invalid scaled box thickness.");
+  next.set_is_orthogonal();
+  for (float value : next.float_h)
+    require(std::isfinite(value), "Scaled box exceeds float cache range.");
+
+  if (number_of_atoms_ > 0) {
+    rescale_centers_and_free_positions<<<(number_of_atoms_ - 1) / 128 + 1, 128>>>(
+      device_view(), old_cell, new_cell, factor, atom.position_per_atom.data());
+    GPU_CHECK_KERNEL
+  }
+  box = next;
+  std::copy(box.cpu_h, box.cpu_h + 9, current_box_.begin());
+  rebuild_positions(atom, box);
 }
 void RigidBodySystem::rebuild_positions(Atom& atom, const Box& box)
 {

@@ -321,5 +321,5 @@ virtual site、拓扑非键排除和 1–4 scaling。
 训练数组仍含 float，强 bonded 叠加很小 residual 时要检查精度。
 软件验收只检查计算正确性，不以能否拟合出好 CG 模型作为通过条件。
 
-更多约定见 [完整使用指南](../../developers/multibead_cg_guide_zh.md)，
+更多约定见 [完整使用指南](../../doc/gpumd/multibead_cg_guide_zh.md)，
 独立计算验证见 [阶段 F 记录](../../developers/cg_stage_f/STATUS.md)。

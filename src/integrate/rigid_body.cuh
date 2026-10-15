@@ -112,6 +112,14 @@ public:
   // 非周期方向不包装；只改 xcm，不改姿态、速度或固定几何，可合并到积分 kernel。
   void remap_centers(const Box& box);
 
+  // 受控各向同性变盒：H*=factor，围绕原点缩放自由 bead 和刚体 COM，
+  // 包装到新盒，再从不变的固定几何/姿态重建刚体成员。支持完整非正交 H。
+  // 要求全周期、有限正 factor；同时刷新 Box 的逆矩阵/float/厚度缓存。
+  // 不改变速度、quat、conjqm、质量、惯量或 image；不支持 unwrapped 存储。
+  // 旧力/载荷/势能/virial 已过期，调用方必须在下一次使用前重新计算。
+  // 此操作不推进时间、不做恒温/恒压动量缩放；仍在默认 GPU stream 执行。
+  void rescale_box(Atom& atom, Box& box, double factor);
+
   // 前置条件：质心已 remap。求局部位置 y_i=xcm+R(q)*s_i，再按完整盒矩阵包装。
   // 只写受管理 bead 的 position_per_atom，保持自由 bead 原值。
   // 刚体不维护跨盒历史；连续展开轨迹输出需另行设计。
@@ -155,7 +163,7 @@ private:
   int number_of_atoms_ = 0;
   int number_of_bodies_ = 0;
   int number_of_members_ = 0;
-  std::array<double, 9> initialized_box_{};
+  std::array<double, 9> current_box_{};
   std::array<int, 3> initialized_pbc_{};
   GPU_Vector<BodyGeometry> geometry_;
   GPU_Vector<BodyState> state_;
