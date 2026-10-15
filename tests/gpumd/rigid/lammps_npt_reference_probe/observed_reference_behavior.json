@@ -1,0 +1,1151 @@
+{
+  "purpose": "Observed reference behavior, not an NPT acceptance baseline",
+  "coordinate_fields": [
+    "x y z",
+    "xs ys zs reconstructed with frame box",
+    "xu yu zu"
+  ],
+  "units": "metal: distance in Angstrom, pressure in bar, time in ps",
+  "references": {
+    "local-dev": {
+      "source_commit": "c71ef819ab3785bba81c31c0ef5fce84603608d3",
+      "source_dirty": false,
+      "executable_sha256": "b5ab618513d9fa29883b96e39bebc2380817a6f9b912a0cdb88039112b330e63",
+      "source_sha256": {
+        "src/RIGID/fix_rigid_nh_small.cpp": "de8d0f6119d3124bc3ef86264f684e723dd98fc7a0250d29c851c95f71214aa4",
+        "src/RIGID/fix_rigid_small.cpp": "94c0893a77d0ce6375d13e65a9a550dfebabbd38aade75e09c9be52d8d384b68",
+        "src/fix_nh.cpp": "1468b17cafcf055051138ca1f34559f25c780148bc5c10ca12b76e9b84160187"
+      },
+      "cases": {
+        "nvt_small": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026 - Development - c71ef819ab)",
+          "fix_command": "fix rb all rigid/nvt/small molecule temp 300 300 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "max_coordinate_reconstruction_error_A": 0.0,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0,
+          "rigid_within_1e-12_A": true,
+          "half_box_scale": 1.0,
+          "max_error_from_half_box_scaling_A": 0.0,
+          "full_box_scale": 1.0,
+          "max_error_from_full_box_scaling_A": 0.0
+        },
+        "npt_small_10000bar": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026 - Development - c71ef819ab)",
+          "fix_command": "fix rb all rigid/npt/small molecule temp 300 300 1 iso 10000 10000 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.98913752262618,
+            29.98913752262618,
+            29.98913752262618
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817162,
+            "2-3": 1.0628221143190344
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "max_coordinate_reconstruction_error_A": 1.7763568394002505e-15,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0001924669544293156,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.9998189423194945,
+          "max_error_from_half_box_scaling_A": 4.440892098500626e-16,
+          "full_box_scale": 0.9996379174208727,
+          "max_error_from_full_box_scaling_A": 0.00019243210680808254
+        },
+        "npt_large_10000bar": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026 - Development - c71ef819ab)",
+          "fix_command": "fix rb all rigid/npt molecule temp 300 300 1 iso 10000 10000 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.98913752262618,
+            29.98913752262618,
+            29.98913752262618
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817162,
+            "2-3": 1.0628221143190344
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "max_coordinate_reconstruction_error_A": 1.7763568394002505e-15,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0001924669544293156,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.9998189423194945,
+          "max_error_from_half_box_scaling_A": 4.440892098500626e-16,
+          "full_box_scale": 0.9996379174208727,
+          "max_error_from_full_box_scaling_A": 0.00019243210680808254
+        },
+        "npt_small_1bar": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026 - Development - c71ef819ab)",
+          "fix_command": "fix rb all rigid/npt/small molecule temp 300 300 1 iso 1 1 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.999998913555586,
+            29.999998913555586,
+            29.999998913555586
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9999999818925946,
+            "1-3": 0.8544003590607807,
+            "2-3": 1.0630145620250298
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9999999818925946,
+            "1-3": 0.8544003590607807,
+            "2-3": 1.0630145620250298
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9999999818925946,
+            "1-3": 0.8544003590607807,
+            "2-3": 1.0630145620250298
+          },
+          "max_coordinate_reconstruction_error_A": 0.0,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 1.9248435290109e-08,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.999999981892593,
+          "max_error_from_half_box_scaling_A": 2.4424906541753444e-15,
+          "full_box_scale": 0.9999999637851863,
+          "max_error_from_full_box_scaling_A": 1.92484397310011e-08
+        },
+        "npt_small_zero_pressure": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026 - Development - c71ef819ab)",
+          "fix_command": "fix rb all rigid/npt/small molecule temp 300 300 1 iso 0 0 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "max_coordinate_reconstruction_error_A": 0.0,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0,
+          "rigid_within_1e-12_A": true,
+          "half_box_scale": 1.0,
+          "max_error_from_half_box_scaling_A": 0.0,
+          "full_box_scale": 1.0,
+          "max_error_from_full_box_scaling_A": 0.0
+        },
+        "nph_small_10000bar": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026 - Development - c71ef819ab)",
+          "fix_command": "fix rb all rigid/nph/small molecule iso 10000 10000 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.98913752262618,
+            29.98913752262618,
+            29.98913752262618
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817162,
+            "2-3": 1.0628221143190344
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "max_coordinate_reconstruction_error_A": 1.7763568394002505e-15,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0001924669544293156,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.9998189423194945,
+          "max_error_from_half_box_scaling_A": 4.440892098500626e-16,
+          "full_box_scale": 0.9996379174208727,
+          "max_error_from_full_box_scaling_A": 0.00019243210680808254
+        },
+        "npt_small_moving": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026 - Development - c71ef819ab)",
+          "fix_command": "fix rb all rigid/npt/small molecule temp 300 300 1 iso 10000 10000 1",
+          "initial_velocity_A_per_ps": "1 2 3",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.989138925293958,
+            29.989138925293958,
+            29.989138925293958
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9998189657015235,
+            "1-3": 0.8542456987593323,
+            "2-3": 1.0628221391744745
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9998189657015235,
+            "1-3": 0.8542456987593307,
+            "2-3": 1.062822139174473
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9998189657015235,
+            "1-3": 0.8542456987593323,
+            "2-3": 1.0628221391744745
+          },
+          "max_coordinate_reconstruction_error_A": 1.7763568394002505e-15,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.00019244209899049736,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.999818965701524,
+          "max_error_from_half_box_scaling_A": 6.661338147750939e-16,
+          "full_box_scale": 0.9996379641764651,
+          "max_error_from_full_box_scaling_A": 0.00019240726037050848
+        },
+        "npt_before_rigid_nve": {
+          "status": "rejected",
+          "fix_command": "group solvent empty\ncompute physical all temp\nfix bp solvent npt temp 300 300 1 iso 10000 10000 1\nfix_modify bp temp physical\nfix rb all rigid/nve/small molecule",
+          "returncode": 1,
+          "errors": [
+            "ERROR: Rigid fixes must come before any box changing fix (src/RIGID/fix_rigid_small.cpp:567)"
+          ]
+        },
+        "npt_after_rigid_nve": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026 - Development - c71ef819ab)",
+          "fix_command": "fix rb all rigid/nve/small molecule\ngroup solvent empty\ncompute physical all temp\nfix bp solvent npt temp 300 300 1 iso 10000 10000 1\nfix_modify bp temp physical",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.97556495668333,
+            29.97556495668333,
+            29.97556495668333
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9991854985561108,
+            "1-3": 0.8537044641930426,
+            "2-3": 1.0621487543621446
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9991854985561108,
+            "1-3": 0.8537044641930426,
+            "2-3": 1.0621487543621446
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9991854985561108,
+            "1-3": 0.8537044641930426,
+            "2-3": 1.0621487543621446
+          },
+          "max_coordinate_reconstruction_error_A": 0.0,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.000865826911320422,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.9995926663176911,
+          "max_error_from_half_box_scaling_A": 0.0004328252675822597,
+          "full_box_scale": 0.9991854985561108,
+          "max_error_from_full_box_scaling_A": 4.107825191113079e-15
+        }
+      }
+    },
+    "stable_22Jul2025": {
+      "source_commit": "c7ae612a9497437412cb787b78769570f48653dd",
+      "source_dirty": false,
+      "executable_sha256": "2de3d9978dc23c2f37334e62e16346ce8b055020db521b05bc592395fdc3082a",
+      "source_sha256": {
+        "src/RIGID/fix_rigid_nh_small.cpp": "f919a6f77c835a9e8110a5aaed6b251bd07e997d811d69ed79529547451820e4",
+        "src/RIGID/fix_rigid_small.cpp": "7b030d9b8f66b5ef1353495c05265a99cac3c8c23552a2439e81a0d90eb56a23",
+        "src/fix_nh.cpp": "f0dccece4771012e45ffb6d1fbde6e17ec23bdf72cefa0c02744264132858973"
+      },
+      "cases": {
+        "nvt_small": {
+          "status": "completed",
+          "version": "LAMMPS (22 Jul 2025)",
+          "fix_command": "fix rb all rigid/nvt/small molecule temp 300 300 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "max_coordinate_reconstruction_error_A": 0.0,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0,
+          "rigid_within_1e-12_A": true,
+          "half_box_scale": 1.0,
+          "max_error_from_half_box_scaling_A": 0.0,
+          "full_box_scale": 1.0,
+          "max_error_from_full_box_scaling_A": 0.0
+        },
+        "npt_small_10000bar": {
+          "status": "completed",
+          "version": "LAMMPS (22 Jul 2025)",
+          "fix_command": "fix rb all rigid/npt/small molecule temp 300 300 1 iso 10000 10000 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.98913752262618,
+            29.98913752262618,
+            29.98913752262618
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817162,
+            "2-3": 1.0628221143190344
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "max_coordinate_reconstruction_error_A": 1.7763568394002505e-15,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0001924669544293156,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.9998189423194945,
+          "max_error_from_half_box_scaling_A": 4.440892098500626e-16,
+          "full_box_scale": 0.9996379174208727,
+          "max_error_from_full_box_scaling_A": 0.00019243210680808254
+        },
+        "npt_large_10000bar": {
+          "status": "completed",
+          "version": "LAMMPS (22 Jul 2025)",
+          "fix_command": "fix rb all rigid/npt molecule temp 300 300 1 iso 10000 10000 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.98913752262618,
+            29.98913752262618,
+            29.98913752262618
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817162,
+            "2-3": 1.0628221143190344
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "max_coordinate_reconstruction_error_A": 1.7763568394002505e-15,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0001924669544293156,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.9998189423194945,
+          "max_error_from_half_box_scaling_A": 4.440892098500626e-16,
+          "full_box_scale": 0.9996379174208727,
+          "max_error_from_full_box_scaling_A": 0.00019243210680808254
+        },
+        "npt_small_1bar": {
+          "status": "completed",
+          "version": "LAMMPS (22 Jul 2025)",
+          "fix_command": "fix rb all rigid/npt/small molecule temp 300 300 1 iso 1 1 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.999998913555586,
+            29.999998913555586,
+            29.999998913555586
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9999999818925946,
+            "1-3": 0.8544003590607807,
+            "2-3": 1.0630145620250298
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9999999818925946,
+            "1-3": 0.8544003590607807,
+            "2-3": 1.0630145620250298
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9999999818925946,
+            "1-3": 0.8544003590607807,
+            "2-3": 1.0630145620250298
+          },
+          "max_coordinate_reconstruction_error_A": 0.0,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 1.9248435290109e-08,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.999999981892593,
+          "max_error_from_half_box_scaling_A": 2.4424906541753444e-15,
+          "full_box_scale": 0.9999999637851863,
+          "max_error_from_full_box_scaling_A": 1.92484397310011e-08
+        },
+        "npt_small_zero_pressure": {
+          "status": "completed",
+          "version": "LAMMPS (22 Jul 2025)",
+          "fix_command": "fix rb all rigid/npt/small molecule temp 300 300 1 iso 0 0 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "max_coordinate_reconstruction_error_A": 0.0,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0,
+          "rigid_within_1e-12_A": true,
+          "half_box_scale": 1.0,
+          "max_error_from_half_box_scaling_A": 0.0,
+          "full_box_scale": 1.0,
+          "max_error_from_full_box_scaling_A": 0.0
+        },
+        "nph_small_10000bar": {
+          "status": "completed",
+          "version": "LAMMPS (22 Jul 2025)",
+          "fix_command": "fix rb all rigid/nph/small molecule iso 10000 10000 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.98913752262618,
+            29.98913752262618,
+            29.98913752262618
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817162,
+            "2-3": 1.0628221143190344
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "max_coordinate_reconstruction_error_A": 1.7763568394002505e-15,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0001924669544293156,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.9998189423194945,
+          "max_error_from_half_box_scaling_A": 4.440892098500626e-16,
+          "full_box_scale": 0.9996379174208727,
+          "max_error_from_full_box_scaling_A": 0.00019243210680808254
+        },
+        "npt_small_moving": {
+          "status": "completed",
+          "version": "LAMMPS (22 Jul 2025)",
+          "fix_command": "fix rb all rigid/npt/small molecule temp 300 300 1 iso 10000 10000 1",
+          "initial_velocity_A_per_ps": "1 2 3",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.989138925293958,
+            29.989138925293958,
+            29.989138925293958
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9998189657015235,
+            "1-3": 0.8542456987593323,
+            "2-3": 1.0628221391744745
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9998189657015235,
+            "1-3": 0.8542456987593307,
+            "2-3": 1.062822139174473
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9998189657015235,
+            "1-3": 0.8542456987593323,
+            "2-3": 1.0628221391744745
+          },
+          "max_coordinate_reconstruction_error_A": 1.7763568394002505e-15,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.00019244209899049736,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.999818965701524,
+          "max_error_from_half_box_scaling_A": 6.661338147750939e-16,
+          "full_box_scale": 0.9996379641764651,
+          "max_error_from_full_box_scaling_A": 0.00019240726037050848
+        },
+        "npt_before_rigid_nve": {
+          "status": "rejected",
+          "fix_command": "group solvent empty\ncompute physical all temp\nfix bp solvent npt temp 300 300 1 iso 10000 10000 1\nfix_modify bp temp physical\nfix rb all rigid/nve/small molecule",
+          "returncode": 1,
+          "errors": [
+            "ERROR: Rigid fixes must come before any box changing fix (src/RIGID/fix_rigid_small.cpp:561)"
+          ]
+        },
+        "npt_after_rigid_nve": {
+          "status": "completed",
+          "version": "LAMMPS (22 Jul 2025)",
+          "fix_command": "fix rb all rigid/nve/small molecule\ngroup solvent empty\ncompute physical all temp\nfix bp solvent npt temp 300 300 1 iso 10000 10000 1\nfix_modify bp temp physical",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.97556495668333,
+            29.97556495668333,
+            29.97556495668333
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9991854985561108,
+            "1-3": 0.8537044641930426,
+            "2-3": 1.0621487543621446
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9991854985561108,
+            "1-3": 0.8537044641930426,
+            "2-3": 1.0621487543621446
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9991854985561108,
+            "1-3": 0.8537044641930426,
+            "2-3": 1.0621487543621446
+          },
+          "max_coordinate_reconstruction_error_A": 0.0,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.000865826911320422,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.9995926663176911,
+          "max_error_from_half_box_scaling_A": 0.0004328252675822597,
+          "full_box_scale": 0.9991854985561108,
+          "max_error_from_full_box_scaling_A": 4.107825191113079e-15
+        }
+      }
+    },
+    "stable_30Sep2026": {
+      "source_commit": "8de817dd79bfe4525d5d39246a212d833e6dee07",
+      "source_dirty": false,
+      "executable_sha256": "ced7c9917bd048abba184ebf982b5412fe761299edf3c0f4c166258c0a03c6e6",
+      "source_sha256": {
+        "src/RIGID/fix_rigid_nh_small.cpp": "de8d0f6119d3124bc3ef86264f684e723dd98fc7a0250d29c851c95f71214aa4",
+        "src/RIGID/fix_rigid_small.cpp": "94c0893a77d0ce6375d13e65a9a550dfebabbd38aade75e09c9be52d8d384b68",
+        "src/fix_nh.cpp": "1468b17cafcf055051138ca1f34559f25c780148bc5c10ca12b76e9b84160187"
+      },
+      "cases": {
+        "nvt_small": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026)",
+          "fix_command": "fix rb all rigid/nvt/small molecule temp 300 300 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "max_coordinate_reconstruction_error_A": 0.0,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0,
+          "rigid_within_1e-12_A": true,
+          "half_box_scale": 1.0,
+          "max_error_from_half_box_scaling_A": 0.0,
+          "full_box_scale": 1.0,
+          "max_error_from_full_box_scaling_A": 0.0
+        },
+        "npt_small_10000bar": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026)",
+          "fix_command": "fix rb all rigid/npt/small molecule temp 300 300 1 iso 10000 10000 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.98913752262618,
+            29.98913752262618,
+            29.98913752262618
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817162,
+            "2-3": 1.0628221143190344
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "max_coordinate_reconstruction_error_A": 1.7763568394002505e-15,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0001924669544293156,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.9998189423194945,
+          "max_error_from_half_box_scaling_A": 4.440892098500626e-16,
+          "full_box_scale": 0.9996379174208727,
+          "max_error_from_full_box_scaling_A": 0.00019243210680808254
+        },
+        "npt_large_10000bar": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026)",
+          "fix_command": "fix rb all rigid/npt molecule temp 300 300 1 iso 10000 10000 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.98913752262618,
+            29.98913752262618,
+            29.98913752262618
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817162,
+            "2-3": 1.0628221143190344
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "max_coordinate_reconstruction_error_A": 1.7763568394002505e-15,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0001924669544293156,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.9998189423194945,
+          "max_error_from_half_box_scaling_A": 4.440892098500626e-16,
+          "full_box_scale": 0.9996379174208727,
+          "max_error_from_full_box_scaling_A": 0.00019243210680808254
+        },
+        "npt_small_1bar": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026)",
+          "fix_command": "fix rb all rigid/npt/small molecule temp 300 300 1 iso 1 1 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.999998913555586,
+            29.999998913555586,
+            29.999998913555586
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9999999818925946,
+            "1-3": 0.8544003590607807,
+            "2-3": 1.0630145620250298
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9999999818925946,
+            "1-3": 0.8544003590607807,
+            "2-3": 1.0630145620250298
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9999999818925946,
+            "1-3": 0.8544003590607807,
+            "2-3": 1.0630145620250298
+          },
+          "max_coordinate_reconstruction_error_A": 0.0,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 1.9248435290109e-08,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.999999981892593,
+          "max_error_from_half_box_scaling_A": 2.4424906541753444e-15,
+          "full_box_scale": 0.9999999637851863,
+          "max_error_from_full_box_scaling_A": 1.92484397310011e-08
+        },
+        "npt_small_zero_pressure": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026)",
+          "fix_command": "fix rb all rigid/npt/small molecule temp 300 300 1 iso 0 0 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "max_coordinate_reconstruction_error_A": 0.0,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0,
+          "rigid_within_1e-12_A": true,
+          "half_box_scale": 1.0,
+          "max_error_from_half_box_scaling_A": 0.0,
+          "full_box_scale": 1.0,
+          "max_error_from_full_box_scaling_A": 0.0
+        },
+        "nph_small_10000bar": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026)",
+          "fix_command": "fix rb all rigid/nph/small molecule iso 10000 10000 1",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.98913752262618,
+            29.98913752262618,
+            29.98913752262618
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817162,
+            "2-3": 1.0628221143190344
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9998189423194948,
+            "1-3": 0.8542456787817179,
+            "2-3": 1.0628221143190357
+          },
+          "max_coordinate_reconstruction_error_A": 1.7763568394002505e-15,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.0001924669544293156,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.9998189423194945,
+          "max_error_from_half_box_scaling_A": 4.440892098500626e-16,
+          "full_box_scale": 0.9996379174208727,
+          "max_error_from_full_box_scaling_A": 0.00019243210680808254
+        },
+        "npt_small_moving": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026)",
+          "fix_command": "fix rb all rigid/npt/small molecule temp 300 300 1 iso 10000 10000 1",
+          "initial_velocity_A_per_ps": "1 2 3",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.989138925293958,
+            29.989138925293958,
+            29.989138925293958
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9998189657015235,
+            "1-3": 0.8542456987593323,
+            "2-3": 1.0628221391744745
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9998189657015235,
+            "1-3": 0.8542456987593307,
+            "2-3": 1.062822139174473
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9998189657015235,
+            "1-3": 0.8542456987593323,
+            "2-3": 1.0628221391744745
+          },
+          "max_coordinate_reconstruction_error_A": 1.7763568394002505e-15,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.00019244209899049736,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.999818965701524,
+          "max_error_from_half_box_scaling_A": 6.661338147750939e-16,
+          "full_box_scale": 0.9996379641764651,
+          "max_error_from_full_box_scaling_A": 0.00019240726037050848
+        },
+        "npt_before_rigid_nve": {
+          "status": "rejected",
+          "fix_command": "group solvent empty\ncompute physical all temp\nfix bp solvent npt temp 300 300 1 iso 10000 10000 1\nfix_modify bp temp physical\nfix rb all rigid/nve/small molecule",
+          "returncode": 1,
+          "errors": [
+            "ERROR: Rigid fixes must come before any box changing fix (src/RIGID/fix_rigid_small.cpp:567)"
+          ]
+        },
+        "npt_after_rigid_nve": {
+          "status": "completed",
+          "version": "LAMMPS (30 Sep 2026)",
+          "fix_command": "fix rb all rigid/nve/small molecule\ngroup solvent empty\ncompute physical all temp\nfix bp solvent npt temp 300 300 1 iso 10000 10000 1\nfix_modify bp temp physical",
+          "initial_velocity_A_per_ps": "0 0 0",
+          "box_lengths_before": [
+            30.0,
+            30.0,
+            30.0
+          ],
+          "box_lengths_after": [
+            29.97556495668333,
+            29.97556495668333,
+            29.97556495668333
+          ],
+          "distances_before_A": {
+            "1-2": 1.0,
+            "1-3": 0.854400374531754,
+            "2-3": 1.063014581273465
+          },
+          "distances_after_A": {
+            "1-2": 0.9991854985561108,
+            "1-3": 0.8537044641930426,
+            "2-3": 1.0621487543621446
+          },
+          "distances_after_from_scaled_A": {
+            "1-2": 0.9991854985561108,
+            "1-3": 0.8537044641930426,
+            "2-3": 1.0621487543621446
+          },
+          "distances_after_from_unwrapped_A": {
+            "1-2": 0.9991854985561108,
+            "1-3": 0.8537044641930426,
+            "2-3": 1.0621487543621446
+          },
+          "max_coordinate_reconstruction_error_A": 0.0,
+          "max_unwrapping_identity_error_A": 0.0,
+          "all_image_flags_zero": true,
+          "max_distance_change_A": 0.000865826911320422,
+          "rigid_within_1e-12_A": false,
+          "half_box_scale": 0.9995926663176911,
+          "max_error_from_half_box_scaling_A": 0.0004328252675822597,
+          "full_box_scale": 0.9991854985561108,
+          "max_error_from_full_box_scaling_A": 4.107825191113079e-15
+        }
+      }
+    }
+  }
+}

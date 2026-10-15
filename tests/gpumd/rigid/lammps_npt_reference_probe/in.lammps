@@ -1,0 +1,24 @@
+units metal
+atom_style atomic
+atom_modify map array
+boundary p p p
+region cell block 0 30 0 30 0 30 units box
+create_box 1 cell
+create_atoms 1 single 10 10 10 units box
+create_atoms 1 single 11 10 10 units box
+create_atoms 1 single 10.3 10.8 10 units box
+mass 1 10
+fix mol all property/atom mol ghost yes
+set group all mol 1
+pair_style zero 10
+pair_coeff * *
+comm_modify cutoff 10
+velocity all set 0 0 0
+fix rb all rigid/npt/small molecule temp 300 300 1 iso 10000 10000 1
+timestep 0.001
+thermo 1
+thermo_style custom step temp press vol lx ly lz
+thermo_modify flush yes
+dump state all custom 1 state.dump id mol x y z xs ys zs xu yu zu ix iy iz vx vy vz
+dump_modify state sort id format float %.17g
+run 1

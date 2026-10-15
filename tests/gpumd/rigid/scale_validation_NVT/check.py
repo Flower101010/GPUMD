@@ -1,4 +1,4 @@
-"""NVT acceptance: rigid constraints, thermo consistency and resolved temperature control.
+"""Shared NVT/NPT acceptance: constraints, thermo consistency and bath control.
 
 Physical-system energy is exchanged with the bath. E=K+U is diagnostic only;
 no NVE energy-drift or nonzero-momentum conservation test is applied here.
@@ -28,8 +28,9 @@ def kinetic_partitions(mass, velocity, ids, free):
 def verify(folder):
     folder = Path(folder)
     config = json.loads((folder / 'manifest.json').read_text())
-    if config['ensemble'] != 'rigid_nvt' or config['case'] != 'mixed_2700_300':
-        raise ValueError('Expected a mixed rigid NVT manifest')
+    is_npt = config['ensemble'] == 'rigid_npt'
+    if config['ensemble'] not in ('rigid_nvt', 'rigid_npt') or config['case'] != 'mixed_2700_300':
+        raise ValueError('Expected a mixed rigid NVT/NPT manifest')
     steps, dt = config['steps'], config['dt_fs']
     ti, xi = config['thermo_interval'], config['xyz_interval']
     target = config['target_temperature_kelvin']
@@ -50,15 +51,16 @@ def verify(folder):
     free[ids.ravel()] = False
     initial_temperature = 2 * total_ke(mass, v0) / (dof * KB)
     assert abs(initial_temperature / config['initial_temperature_kelvin'] - 1) < 1e-10
-    # A common NHC rescales P, so arbitrary nonzero P is not conserved.
-    # This fixture starts at P=0, which remains zero under that scaling.
+    # Translation thermostat/piston scaling preserves initially zero total momentum.
+    # Arbitrary nonzero momentum is not a conserved quantity in these ensembles.
     momentum_scale = float(np.sum(mass) * np.sqrt(np.sum(mass[:, None] * v0**2) / np.sum(mass)))
     assert np.linalg.norm(np.sum(mass[:, None] * v0, axis=0)) / momentum_scale < 1e-12
     ref_dists = [np.linalg.norm(mic(r0[ids[:, a]] - r0[ids[:, b]], lengths), axis=1)
                  for a, b in ((0, 1), (0, 2), (1, 2))]
     header = (folder / 'thermo.out').read_text()
-    assert '# ensemble rigid_nvt' in header and f'# thermal_dof {dof}\n' in header
-    assert 'Rigid NVT initialized: 300 bodies, 2700 free particles, 9900 thermal DOF.' in (folder / 'gpumd.log').read_text()
+    assert f'# ensemble {config["ensemble"]}' in header and f'# thermal_dof {dof}\n' in header
+    assert '# rigid_thermostat separate_translation_rotation' in header
+    assert '# rigid_constraint_estimator instantaneous_mechanical' in header
     data = np.atleast_2d(np.loadtxt(folder / 'thermo.out'))
     assert data.shape == (steps // ti, 18), f'Wrong thermo shape: {data.shape}'
     assert np.all(np.isfinite(data)), 'Nonfinite thermo data'
@@ -73,7 +75,13 @@ def verify(folder):
         assert len(frame.pos) == natoms and np.array_equal(frame.group, groups)
         assert frame.species == species
         assert np.allclose(frame.mass, mass, atol=1e-12, rtol=1e-12)
-        assert np.allclose(frame.lattice, lattice, atol=1e-8, rtol=0), 'Box changed in fixed-box NVT'
+        if not is_npt:
+            assert np.allclose(frame.lattice, lattice, atol=1e-8, rtol=0), 'Box changed in fixed-box NVT'
+        lengths = np.diag(frame.lattice)
+        assert np.all(lengths > 0) and np.allclose(frame.lattice, np.diag(lengths), atol=1e-9, rtol=0)
+        if is_npt:
+            ratios = lengths / np.diag(lattice)
+            assert np.allclose(ratios, ratios[0], rtol=1e-8, atol=1e-9), 'Non-isotropic box change'
         assert all(frame.pbc)
         for array in (frame.pos, frame.vel, frame.forces, frame.energy_atom):
             assert np.all(np.isfinite(array)), f'Nonfinite trajectory at {frame.time_fs} fs'
@@ -89,6 +97,7 @@ def verify(folder):
         metrics['force'] = max(metrics['force'], float(np.max(np.linalg.norm(frame.forces, axis=1))))
         k = round(frame.time_fs / (dt * ti)) - 1
         assert 0 <= k < len(data) and abs(frame.time_fs - times_fs[k]) <= 1e-4
+        assert np.allclose(frame.lattice, data[k, 9:18].reshape(3, 3), rtol=1e-8, atol=1e-7), 'XYZ/thermo box mismatch'
         kinetic = total_ke(mass, frame.vel)
         temperature = 2 * kinetic / (dof * KB)
         metrics['ke_relative'] = max(metrics['ke_relative'], abs(kinetic - data[k, 1]) / max(1, abs(kinetic)))
@@ -118,24 +127,36 @@ def verify(folder):
     energy_diagnostics = {'endpoint_change_eV_per_bead': float((energy[-1] - energy[0]) / natoms),
                           'range_eV_per_bead': float(np.ptp(energy) / natoms),
                           'acceptance_criterion': False}
-    np.savetxt(folder / 'nvt_trace.csv', np.column_stack((times_fs / 1000, data[:, 0],
+    np.savetxt(folder / ('temperature_trace.csv' if is_npt else 'nvt_trace.csv'), np.column_stack((times_fs / 1000, data[:, 0],
                np.full(len(data), target), data[:, 1:3], energy)), delimiter=',', comments='',
                header='time_ps,temperature_K,target_K,kinetic_energy_eV,potential_energy_eV,total_energy_eV', fmt='%.14e')
     np.savetxt(folder / 'kinetic_partitions.csv', partition_trace, delimiter=',', comments='',
                header='time_fs,K_free_eV,K_body_translation_eV,K_body_rotation_eV,T_free_K,T_body_translation_K,T_body_rotation_K', fmt='%.14e')
+    pressure_stats = None
+    if is_npt:
+        from npt_analysis import assess_pressure, plot_npt
+        pressure_stats = assess_pressure(folder, config, data, times_fs, mass)
+        if config['strict_statistics']:
+            checks.update(pressure_stats['checks'])
     report = {
-        'case': config['case'], 'ensemble': 'rigid_nvt', 'n_atoms': natoms, 'n_bodies': nb,
+        'case': config['case'], 'ensemble': config['ensemble'], 'n_atoms': natoms, 'n_bodies': nb,
         'n_free': nfree, 'thermal_dof': dof, 'simulated_ps': total_fs / 1000,
-        'acceptance_scope': 'long_nvt' if config['strict_statistics'] else 'smoke_only',
+        'acceptance_scope': f'long_{config["ensemble"].removeprefix("rigid_")}' if config['strict_statistics'] else 'smoke_only',
         'strict_statistics': config['strict_statistics'], 'metrics': metrics, 'thresholds': thresholds,
-        'equilibrium_acceptance': ('passed' if all(stats['checks'].values()) else 'failed')
+        'equilibrium_acceptance': ('passed' if (all(stats['checks'].values()) and (pressure_stats is None or all(pressure_stats['checks'].values()))) else 'failed')
             if config['strict_statistics'] else 'not_evaluated_smoke',
-        'temperature_statistics': stats, 'physical_energy_diagnostic_only': energy_diagnostics,
+        'pressure_statistics': pressure_stats, 'temperature_statistics': stats, 'physical_energy_diagnostic_only': energy_diagnostics,
         'checks': checks, 'passed': all(checks.values()),
     }
     (folder / 'validation.json').write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
-    plot(folder, times_fs, data, partition_trace, target, cutoff_fs)
-    print(f'\nNVT: {natoms} beads, {nb} bodies, {nfree} free particles, {dof} DOFs')
+    if is_npt:
+        plot_npt(folder, config)
+    else:
+        plot(folder, times_fs, data, partition_trace, target, cutoff_fs)
+        from analyze import draw_production_temperature
+        trace = np.atleast_1d(np.genfromtxt(folder / 'nvt_trace.csv', delimiter=',', names=True))
+        draw_production_temperature(folder, trace, config, cutoff_fs / 1000, total_fs / 1000)
+    print(f'\n{config["ensemble"]}: {natoms} beads, {nb} bodies, {nfree} free particles, {dof} DOFs')
     print(f'Production mean T={stats["mean_kelvin"]:.4f} K; target={target:g} K')
     print('Partition mean temperatures: ' + str(stats['partition_mean_kelvin']))
     print(f'Observed temperature variance / canonical reference: {stats["variance_ratio"]:.4g}')
