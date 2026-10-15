@@ -122,7 +122,41 @@ def plot_npt(folder, config, *, start_ps=None, end_ps=None, output=None):
     for suffix in ('png', 'pdf'):
         fig.savefig(output / f'production_fluctuations.{suffix}', dpi=180)
     plt.close(fig)
+    plot_volume_history(output, trace, start, end)
     return output
+
+
+def plot_volume_history(output, trace, start, end):
+    """Separate relaxation, selected production and final unsmoothed volume detail."""
+    import matplotlib.pyplot as plt
+    t, volume = trace['time_ps'], trace['volume_A3']
+    production = (t > start) & (t <= end + 1e-10)
+    mean = float(volume[production].mean())
+    detail_start = max(start, end - min(5., (end - start) / 4))
+    fig, axes = plt.subplots(3, 1, figsize=(10, 9), layout='constrained')
+    windows = ((0., 'Full trajectory'), (start, 'Selected production'),
+               (detail_start, 'Final-window detail'))
+    for axis, (beginning, title) in zip(axes, windows):
+        mask = (t > beginning) & (t <= end + 1e-10)
+        axis.plot(t[mask], volume[mask], lw=.75, color='#2469a0',
+                  label='Instantaneous volume (no smoothing)')
+        guide = float(volume[mask].mean()) if beginning == detail_start else mean
+        guide_label = 'Shown-window mean' if beginning == detail_start else 'Selected production mean'
+        axis.axhline(guide, color='#c55a11', ls=':',
+                     label=f'{guide_label}: {guide:.1f} A^3')
+        axis.set(xlabel='Time (ps)', ylabel=r'Volume ($\mathrm{\AA}^3$)',
+                 title=f'{title}: {beginning:g}-{end:g} ps')
+        axis.ticklabel_format(axis='y', style='sci', scilimits=(0, 0), useOffset=False)
+        axis.grid(alpha=.2)
+        axis.legend(fontsize=8)
+    axes[0].axvspan(0, start, color='grey', alpha=.15)
+    axes[0].axvline(start, color='grey', ls='--', label='Selected production start')
+    axes[0].legend(fontsize=8)
+    axes[0].set_xlim(0, end)
+    fig.suptitle('Rigid NPT volume history | selected window does not certify equilibrium')
+    for suffix in ('png', 'pdf'):
+        fig.savefig(Path(output) / f'volume_history.{suffix}', dpi=180)
+    plt.close(fig)
 
 
 def main():

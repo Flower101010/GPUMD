@@ -11,7 +11,7 @@ import numpy as np
 from nvt_statistics import assess_temperature
 from scale_common import (
     KB_GPUMD_EV_PER_K as KB, AMU_ANG2_PER_FS2_TO_EV as CONVERSION,
-    body_ids, iter_xyz, mic, read_initial_xyz, total_ke,
+    body_ids, iter_xyz, mic, read_initial_xyz, total_ke, rigid_distance_tolerance,
 )
 
 
@@ -38,6 +38,7 @@ def verify(folder):
     total_fs = steps * dt
     lattice, species, r0, mass, v0, groups = read_initial_xyz(folder / 'model.xyz')
     lengths = np.diag(lattice)
+    max_box_length = float(np.max(lengths))
     if not np.allclose(lattice, np.diag(lengths)) or not np.all(lengths > 0):
         raise ValueError('Expected positive orthorhombic box lengths')
     ids, nfree = body_ids(groups)
@@ -78,6 +79,7 @@ def verify(folder):
         if not is_npt:
             assert np.allclose(frame.lattice, lattice, atol=1e-8, rtol=0), 'Box changed in fixed-box NVT'
         lengths = np.diag(frame.lattice)
+        max_box_length = max(max_box_length, float(np.max(lengths)))
         assert np.all(lengths > 0) and np.allclose(frame.lattice, np.diag(lengths), atol=1e-9, rtol=0)
         if is_npt:
             ratios = lengths / np.diag(lattice)
@@ -119,6 +121,8 @@ def verify(folder):
     thresholds = {'distance': 2e-6, 'velocity_constraint': 1e-7, 'zero_com_residual': 2e-4,
                   'ke_relative': 1e-4, 'temperature_relative': 1e-4, 'pe_per_bead': 5e-5,
                   'partition_ke_relative': 1e-10}
+    if is_npt:
+        thresholds['distance'] = rigid_distance_tolerance(max_box_length)
     checks = {name: bool(metrics[name] < limit) for name, limit in thresholds.items()}
     checks['Nonzero NEP forces'] = metrics['force'] > 1e-5
     if config['strict_statistics']:

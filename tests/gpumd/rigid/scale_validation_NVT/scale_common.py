@@ -112,6 +112,11 @@ def total_ke(mass, v):
     return 0.5 * AMU_ANG2_PER_FS2_TO_EV * float(np.sum(mass[:, None] * v * v))
 
 
+def rigid_distance_tolerance(max_box_length):
+    """Strict double-output engineering guard, scaled for coordinate subtraction."""
+    return max(1e-11, 64 * np.finfo(float).eps * float(max_box_length))
+
+
 def body_ids(groups):
     counts = np.bincount(groups)
     bodies = [np.flatnonzero(groups == label) for label in np.flatnonzero(counts >= 2)]
