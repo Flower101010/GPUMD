@@ -1,2 +1,12 @@
-results/
+results/**
 __pycache__/
+!/results/
+!/results/equilateral_1000/
+!/results/equilateral_1000/lammps_nvt/
+!/results/equilateral_1000/lammps_nvt/state.dump
+!/results/equilateral_1000/lammps_npt/
+!/results/equilateral_1000/lammps_npt/state.dump
+!/results/equilateral_1000/gpumd_nvt/
+!/results/equilateral_1000/gpumd_nvt/trajectory.xyz
+!/results/equilateral_1000/gpumd_npt/
+!/results/equilateral_1000/gpumd_npt/trajectory.xyz
