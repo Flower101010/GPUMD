@@ -356,30 +356,6 @@ static void many_bodies()
   }
 }
 
-// 独立用晶格列向量和 Cramer 法则求分数坐标，覆盖非上三角盒。
-static Vec3 fractional_general(const Box& box, Vec3 r)
-{
-  const Vec3 a{box.cpu_h[0], box.cpu_h[3], box.cpu_h[6]};
-  const Vec3 b{box.cpu_h[1], box.cpu_h[4], box.cpu_h[7]};
-  const Vec3 c{box.cpu_h[2], box.cpu_h[5], box.cpu_h[8]};
-  const double determinant = dot(a, cross(b, c));
-  return {dot(r, cross(b, c)) / determinant,
-          dot(r, cross(c, a)) / determinant,
-          dot(r, cross(a, b)) / determinant};
-}
-static void equivalent_position(const Box& box, Vec3 actual, Vec3 expected)
-{
-  const Vec3 f = fractional_general(box, actual);
-  assert(f.x >= -1e-12 && f.x < 1 + 1e-12);
-  assert(f.y >= -1e-12 && f.y < 1 + 1e-12);
-  assert(f.z >= -1e-12 && f.z < 1 + 1e-12);
-  Vec3 error = fractional_general(box, subtract(actual, expected));
-  error.x -= std::nearbyint(error.x);
-  error.y -= std::nearbyint(error.y);
-  error.z -= std::nearbyint(error.z);
-  near(error, {0, 0, 0});
-}
-
 static void exercise_rescaling(Box box, bool all_free = false)
 {
   const int N = 4;
@@ -430,7 +406,7 @@ static void exercise_rescaling(Box box, bool all_free = false)
     near(box.thickness_x, box.get_volume() / box.get_area(0));
     near(box.thickness_y, box.get_volume() / box.get_area(1));
     near(box.thickness_z, box.get_volume() / box.get_area(2));
-    assert(box.is_orthogonal == (original_box.cpu_h[1] == 0));
+    assert(box.is_orthogonal);
     assert(download(atom.velocity_per_atom) == velocities);
     assert(download(atom.force_per_atom) == forces);
     std::vector<int> images(3 * N);
@@ -438,7 +414,7 @@ static void exercise_rescaling(Box box, bool all_free = false)
     assert(images == std::vector<int>(3 * N, 17));
     const auto positions = download(atom.position_per_atom);
     for (int i = all_free ? 0 : 3; i < N; ++i)
-      equivalent_position(box, read_vec(positions, i, N), scale(x[i], cumulative));
+      near_position(box, read_vec(positions, i, N), scale(x[i], cumulative));
     RigidBodySystem::HostSnapshot current;
     rigid.copy_to_host(current);
     assert(current.member_atoms == initial.member_atoms);
@@ -454,11 +430,11 @@ static void exercise_rescaling(Box box, bool all_free = false)
       near(after.state.quat, before.state.quat);
       near(after.state.conjqm, before.state.conjqm);
       near(after.state.vcm, before.state.vcm);
-      equivalent_position(box, after.state.xcm, scale(before.state.xcm, cumulative));
+      near_position(box, after.state.xcm, scale(before.state.xcm, cumulative));
       for (int j = 0; j < 3; ++j) {
         const int i = initial.member_atoms[j];
         const Vec3 lever = rotate(before.state.quat, initial.member_displace[j]);
-        equivalent_position(box, read_vec(positions, i, N), add(after.state.xcm, lever));
+        near_position(box, read_vec(positions, i, N), add(after.state.xcm, lever));
       }
     }
     // 新盒已被明确接纳；旧运行接口在新盒继续工作。
@@ -491,6 +467,32 @@ static void exercise_rescaling(Box box, bool all_free = false)
   rejects<std::invalid_argument>([&] { rigid.rescale_box(atom, box, 1.1); });
 }
 
+static void rejects_nonorthogonal_rescaling(Box box)
+{
+  for (int tilt : {1, 2, 3, 5, 6, 7}) {
+    Box tilted = box;
+    tilted.cpu_h[tilt] = 0.5;
+    tilted.is_orthogonal = true; // 故意留下错误缓存，校验必须读取实际 H。
+    Atom atom;
+    atom.number_of_atoms = 3;
+    const auto positions = soa({{1, 1, 1}, {1.4, 1, 1}, {1, 1.3, 1}});
+    upload(atom.mass, {1, 2, 3});
+    upload(atom.position_per_atom, positions);
+    upload(atom.velocity_per_atom, std::vector<double>(9, 0));
+    RigidBodySystem rigid;
+    rigid.initialize(atom, tilted, {0, 0, 0}, positions);
+    RigidBodySystem::HostSnapshot before, after;
+    rigid.copy_to_host(before);
+    rejects<std::invalid_argument>([&] { rigid.rescale_box(atom, tilted, 1.1); });
+    rigid.copy_to_host(after);
+    near(after.bodies[0].state.xcm, before.bodies[0].state.xcm);
+    near(after.bodies[0].state.quat, before.bodies[0].state.quat);
+    assert(download(atom.position_per_atom) == positions);
+    for (int k = 0; k < 9; ++k)
+      assert(tilted.cpu_h[k] == (k == tilt ? 0.5 : box.cpu_h[k]));
+  }
+}
+
 int main()
 {
   int count = 0;
@@ -503,17 +505,16 @@ int main()
   exercise(box);
   exercise_rescaling(box);
   exercise_rescaling(box, true);
+  Box rectangular = box;
+  rectangular.cpu_h[4] = 9;
+  rectangular.cpu_h[8] = 8;
+  exercise_rescaling(rectangular);
+  rejects_nonorthogonal_rescaling(box);
   box.cpu_h[1] = 2;
   box.cpu_h[2] = 1;
   box.cpu_h[4] = 9;
   box.cpu_h[5] = 0.5;
   box.cpu_h[8] = 8;
-  exercise_rescaling(box);
-  Box dense = box;
-  dense.cpu_h[3] = 0.4;
-  dense.cpu_h[6] = -0.2;
-  dense.cpu_h[7] = 0.3;
-  exercise_rescaling(dense);
   box.pbc_z = 0;
   exercise(box);
   box.pbc_x = box.pbc_y = 0;
@@ -546,7 +547,7 @@ int main()
   assert(download(atom.position_per_atom) == std::vector<double>({1, 2, 3}));
   assert(download(atom.velocity_per_atom) == std::vector<double>({4, 5, 6}));
   Atom empty;
-  box.pbc_x = box.pbc_y = box.pbc_z = 1;
+  box = rectangular;
   rigid.initialize(empty, box, {});
   rigid.rescale_box(empty, box, 1.1);
   rigid.remap_centers(box);

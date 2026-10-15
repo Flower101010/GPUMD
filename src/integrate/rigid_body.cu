@@ -91,6 +91,8 @@ struct Cell {
       h[3] * v.x + h[4] * v.y + h[5] * v.z,
       h[6] * v.x + h[7] * v.y + h[8] * v.z};
   }
+
+  // 把质心映射回主周期盒
   __host__ __device__ Vec3 wrapped(Vec3 v) const
   {
     Vec3 f = fractional(v);
@@ -685,6 +687,11 @@ void RigidBodySystem::rescale_box(Atom& atom, Box& box, double factor)
     box.pbc_x == 1 && box.pbc_y == 1 && box.pbc_z == 1,
     "Isotropic rigid box scaling requires three periodic directions.");
   require(
+    box.cpu_h[1] == 0 && box.cpu_h[2] == 0 && box.cpu_h[3] == 0 &&
+      box.cpu_h[5] == 0 && box.cpu_h[6] == 0 && box.cpu_h[7] == 0 &&
+      box.cpu_h[0] > 0 && box.cpu_h[4] > 0 && box.cpu_h[8] > 0,
+    "Rigid box scaling currently requires an orthogonal box with positive lengths.");
+  require(
     atom.position_per_atom.size() == 3 * static_cast<std::size_t>(number_of_atoms_),
     "Rigid box scaling requires a 3N position array.");
   require(
@@ -694,7 +701,7 @@ void RigidBodySystem::rescale_box(Atom& atom, Box& box, double factor)
   // 先在临时盒中验证所有派生量，失败时不改变 HOST 盒或 DEVICE 状态。
   const Cell old_cell(box);
   Box next = box;
-  for (int i = 0; i < 9; ++i)
+  for (int i : {0, 4, 8})
     next.cpu_h[i] *= factor;
   const Cell new_cell(next);
   std::copy(new_cell.inv, new_cell.inv + 9, next.cpu_h + 9);
