@@ -13,7 +13,7 @@ public:
   Ensemble_Rigid_NPT(
     int molecule_grouping_method, double target_temperature, double temperature_coupling,
     double target_pressure, double pressure_coupling, double time_step);
-  void initialize(Atom& atom, const Box& box, const std::vector<Group>& groups);
+  virtual void initialize(Atom& atom, const Box& box, const std::vector<Group>& groups);
 
   // 初次 compute1 延迟到初始 Force::compute 之后准备压力和活塞半步。
   // kick -> scale -> affine translation/rotation drift -> advance three chains.
@@ -29,12 +29,13 @@ public:
   const RigidBodySystem& rigid_bodies() const { return rigid_; }
   const RigidNH& extended_system() const;
   // 当前完整时间层的瞬时约束 virial，6*B SoA；不含恒温/活塞摩擦。
-  const GPU_Vector<double>& constraint_virial_per_body() const
+  virtual const GPU_Vector<double>& constraint_virial_per_body() const
   {
     return thermo_state_.constraint_virial_per_body();
   }
 
-private:
+protected:
+  // Shared lifecycle and validation for the separately selected LAMMPS path.
   enum class Stage { uninitialized, needs_setup, full_step, half_step };
   int molecule_grouping_method_;
   const double target_temperature_, target_pressure_, temperature_coupling_, pressure_coupling_;

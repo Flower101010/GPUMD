@@ -286,3 +286,17 @@ with three different options for specifying :attr:`pressure_control_parameters`:
 :attr:`npt_scr`
 ^^^^^^^^^^^^^^^
 If the first parameter is :attr:`npt_scr`, it is similar to the case of :attr:`npt_ber`, but using the :ref:`stochastic cell rescaling method <stochastic_cell_rescaling>`.
+
+:attr:`rigid_npt_lammps`
+^^^^^^^^^^^^^^^^^^^^^^^
+Explicit LAMMPS ``FixRigidNHSmall`` compatibility mode::
+
+    ensemble rigid_npt_lammps <T_1> <T_2> <T_coup> <P> <P_coup> <grouping_method>
+
+Units, constant-temperature requirement and orthogonal/full-periodic box
+restrictions are identical to ``rigid_npt``. This mode uses two affine half-box
+remaps around bead reconstruction and the reference's discrete impulse virial.
+Member distances at force/output time are consequently scaled by the last
+half-remap. This is intentional reference behavior; use ``rigid_npt`` to retain
+internal geometry at that time layer. Neither mode stores image history.
+See the `compatibility guide <../rigid_npt_lammps.html>`_ for scope and tests.

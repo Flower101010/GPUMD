@@ -185,6 +185,13 @@ endif()
 find_package(Python3 QUIET COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
     add_test(
+        NAME integration.rigid_npt_lammps_run_in
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_rigid_npt_lammps_run_in.py
+            --gpumd $<TARGET_FILE:gpumd> --probe $<TARGET_FILE:test_gpu_vector>)
+    set_tests_properties(integration.rigid_npt_lammps_run_in PROPERTIES
+        LABELS "integration;gpu" RESOURCE_LOCK gpu
+        SKIP_REGULAR_EXPRESSION "^SKIP: no accessible GPU" TIMEOUT 120)
+    add_test(
         NAME integration.rigid_npt_run_in
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_rigid_npt_run_in.py
             $<TARGET_FILE:gpumd> $<TARGET_FILE:test_gpu_vector> ${PROJECT_SOURCE_DIR})

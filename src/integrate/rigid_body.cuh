@@ -106,7 +106,7 @@ public:
   // 短刚体采用每线程一个 body；以后长 body 可另选 warp/block 归约。
   // F=sum(f_i)，tau=sum((R(q)*s_i) x f_i)，每次覆盖旧载荷。
   // 力与当前位姿必须对应；不修改 Atom 的力/能量/virial。
-  void compute_forces_and_torques(const Atom& atom);
+  void compute_forces_and_torques(const Atom& atom, double member_scale = 1.0);
 
   // 质心漂移后调用：s=H^-1*xcm，周期方向 s-=floor(s)，再转换回空间坐标。
   // 非周期方向不包装；只改 xcm，不改姿态、速度或固定几何，可合并到积分 kernel。
@@ -120,6 +120,8 @@ public:
   // 旧力/载荷/势能/virial 已过期，调用方必须在下一次使用前重新计算。
   // 此操作不推进时间、不做恒温/恒压动量缩放；仍在默认 GPU stream 执行。
   void rescale_box(Atom& atom, Box& box, double factor);
+  // LAMMPS compatibility: affine-map every bead and COM, without reconstructing geometry.
+  void remap_box_and_atoms(Atom& atom, Box& box, double factor);
 
   // 前置条件：质心已 remap。求局部位置 y_i=xcm+R(q)*s_i，再按完整盒矩阵包装。
   // 只写受管理 bead 的 position_per_atom，保持自由 bead 原值。
@@ -135,6 +137,8 @@ public:
   void copy_to_host(HostSnapshot& destination) const;
 
 private:
+  enum class BoxMapping { preserve_geometry, affine_atoms };
+  void rescale_box_impl(Atom& atom, Box& box, double factor, BoxMapping mapping);
   void require_initialized() const;
   void check_atom(const Atom& atom) const;
   void check_box(const Box& box) const;

@@ -32,6 +32,7 @@ The driver class for the various integrators.
 #include "ensemble_rigid_nve.cuh"
 #include "ensemble_rigid_nvt.cuh"
 #include "ensemble_rigid_npt.cuh"
+#include "ensemble_rigid_npt_lammps.cuh"
 #include "ensemble_pimd.cuh"
 #include "ensemble_qtb.cuh"
 #include "ensemble_ti.cuh"
@@ -125,9 +126,14 @@ void Integrate::initialize(
         type, number_of_atoms, temperature, temperature_coupling, time_step, qtb_f_max, qtb_n_f));
       break;
     case 13: // Rigid NPT, Miller + NH chains + isotropic MTK piston
-      rigid_npt_ensemble = new Ensemble_Rigid_NPT(
-        rigid_grouping_method, temperature, temperature_coupling, target_pressure[0],
-        rigid_pressure_coupling, time_step);
+      if (rigid_npt_lammps)
+        rigid_npt_ensemble = new Ensemble_Rigid_NPT_LAMMPS(
+          rigid_grouping_method, temperature, temperature_coupling, target_pressure[0],
+          rigid_pressure_coupling, time_step);
+      else
+        rigid_npt_ensemble = new Ensemble_Rigid_NPT(
+          rigid_grouping_method, temperature, temperature_coupling, target_pressure[0],
+          rigid_pressure_coupling, time_step);
       ensemble.reset(rigid_npt_ensemble);
       break;
     case 11: // NPT-Berendsen
@@ -423,6 +429,7 @@ void Integrate::parse_ensemble(
     PRINT_INPUT_ERROR("ensemble requires an integrator name.");
   }
   rigid_grouping_method = -1;
+  rigid_npt_lammps = false;
   qtb_f_max = 200.0;
   qtb_n_f = 100;
   use_eco_pimd = false;
@@ -457,7 +464,8 @@ void Integrate::parse_ensemble(
         static_cast<std::size_t>(rigid_grouping_method) >= group.size()) {
       PRINT_INPUT_ERROR("rigid_nvt requires a valid nonnegative molecule grouping-method index.");
     }
-  } else if (strcmp(param[1], "rigid_npt") == 0) {
+  } else if (strcmp(param[1], "rigid_npt") == 0 || strcmp(param[1], "rigid_npt_lammps") == 0) {
+    rigid_npt_lammps = strcmp(param[1], "rigid_npt_lammps") == 0;
     type = 13;
     if (num_param != 8) {
       PRINT_INPUT_ERROR("ensemble rigid_npt requires T_initial T_final T_coupling P P_coupling grouping_method.");
@@ -1245,7 +1253,8 @@ void Integrate::parse_ensemble(
       printf("    N_f is %d.\n", qtb_n_f);
       break;
     case 13:
-      printf("Use rigid NPT with Miller rotation, NH chains and an isotropic MTK piston.\n");
+      printf("Use %s with Miller rotation, NH chains and an isotropic MTK piston.\n",
+             rigid_npt_lammps ? "rigid_npt_lammps (LAMMPS remap/impulse compatibility)" : "rigid NPT");
       printf("    temperature is %g K; isotropic pressure is %g GPa.\n",
              temperature1, target_pressure[0] * PRESSURE_UNIT_CONVERSION);
       printf("    tau_T is %g time_step; tau_P is %g time_step.\n",

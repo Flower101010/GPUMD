@@ -236,7 +236,7 @@ __device__ void write_device_vec(double* values, int i, int N, Vec3 v)
   values[index + 2 * count] = v.z;
 }
 __global__ void sum_body_loads(
-  RigidBodySystem::ConstDeviceView view, const double* forces, RigidBodySystem::BodyLoad* loads)
+  RigidBodySystem::ConstDeviceView view, const double* forces, RigidBodySystem::BodyLoad* loads, double member_scale)
 {
   const int b = blockIdx.x * blockDim.x + threadIdx.x;
   if (b >= view.number_of_bodies)
@@ -248,7 +248,7 @@ __global__ void sum_body_loads(
     const Vec3 f = read_device_vec(forces, view.member_atoms[j], view.number_of_atoms);
     const Vec3 r = rotate(q, view.member_displace[j]);
     force = add(force, f);
-    torque = add(torque, cross(r, f));
+    torque = add(torque, cross(scale(r, member_scale), f));
   }
   loads[b] = {force, torque}; // 覆盖旧值，不累加上一时刻的载荷。
 }
@@ -280,6 +280,14 @@ __global__ void rescale_centers_and_free_positions(
     const Vec3 position = old_cell.wrapped(read_device_vec(positions, i, view.number_of_atoms));
     write_device_vec(positions, i, view.number_of_atoms, new_cell.wrapped(scale(position, factor)));
   }
+}
+__global__ void rescale_member_positions(
+  RigidBodySystem::ConstDeviceView view, double factor, double* positions)
+{
+  const int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < view.number_of_atoms && view.atom_to_body[i] >= 0)
+    write_device_vec(positions, i, view.number_of_atoms,
+      scale(read_device_vec(positions, i, view.number_of_atoms), factor));
 }
 __global__ void
 reconstruct_positions(RigidBodySystem::ConstDeviceView view, Cell cell, double* positions)
@@ -657,9 +665,10 @@ void RigidBodySystem::check_box(const Box& box) const
       initialized_pbc_ == std::array<int, 3>{box.pbc_x, box.pbc_y, box.pbc_z},
     "Rigid box changed externally; use rescale_box for controlled isotropic changes.");
 }
-void RigidBodySystem::compute_forces_and_torques(const Atom& atom)
+void RigidBodySystem::compute_forces_and_torques(const Atom& atom, double member_scale)
 {
   check_atom(atom);
+  require(std::isfinite(member_scale) && member_scale > 0, "Invalid member force-arm scale.");
   if (number_of_bodies_ == 0)
     return;
   require(
@@ -667,7 +676,7 @@ void RigidBodySystem::compute_forces_and_torques(const Atom& atom)
     "Rigid force reduction requires a 3N force array.");
   const auto view = static_cast<const RigidBodySystem&>(*this).device_view();
   sum_body_loads<<<(number_of_bodies_ + 127) / 128, 128>>>(
-    view, atom.force_per_atom.data(), load_.data());
+    view, atom.force_per_atom.data(), load_.data(), member_scale);
   GPU_CHECK_KERNEL
 }
 void RigidBodySystem::remap_centers(const Box& box)
@@ -679,6 +688,14 @@ void RigidBodySystem::remap_centers(const Box& box)
   GPU_CHECK_KERNEL
 }
 void RigidBodySystem::rescale_box(Atom& atom, Box& box, double factor)
+{
+  rescale_box_impl(atom, box, factor, BoxMapping::preserve_geometry);
+}
+void RigidBodySystem::remap_box_and_atoms(Atom& atom, Box& box, double factor)
+{
+  rescale_box_impl(atom, box, factor, BoxMapping::affine_atoms);
+}
+void RigidBodySystem::rescale_box_impl(Atom& atom, Box& box, double factor, BoxMapping mapping)
 {
   check_atom(atom);
   check_box(box);
@@ -724,9 +741,15 @@ void RigidBodySystem::rescale_box(Atom& atom, Box& box, double factor)
       device_view(), old_cell, new_cell, factor, atom.position_per_atom.data());
     GPU_CHECK_KERNEL
   }
+  if (mapping == BoxMapping::affine_atoms && number_of_atoms_ > 0) {
+    // Free particles have already been mapped above; only map the members here.
+    rescale_member_positions<<<(number_of_atoms_ + 127) / 128, 128>>>(
+      static_cast<const RigidBodySystem&>(*this).device_view(), factor, atom.position_per_atom.data());
+    GPU_CHECK_KERNEL
+  }
   box = next;
   std::copy(box.cpu_h, box.cpu_h + 9, current_box_.begin());
-  rebuild_positions(atom, box);
+  if (mapping == BoxMapping::preserve_geometry) rebuild_positions(atom, box);
 }
 void RigidBodySystem::rebuild_positions(Atom& atom, const Box& box)
 {

@@ -114,6 +114,14 @@ noticeable temperature bias. Check timestep convergence and stationary
 volume/density as well as target temperature and pressure. See the
 [parameter and preparation guide](doc/gpumd/rigid_body_guide_zh.md) for details.
 
+An additional compatibility mode is available as
+`ensemble rigid_npt_lammps 300 300 200 0.0001 2000 0`, with the same units and
+restrictions as `rigid_npt`. It follows LAMMPS `FixRigidNHSmall`'s
+`remap -> set_xv -> remap` ordering and discrete impulse constraint virial,
+including the small step-end changes in internal bead distances. Use it for
+LAMMPS behavior comparisons; `rigid_npt` retains geometry-preserving box scaling.
+See [usage and limitations](doc/gpumd/rigid_npt_lammps.md).
+
 Temperature and kinetic energy use `3*N_free + 6*N_body` degrees of freedom.
 Global pressure includes the rigid constraint virial; per-atom virials remain
 interaction-only. Current support requires nonlinear bodies; NVE/NVT use a fixed
