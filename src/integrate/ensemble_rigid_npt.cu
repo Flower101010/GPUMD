@@ -113,12 +113,11 @@ void Ensemble_Rigid_NPT::compute1(
   check_step(dt, box, atom, thermo);
   rigid_.remap_centers(box);
   rigid_.compute_forces_and_torques(atom);
-  if (stage_ == Stage::needs_setup) {
-    const auto kinetic = thermo_state_.sample_kinetic_energy(rigid_, atom);
-    const double pressure = update_thermo(groups, box, atom, thermo);
-    nh_->advance_piston(dt / 2, pressure, box.get_volume(), kinetic.twice_translation, kinetic.twice_rotation);
-  }
-  // FixRigidNHSmall::initial_integrate: kick 后使用旧链与活塞速率缩放。
+  const auto initial_kinetic = thermo_state_.sample_kinetic_energy(rigid_, atom);
+  const double initial_pressure = update_thermo(groups, box, atom, thermo);
+  nh_->advance_piston(dt / 2, initial_pressure, box.get_volume(),
+    initial_kinetic.twice_translation, initial_kinetic.twice_rotation, RigidNH::PistonStage::initial);
+  // Each full step brackets the physical flow with paired piston half steps.
   const auto scales = nh_->momentum_scales(dt / 2);
   const auto drift = rigid_integrator::isotropic_drift_factors(dt, nh_->piston().rate);
   rigid_integrator::kick_translation(dt / 2, atom, rigid_);
@@ -153,6 +152,7 @@ void Ensemble_Rigid_NPT::compute2(
   rigid_.rebuild_velocities(atom);
   const auto kinetic = thermo_state_.sample_kinetic_energy(rigid_, atom);
   const double pressure = update_thermo(groups, box, atom, thermo);
-  nh_->advance_piston(dt / 2, pressure, box.get_volume(), kinetic.twice_translation, kinetic.twice_rotation);
+  nh_->advance_piston(dt / 2, pressure, box.get_volume(), kinetic.twice_translation,
+    kinetic.twice_rotation, RigidNH::PistonStage::final);
   stage_ = Stage::full_step;
 }

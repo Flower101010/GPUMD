@@ -110,7 +110,7 @@ void check_geometry(const Fixture& f)
 }
 
 // Independent host affine trajectory for force-free particles. The scalar chain
-// module itself is separately checked against original LAMMPS function bodies.
+// module has separate energy/reversibility and legacy-reference checks.
 void test_free_particle_flow()
 {
   Fixture f(false);
@@ -128,8 +128,9 @@ void test_free_particle_flow()
   };
   // initialize does not read force, pressure or advance the piston.
   near(npt.extended_system().piston().rate, 0);
-  reference.advance_piston(dt/2, kinetic()/(3*length*length*length), length*length*length, kinetic(), 0);
   for (int step = 0; step < 100; ++step) {
+    reference.advance_piston(dt/2, kinetic()/(3*length*length*length),
+      length*length*length, kinetic(), 0, RigidNH::PistonStage::initial);
     const auto first = reference.momentum_scales(dt/2);
     const double nu = reference.piston().rate;
     const double scale = std::exp(nu*dt);
@@ -151,7 +152,7 @@ void test_free_particle_flow()
     const auto last = reference.momentum_scales(dt/2);
     for (auto& value : v) value *= last.translation;
     const double k = kinetic(), volume = length*length*length;
-    reference.advance_piston(dt/2, k/(3*volume), volume, k, 0);
+    reference.advance_piston(dt/2, k/(3*volume), volume, k, 0, RigidNH::PistonStage::final);
     npt.compute2(dt, f.groups, f.box, f.atom, f.thermo);
     near(download(f.atom.velocity_per_atom), v);
     near(npt.extended_system().piston().rate, reference.piston().rate);
@@ -212,6 +213,56 @@ void test_mixed_constraints_and_pressure()
   near(npt.extended_system().translation_chain()[0].rate, 0);
 }
 
+// Test-only time reversal of all odd variables, including the extended system.
+class ReversibleNPT : public Ensemble_Rigid_NPT {
+public:
+  using Ensemble_Rigid_NPT::Ensemble_Rigid_NPT;
+  void reverse(Atom& atom) {
+    auto velocity = download(atom.velocity_per_atom);
+    for (auto& v : velocity) v = -v;
+    upload(atom.velocity_per_atom, velocity);
+    RigidBodySystem::HostSnapshot host;
+    rigid_.copy_to_host(host);
+    std::vector<RigidBodySystem::BodyState> states;
+    for (auto& body : host.bodies) {
+      auto& state = body.state;
+      state.vcm = rigid_math::scale(state.vcm, -1);
+      state.conjqm = {-state.conjqm.w, -state.conjqm.x, -state.conjqm.y, -state.conjqm.z};
+      states.push_back(state);
+    }
+    CHECK(gpuMemcpy(rigid_.device_view().state, states.data(),
+      states.size()*sizeof(states[0]), gpuMemcpyHostToDevice));
+    rigid_.rebuild_velocities(atom);
+    // The objects are mutable; production accessors intentionally expose only
+    // const views. No production state-setting API is needed for this check.
+    auto& piston = const_cast<RigidNH::Piston&>(nh_->piston());
+    piston.rate = -piston.rate;
+    for (const auto* view : {&nh_->translation_chain(), &nh_->rotation_chain(), &nh_->piston_chain()})
+      for (auto& link : const_cast<RigidNH::Chain&>(*view)) link.rate = -link.rate;
+  }
+};
+void test_full_step_reversibility()
+{
+  Fixture f(true);
+  ReversibleNPT npt(0, target, 100, 0.000001, 2000, dt);
+  npt.initialize(f.atom, f.box, f.groups);
+  const auto x = download(f.atom.position_per_atom), v = download(f.atom.velocity_per_atom);
+  for (int leg = 0; leg < 2; ++leg) {
+    for (int step = 0; step < 100; ++step) {
+      f.forces(); npt.compute1(dt, f.groups, f.box, f.atom, f.thermo);
+      f.forces(); npt.compute2(dt, f.groups, f.box, f.atom, f.thermo);
+    }
+    npt.reverse(f.atom);
+  }
+  near(download(f.atom.position_per_atom), x);
+  near(download(f.atom.velocity_per_atom), v);
+  near(f.box.cpu_h[0], 100); near(f.box.cpu_h[4], 100); near(f.box.cpu_h[8], 100);
+  near(npt.extended_system().piston().rate, 0);
+  for (const auto* chain : {&npt.extended_system().translation_chain(),
+      &npt.extended_system().rotation_chain(), &npt.extended_system().piston_chain()})
+    for (const auto& link : *chain) { near(link.coordinate, 0); near(link.rate, 0); }
+}
+
 void test_box_and_stage_rejections()
 {
   Fixture f(true);
@@ -243,5 +294,6 @@ int main()
   test_free_particle_flow();
   test_mixed_constraints_and_pressure();
   test_box_and_stage_rejections();
+  test_full_step_reversibility();
   std::cout << "Rigid NPT affine flow, chains, mixed pressure and constraint checks passed.\n";
 }

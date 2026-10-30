@@ -72,6 +72,9 @@ void Ensemble_Rigid_NPT_LAMMPS::initialize(Atom& atom, const Box& box, const std
   initial_velocities_.resize(atom.velocity_per_atom.size());
   initial_velocities_.copy_from_device(atom.velocity_per_atom.data());
   Ensemble_Rigid_NPT::initialize(atom, box, groups);
+  auto parameters = nh_->parameters();
+  parameters.lammps_compatibility = true;
+  nh_.reset(new RigidNH(parameters));
   saved_positions_.resize(3*atom.number_of_atoms);
   impulse_virial_.resize(6*rigid_.number_of_bodies(), 0.0);
   box_center_ = {box.cpu_h[0]/2, box.cpu_h[4]/2, box.cpu_h[8]/2};

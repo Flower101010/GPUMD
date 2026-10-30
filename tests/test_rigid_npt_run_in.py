@@ -92,7 +92,7 @@ def main():
         kt = sum(m*sum((v*TIME_UNIT_FS)**2 for v in vel)
                  for m, vel in zip(MASSES, input_velocities))
         mass = 15*KB*300*(10000*dt)**2
-        nu = dt/2*(kt/3-0.25/160.2177*30**3+kt/12)/mass
+        nu = 3*dt/2*(kt/3-0.25/160.2177*30**3+kt/12)/mass
         close(rows[0][9], 30*math.exp(dt*nu), tolerance=2e-10)
 
         case, _ = run("nep", "time_step 0.01\nensemble rigid_npt 300 300 10000 0 100000 0\n" +

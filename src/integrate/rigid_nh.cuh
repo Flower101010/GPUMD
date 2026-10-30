@@ -44,7 +44,7 @@ private:
   std::vector<double> weights_;
 };
 
-// FixRigidNHSmall 的三维、各向同性、恒定 T/P 标量部分。
+// 三维、各向同性、恒定 T/P 的 scalar MTK/NH；显式支持旧 LAMMPS 参考模式。
 // CPU 只处理链和活塞；动能/压力由调用方在正确时间层提供。
 // 全部使用 GPUMD 内部单位：kT 为能量，pressure*volume 为能量。
 class RigidNH
@@ -61,12 +61,15 @@ public:
     int piston_chain_length = 10;
     int subcycles = 1;
     int yoshida_order = 3; // 与 LAMMPS 一致，只允许 3 或 5
+    // Only the explicitly selected rigid_npt_lammps route retains the old
+    // reference's scalar coefficients and piston/chain conventions.
+    bool lammps_compatibility = false;
   };
   using ChainLink = RigidThermostat::ChainLink;
   using Chain = RigidThermostat::Chain;
   struct Piston {
     double rate = 0; // nu=epsilon_dot_x=y=z，即盒长的对数变化率
-    double mass = 0; // LAMMPS 每轴 epsilon_mass；不当作另一个标量正则质量
+    double mass = 0; // scalar W; legacy mode uses the reference per-axis mass
   };
   struct MTKTerms {
     double energy; // mtk_term1=(2K_t+2K_r)/g
@@ -86,11 +89,13 @@ public:
   void advance_thermostats(double duration, double twice_translation, double twice_rotation);
   // 对应 nhc_press_integrate；采样当前 nu，2K_b=M*nu²，目标 kT（一个 DOF）。
   void advance_piston_thermostat(double duration);
-  // 对应 nh_epsilon_dot：先压力/MTK kick，再活塞链阻尼。
-  // LAMMPS 此处 duration=dt/2；setup 的初始半步也由调用方显式调用。
+  enum class PistonStage { initial, final };
+  // Initial: pressure kick then damping; final: damping then pressure kick.
+  // Their opposite-duration calls are mutual inverses, not identical maps.
   void advance_piston(
     double duration, double pressure, double volume,
-    double twice_translation, double twice_rotation);
+    double twice_translation, double twice_rotation,
+    PistonStage stage = PistonStage::initial);
   MTKTerms mtk_terms(double twice_translation, double twice_rotation) const;
   // 对应 initial/final_integrate 的 scale_t/scale_r，通常 duration=dt/2。
   // 调用双因子 scale_momenta 后重建 bead 速度；本函数不修改任何状态。

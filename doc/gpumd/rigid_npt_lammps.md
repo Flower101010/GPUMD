@@ -12,7 +12,10 @@ ensemble rigid_npt_lammps 300 300 200 0.0001 2000 0
 
 ## 两个 NPT 模式的区别
 
-默认 `rigid_npt` 继续保持现有的质心变盒和机械约束压力。
+默认 `rigid_npt` 使用质心变盒、机械约束压力和修正后的标量 MTK/NH 子步。
+本兼容入口显式启用 `Parameters::lammps_compatibility`，保留固定参考中的
+转动 `9*nu/g`、活塞驱动力每轴质量约定、活塞链半阻尼系数，
+以及 setup 初始半步和后续末端半步的历史顺序；它不继承标准路径的这些修正。
 本模式显式选择 LAMMPS `FixRigidNHSmall` 的顺序：
 
 1. 初始速度投影和离散约束 virial 估计，准备初始活塞半步。

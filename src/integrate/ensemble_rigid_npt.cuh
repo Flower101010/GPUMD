@@ -5,7 +5,7 @@
 #include "rigid_thermo.cuh"
 #include <memory>
 
-// 三维全周期正交盒、各向同性、恒定 T/P；Miller + LAMMPS rigid NH 链。
+// 三维全周期正交盒、各向同性、恒定 T/P；Miller + scalar MTK/NH 链。
 class Ensemble_Rigid_NPT : public Ensemble
 {
 public:
@@ -15,7 +15,7 @@ public:
     double target_pressure, double pressure_coupling, double time_step);
   virtual void initialize(Atom& atom, const Box& box, const std::vector<Group>& groups);
 
-  // 初次 compute1 延迟到初始 Force::compute 之后准备压力和活塞半步。
+  // 每次 compute1 在当前 Force::compute 之后计算压力并推进活塞初始半步。
   // kick -> scale -> affine translation/rotation drift -> advance three chains.
   void compute1(
     double time_step, const std::vector<Group>& groups, Box& box, Atom& atom,

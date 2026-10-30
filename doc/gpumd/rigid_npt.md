@@ -1,9 +1,8 @@
 # 刚体 NPT 上层模块
 
 `Ensemble_Rigid_NPT` 已将 `RigidNH`、GPU 刚体积分、正交变盒和 thermo 接入
-`Integrate`。主要参考本地 LAMMPS `FixRigidNHSmall::setup`、
-`initial_integrate`、`final_integrate`；标量链、活塞、MTK 系数保持前一阶段的
-LAMMPS 原函数对照。当前范围是三维全周期正交盒、各向同性、恒定 T/P。
+`Integrate`。采用标量 MTK/NH 方程和对称子步；旧 LAMMPS 参考行为仅在
+`rigid_npt_lammps` 中保留。当前范围是三维全周期正交盒、各向同性、恒定 T/P。
 
 ## 输入与单位
 
@@ -38,12 +37,12 @@ ensemble rigid_npt T_initial T_final T_coupling P P_coupling grouping_method
 ## 调用顺序
 
 初始化只投影 bead 速度、创建刚体、统计缓冲及零速率的扩展系统。
-首次 `compute1` 才能读取有效初始力：先汇总载荷，计算初始动能/压力，
-再执行一次 `advance_piston(dt/2)`，对应 LAMMPS setup 的活塞准备。
+每次 `compute1` 都先读取有效模型力，汇总载荷并计算当前动能/机械压力；
+随后执行活塞初始半步。初始化不额外推进活塞。
 
 每步：
 
-1. `compute1` 用旧链和活塞速率计算两个 `dt/2` 动量因子。
+1. `compute1` 先对活塞执行压力 kick 半步、链阻尼半步，再计算两个动量因子。
 2. 旧力/力矩 kick 半步，然后缩放平动速度和 Miller p。
 3. 恒定 nu 下伸缩盒子/质心/自由粒子坐标，推进平动与 Miller 姿态，
    包装质心并重建 bead 坐标/速度。刚体内部位移不缩放。
@@ -51,7 +50,7 @@ ensemble rigid_npt T_initial T_final T_coupling P P_coupling grouping_method
 5. 驱动层在新盒子、新坐标下重新计算模型力/virial。
 6. `compute2` 用更新后的链速率，先缩放动量，再用新力/力矩 kick 半步。
 7. 重建 bead 速度，计算最终动能和含机械约束贡献的压力。
-8. 活塞推进 dt/2，准备下一步；thermo 对应这一步的最终物理状态。
+8. 活塞先链阻尼半步，再压力 kick 半步，与步骤 1 配对；thermo 对应最终物理状态。
 
 链推进过程中不再调用旧 NVT 的 `nose_hoover_chain::propagate`，也没有额外
 两个恒温半步。三个链默认各 10 节、一次子循环、Yoshida order=3。
@@ -72,8 +71,8 @@ R_new = s*R_old + phi*v_half
 GPUMD 的盒以原点为缩放中心；LAMMPS 的盒围绕中心缩放，且源码将漂移和
 两次半盒 remap 分开。这里明确采用上述仿射流，不声称这两种上层编排
 逐步轨迹一致，也不把 LAMMPS 的原子仿射映射直接用于刚体内部几何。
-每步都重新构建 bead，避免伸缩内部键长。标量模块与 LAMMPS 的数值对照
-不等于整个 NPT 算法已通过独立物理验证。
+每步都重新构建 bead，避免伸缩内部键长。标量质量、动力学方程和能量核对见
+[标量模块说明](rigid_nh.md)。
 
 ## 压力定义
 
@@ -119,7 +118,9 @@ bead restart 没有扩展系统状态，不能视作精确 NPT checkpoint。
   原子模型力/virial 不变、阶段/重置/盒范围检查。
 - 实际 run.in：混合和全自由体系、GPa 转换及初始活塞半步、连续 run、
   NPT/NVE/NVT 切换、非零 NEP 力，以及不支持输入的错误路径。
-- 既有 RigidNH 标量 LAMMPS 对照和 NVE/NVT 回归。
+- 混合体系非零力矩的 GPU 完整步时间反演，包含盒子及全部扩展变量。
+- 理想气体/球形转子约化系统的扩展能量二阶收敛、标量时间反演、
+  显式兼容模式的固定 LAMMPS 对照和 NVE/NVT 回归。
 
 ```bash
 cmake --build build --target gpumd test_ensemble_rigid_npt -j4
@@ -127,4 +128,4 @@ ctest --test-dir build -R '^(unit.test_ensemble_rigid_npt|integration.rigid_npt_
 ```
 
 这些测试核对软件连接、解析关系和短时约束；平衡密度、温度/压力分布、
-步长收敛和长时间稳定性仍需后续验收。
+生产体系的步长收敛和长时间稳定性仍需后续验收。

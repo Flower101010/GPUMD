@@ -7,7 +7,7 @@
    certain rights in this software. Contributing author: Trung Dac Nguyen (ORNL).
    References: Kamberaj et al., J. Chem. Phys. 122, 224114 (2005);
    Miller et al., J. Chem. Phys. 116, 8649-8659 (2002).
-   See developers/rigid_nh.md for source correspondence and validation scope.
+   See doc/gpumd/rigid_nh.md for source correspondence and validation scope.
 */
 #include "rigid_nh.cuh"
 #include <cmath>
@@ -185,8 +185,10 @@ void RigidNH::advance_piston_thermostat(double duration)
   check_duration(duration);
   if (duration == 0) return;
   auto chain = piston_chain_;
-  // LAMMPS: sum_i(M_i*nu_i²)/pdim = M*nu²；第一节目标是 kT，不是 9*kT。
-  advance_chain(chain, duration, piston_.mass * piston_.rate * piston_.rate, 1.0, 0.5,
+  // One scalar piston DOF. Its chain obeys the same -xi_next*xi damping
+  // equation as the physical chains; the old reference used half this damping.
+  advance_chain(chain, duration, piston_.mass * piston_.rate * piston_.rate, 1.0,
+    parameters_.lammps_compatibility ? 0.5 : 1.0,
     parameters_.kT, parameters_.subcycles, weights_);
   piston_chain_.swap(chain);
 }
@@ -200,16 +202,19 @@ RigidNH::MTKTerms RigidNH::mtk_terms(double kt, double kr) const
     throw std::overflow_error("Rigid NH MTK terms overflow.");
   return terms;
 }
-void RigidNH::advance_piston(double duration, double pressure, double volume, double kt, double kr)
+void RigidNH::advance_piston(double duration, double pressure, double volume, double kt, double kr,
+  PistonStage stage)
 {
   check_duration(duration);
   require(std::isfinite(pressure) && positive(volume), "Invalid rigid NH pressure or volume.");
   const auto terms = mtk_terms(kt, kr);
   if (duration == 0) return;
-  const double acceleration =
+  const double acceleration = (parameters_.lammps_compatibility ? 1.0 : 3.0) *
     ((pressure - parameters_.target_pressure) * volume + terms.energy) / piston_.mass;
-  const double next = (piston_.rate + duration * acceleration) *
-    std::exp(-duration * piston_chain_[0].rate);
+  const double damping = std::exp(-duration * piston_chain_[0].rate);
+  const double next = stage == PistonStage::initial
+    ? (piston_.rate + duration * acceleration) * damping
+    : piston_.rate * damping + duration * acceleration;
   if (!std::isfinite(next)) throw std::overflow_error("Rigid NH piston rate overflow.");
   piston_.rate = next;
 }
@@ -219,7 +224,8 @@ RigidNH::MomentumScales RigidNH::momentum_scales(double duration) const
   const double correction = (3 / degrees_of_freedom()) * piston_.rate;
   const MomentumScales scales{
     std::exp(-duration * (translation_chain()[0].rate + piston_.rate + correction)),
-    rotation_chain().empty() ? 1.0 : std::exp(-duration * (rotation_chain()[0].rate + 3 * correction))};
+    rotation_chain().empty() ? 1.0 : std::exp(-duration * (rotation_chain()[0].rate +
+      (parameters_.lammps_compatibility ? 3.0 : 1.0) * correction))};
   if (!positive(scales.translation) || !positive(scales.rotation))
     throw std::overflow_error("Rigid NH momentum scales are outside the finite positive range.");
   return scales;

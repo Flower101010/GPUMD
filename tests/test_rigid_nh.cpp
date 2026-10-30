@@ -7,6 +7,7 @@
 #include <random>
 #include <stdexcept>
 #include <vector>
+#include <utility>
 
 #include "fixtures/rigid_nh_reference.h"
 
@@ -53,6 +54,7 @@ void source_parity()
   for (int order : {3, 5}) for (int cycles : {1, 3})
     for (int length : {1, 3, 10}) for (int piston_length : {1, 4, 10}) {
       RigidNH::Parameters p{9, 6, 0.025, 0.2, 0.8, 0.001, length, piston_length, cycles, order};
+      p.lammps_compatibility = true;
       RigidNH nh(p);
       lammps_reference::Reference ref(p);
       for (int step = 0; step < 100; ++step) {
@@ -126,6 +128,80 @@ void thermostat_ramp_parity()
   assert(state() == before);
 }
 
+// Independent ideal-gas/spherical-rotor reduction of the isotropic MTK ODE.
+// No model potential: 3PV=2Kt, while rotation still enters the MTK correction.
+struct IdealNPT {
+  RigidNH nh;
+  double kt = 3.2, kr = 1.1, volume = 8;
+  IdealNPT() : nh({6, 3, 0.5, 0.8, 1.2, 0.1, 3, 3, 1, 3}) {}
+  double energy() const {
+    const auto& p = nh.parameters();
+    double e = (kt+kr)/2 + p.target_pressure*volume +
+      0.5*nh.piston().mass*nh.piston().rate*nh.piston().rate;
+    for (const auto* chain : {&nh.translation_chain(), &nh.rotation_chain(), &nh.piston_chain()}) {
+      const int dof = chain == &nh.translation_chain() ? p.translation_dof :
+        (chain == &nh.rotation_chain() ? p.rotation_dof : 1);
+      for (std::size_t i = 0; i < chain->size(); ++i) {
+        const auto& link = (*chain)[i];
+        e += 0.5*link.mass*link.rate*link.rate + p.kT*(i == 0 ? dof : 1)*link.coordinate;
+      }
+    }
+    return e;
+  }
+  void step(double dt) {
+    nh.advance_piston(dt/2, kt/(3*volume), volume, kt, kr, RigidNH::PistonStage::initial);
+    auto scale = nh.momentum_scales(dt/2);
+    kt *= scale.translation*scale.translation;
+    kr *= scale.rotation*scale.rotation;
+    volume *= std::exp(3*dt*nh.piston().rate);
+    nh.advance_thermostats(dt, kt, kr);
+    nh.advance_piston_thermostat(dt);
+    scale = nh.momentum_scales(dt/2);
+    kt *= scale.translation*scale.translation;
+    kr *= scale.rotation*scale.rotation;
+    nh.advance_piston(dt/2, kt/(3*volume), volume, kt, kr, RigidNH::PistonStage::final);
+  }
+};
+void physical_npt_checks()
+{
+  IdealNPT state;
+  // Warm all three chains, so reversibility exercises inter-chain damping.
+  for (int i = 0; i < 70; ++i) state.step(0.01);
+  const auto start = state;
+  for (int i = 0; i < 100; ++i) state.step(0.003);
+  for (int i = 0; i < 100; ++i) state.step(-0.003);
+  near(state.kt, start.kt); near(state.kr, start.kr); near(state.volume, start.volume);
+  near(state.nh.piston().rate, start.nh.piston().rate);
+  // Cached accelerations need not be on the same substep; compare dynamical state.
+  for (auto pair : {std::make_pair(&state.nh.translation_chain(), &start.nh.translation_chain()),
+                   std::make_pair(&state.nh.rotation_chain(), &start.nh.rotation_chain()),
+                   std::make_pair(&state.nh.piston_chain(), &start.nh.piston_chain())})
+    for (std::size_t i = 0; i < pair.first->size(); ++i) {
+      near((*pair.first)[i].coordinate, (*pair.second)[i].coordinate);
+      near((*pair.first)[i].rate, (*pair.second)[i].rate);
+    }
+  // Conserved extended energy is an independent ODE oracle, rather than old
+  // source parity. Over fixed time, second-order error must fall by about four.
+  double previous = 0;
+  for (int steps : {200, 400, 800}) {
+    IdealNPT flow;
+    const double initial_energy = flow.energy();
+    double error = 0;
+    for (int i = 0; i < steps; ++i) {
+      flow.step(2.0/steps);
+      error = std::max(error, std::abs(flow.energy()-initial_energy));
+    }
+    std::cout << "Physical NPT energy error (" << steps << " steps): " << error << '\n';
+    if (previous) assert(error < previous/3.5 && error > previous/4.5);
+    previous = error;
+  }
+  // At a warmed state verify dH/dt=0 directly, independent of long trajectories.
+  const double e = start.energy();
+  auto probe = start;
+  probe.step(1e-6);
+  assert(std::abs((probe.energy()-e)/1e-6) < 2e-6);
+}
+
 void analytical_and_boundaries()
 {
   RigidNH::Parameters p{6, 3, 0.5, 2, 3, 0.01, 1, 1, 1, 3};
@@ -148,18 +224,18 @@ void analytical_and_boundaries()
   near(nh.piston_chain()[0].rate, -h * 0.5 / 40.5);
   nh.advance_piston_thermostat(-h);
   near(nh.piston_chain()[0].rate, 0);
-  // Pure MTK drive survives P=P0; no hidden additional factor 3 or dt/2.
+  // Scalar W and log-length rate require three times the pressure/MTK drive.
   nh.advance_piston(h, p.target_pressure, 100, 3, 1.5);
-  near(nh.piston().rate, h * 0.5 / 54);
+  near(nh.piston().rate, h * 3 * 0.5 / 54);
   const auto factors = nh.momentum_scales(h);
   near(factors.translation, std::exp(-h * nh.piston().rate * (1 + 3.0 / 9)));
-  near(factors.rotation, std::exp(-h * nh.piston().rate)); // 9*nu/g, g=9
+  near(factors.rotation, std::exp(-h * nh.piston().rate / 3)); // 3*nu/g, g=9
   // Piston update is kick then damping, not a symmetric integrator on its own.
   nh.advance_piston_thermostat(h);
   const double old_rate = nh.piston().rate;
   const double bath_rate = nh.piston_chain()[0].rate;
   nh.advance_piston(h, 0.03, 100, 3, 1.5);
-  near(nh.piston().rate, (old_rate + h * (2 + 0.5) / 54) * std::exp(-h * bath_rate));
+  near(nh.piston().rate, (old_rate + h * 3 * (2 + 0.5) / 54) * std::exp(-h * bath_rate));
 
   const auto before = snapshot(nh);
   nh.advance_thermostats(0, 3, 1.5);
@@ -200,5 +276,6 @@ int main()
   source_parity();
   thermostat_ramp_parity();
   analytical_and_boundaries();
+  physical_npt_checks();
   std::cout << "Rigid NH chains, piston and MTK checks passed.\n";
 }
