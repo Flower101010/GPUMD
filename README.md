@@ -32,12 +32,14 @@ This software is distributed under the GNU General Public License (GPL) version 
 
 ## Extensions in this repository / 本仓库新增功能
 
-This repository includes four extensions. Start with the user documentation linked
+Start with the user documentation linked
 below for supported inputs, usage and precautions.
 
 | Feature  | Usage  | Documentation |
 | --- | --- | --- |
 | Streaming training  | `stream_train 1` keeps only the current training batch on GPUs; parsed data stays on the CPU. Scratch space and validation data still occupy GPU memory.  | [stream_train](doc/nep/input_parameters/stream_train.rst) |
+| Composition-weighted force training | `composition_force_weights force_weights.txt` weights squared force residuals for water beads (`O`) and methanol beads (`C`) by each configuration's exact methanol fraction. Supports resident and streaming training. | [Table format and normalization](doc/nep/input_parameters/composition_force_weights.rst) |
+| Validation force RMSE by type | `validation_force_rmse_by_type 1` writes unweighted O/C validation force RMSE to `validation_force_rmse_by_type.csv` at each reporting interval, both across the full validation set and by methanol fraction. | [CSV format](doc/nep/input_parameters/validation_force_rmse_by_type.rst) |
 | Pair-specific cutoffs  | `cross_cutoff i j radial angular` overrides the symmetric cutoff for a selected pair of different types; other pairs retain the default averaging rule. Indices start at 0 and follow the `type` order.  | [cutoff and cross_cutoff](doc/nep/input_parameters/cutoff.rst), [cluster build and usage](INSTALL_CLUSTER.md) |
 | Multi-bead CG  | Fixed harmonic bond/angle and periodic proper-dihedral terms plus a trainable residual NEP, with per-frame topology, shared parameters and complete model packages for MD.  | [build, training and MD tutorial ](examples/multibead_cg/README.md), [detailed guide](doc/gpumd/multibead_cg_guide_zh.md) |
 | Rigid-body NVE/NVT/NPT | GPU integration of nonlinear multi-bead rigid bodies mixed with free particles, using Miller quaternion dynamics, NHC for NVT, and separate NH chains with an isotropic MTK piston for NPT, under bead forces from a temperature-independent NEP or another supported potential. | [usage and precautions](doc/gpumd/rigid_body_guide_zh.md), [input parameters](doc/gpumd/input_parameters/ensemble_standard.rst) |

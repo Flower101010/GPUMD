@@ -115,7 +115,8 @@ public:
     int n1,
     int n2,
     int device_id,
-    bool borrow_structures = false);
+    bool borrow_structures = false,
+    const std::vector<float>& frame_force_weight_squared = {});
   const Structure& get_structure(int index) const;
   // Call once after fresh residual E/F/W computation, before loss or output.
   void add_bonded_baseline();
@@ -132,6 +133,7 @@ public:
   std::vector<float> get_rmse_bec(Parameters& para, int device_id);
 
 private:
+  GPU_Vector<float> frame_force_weight_squared_gpu;
   const std::vector<Structure>* borrowed_structures = nullptr;
   int borrowed_begin = 0;
   bool print_statistics = true;

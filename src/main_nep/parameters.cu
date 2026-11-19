@@ -45,12 +45,34 @@ Parameters::Parameters()
     read_zbl_in();
   }
   calculate_parameters();
+  if (!composition_force_weights_file.empty()) {
+    if (is_type_weight_set)
+      PRINT_INPUT_ERROR("composition_force_weights and type_weight are mutually exclusive.");
+    if (prediction != 0 || (train_mode != 0 && train_mode != 3))
+      PRINT_INPUT_ERROR("composition_force_weights requires NEP force training.");
+    if (num_types != 2 ||
+        !((elements[0] == "O" && elements[1] == "C") ||
+          (elements[0] == "C" && elements[1] == "O")))
+      PRINT_INPUT_ERROR("composition_force_weights requires exactly two particle types, O and C.");
+  }
+  if (validation_force_rmse_by_type) {
+    if (prediction != 0 || (train_mode != 0 && train_mode != 3))
+      PRINT_INPUT_ERROR("validation_force_rmse_by_type requires NEP force training.");
+    if (elements.empty() || std::any_of(elements.begin(), elements.end(), [](const auto& element) {
+          return element != "O" && element != "C";
+        }))
+      PRINT_INPUT_ERROR("validation_force_rmse_by_type requires particle types O and/or C.");
+  }
   if (molecular_force) {
     if (train_mode != 0 || charge_mode || charge_vdw || vdw)
       PRINT_INPUT_ERROR("molecular_force supports plain potential NEP only.");
     bonded_parameters = read_bonded_parameters(molecular_force_file);
   }
   report_inputs();
+  if (!composition_force_weights_file.empty())
+    printf("    Composition force weights: %s\n", composition_force_weights_file.c_str());
+  if (validation_force_rmse_by_type)
+    printf("    Validation force RMSE by type: validation_force_rmse_by_type.csv\n");
   if (molecular_force) {
     printf("    Fixed bonded baseline: %s, per-frame topology.\n", molecular_force_file.c_str());
     printf("    Labels and predictions are total E/F/virial; nep.txt stores the NEP residual.\n");
@@ -1335,6 +1357,15 @@ void Parameters::parse_one_keyword(std::vector<std::string>& tokens)
     parse_batch(param, num_param);
   } else if (strcmp(param[0], "stream_train") == 0) {
     parse_stream_train(param, num_param);
+  } else if (strcmp(param[0], "composition_force_weights") == 0) {
+    if (num_param != 2 || !composition_force_weights_file.empty())
+      PRINT_INPUT_ERROR("Specify composition_force_weights <table_file> once.");
+    composition_force_weights_file = param[1];
+  } else if (strcmp(param[0], "validation_force_rmse_by_type") == 0) {
+    int enabled;
+    if (num_param != 2 || !is_valid_int(param[1], &enabled) || (enabled != 0 && enabled != 1))
+      PRINT_INPUT_ERROR("validation_force_rmse_by_type requires 0 or 1.");
+    validation_force_rmse_by_type = enabled == 1;
   } else if (strcmp(param[0], "population") == 0) {
     parse_population(param, num_param);
   } else if (strcmp(param[0], "molecular_force") == 0) {

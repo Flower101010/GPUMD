@@ -16,6 +16,7 @@ Below you can find a listing of keywords for the ``nep.in`` input file.
    model_type
    type
    type_weight
+   composition_force_weights
    zbl
    use_typewise_cutoff_zbl
    cutoff
@@ -40,6 +41,7 @@ Below you can find a listing of keywords for the ``nep.in`` input file.
    generation
    save_potential
    output_interval
+   validation_force_rmse_by_type
    output_descriptor
    fine_tune
    import_q_scaler

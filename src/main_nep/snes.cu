@@ -474,6 +474,17 @@ void SNES::compute(Parameters& para, Fitness* fitness_function)
 
       sort_population(para);
 
+#ifdef NEP_TEST_DIAGNOSTICS
+      FILE* ranking = my_fopen("nep_diagnostic_ranking.tsv", n == 0 ? "w" : "a");
+      for (int t = 0; t <= para.num_types; ++t) {
+        for (int p = 0; p < population_size; ++p) {
+          const int offset = t * population_size + p;
+          fprintf(ranking, "%d\t%d\t%d\t%d\t%.9e\n", n, t, p, index[offset], fitness_total[offset]);
+        }
+      }
+      fclose(ranking);
+#endif
+
       int best_index = index[para.num_types * population_size];
       fitness_function->report_error(
         para,

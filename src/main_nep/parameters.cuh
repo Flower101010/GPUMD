@@ -68,6 +68,8 @@ public:
   int version;                // NEP version; only NEP4 is supported
   int batch_size;             // number of configurations in one batch
   int stream_train;           // keep only the current training batch on GPU
+  std::string composition_force_weights_file;
+  bool validation_force_rmse_by_type = false;
   int num_types;              // number of atom types
   int population_size;        // population size for SNES
   int maximum_generation;     // maximum number of generations for SNES;

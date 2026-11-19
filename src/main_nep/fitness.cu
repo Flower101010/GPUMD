@@ -30,15 +30,112 @@ Get the fitness
 #include "utilities/gpu_macro.cuh"
 #include "utilities/gpu_vector.cuh"
 #include "utilities/nep_parameters.cuh"
+#include "utilities/read_file.cuh"
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <chrono>
+#include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <iostream>
+#include <map>
+#include <numeric>
 #include <random>
 #include <sstream>
+#include <string_view>
 #include <vector>
+
+static std::pair<int, int> reduce_fraction(int numerator, int denominator)
+{
+  const int divisor = std::gcd(numerator, denominator);
+  return {numerator / divisor, denominator / divisor};
+}
+
+static bool parse_fraction(std::string_view token, int& numerator, int& denominator)
+{
+  const auto slash = token.find('/');
+  if (slash == std::string_view::npos)
+    return false;
+  const char* begin = token.data();
+  const char* delimiter = begin + slash;
+  const char* end = begin + token.size();
+  const auto left = std::from_chars(begin, delimiter, numerator);
+  const auto right = std::from_chars(delimiter + 1, end, denominator);
+  return left.ec == std::errc{} && right.ec == std::errc{} && left.ptr == delimiter &&
+         right.ptr == end && denominator > 0 && numerator >= 0 && numerator <= denominator;
+}
+
+static std::vector<float> read_composition_force_weights(
+  const Parameters& para, const std::vector<Structure>& frames)
+{
+  const auto& filename = para.composition_force_weights_file;
+  std::ifstream input(filename);
+  if (!input)
+    PRINT_INPUT_ERROR(("Cannot open composition force weight table " + filename).c_str());
+
+  std::map<std::pair<int, int>, std::array<float, 2>> table;
+  int line_number = 0;
+  for (std::string line; std::getline(input, line);) {
+    ++line_number;
+    const auto tokens = get_tokens(line.substr(0, line.find('#')));
+    if (tokens.empty())
+      continue;
+
+    const std::string context = filename + ":" + std::to_string(line_number);
+    int carbon, total;
+    double oxygen_weight, carbon_weight;
+    if (tokens.size() != 3 || !parse_fraction(tokens[0], carbon, total) ||
+        !is_valid_real(tokens[1].c_str(), &oxygen_weight) ||
+        !is_valid_real(tokens[2].c_str(), &carbon_weight) || !std::isfinite(oxygen_weight) ||
+        !std::isfinite(carbon_weight) || oxygen_weight < 0 || carbon_weight < 0)
+      PRINT_INPUT_ERROR((context + ": expected N_C/N_total and finite nonnegative O and C weights.").c_str());
+
+    // Rescale before squaring to avoid overflow. Ignore absent species in pure frames.
+    const int oxygen = total - carbon;
+    const double scale = std::max(oxygen ? oxygen_weight : 0, carbon ? carbon_weight : 0);
+    if (scale == 0)
+      PRINT_INPUT_ERROR((context + ": at least one present species must have a positive weight.").c_str());
+    const double oxygen_scaled = oxygen ? oxygen_weight / scale : 0;
+    const double carbon_scaled = carbon ? carbon_weight / scale : 0;
+    const double oxygen_squared = oxygen_scaled * oxygen_scaled;
+    const double carbon_squared = carbon_scaled * carbon_scaled;
+    const double normalization = (oxygen * oxygen_squared + carbon * carbon_squared) / total;
+    const std::array<float, 2> squared{
+      float(oxygen_squared / normalization), float(carbon_squared / normalization)};
+    if (!table.emplace(reduce_fraction(carbon, total), squared).second)
+      PRINT_INPUT_ERROR((context + ": duplicate methanol fraction.").c_str());
+  }
+  if (input.bad())
+    PRINT_INPUT_ERROR(("Error reading composition force weight table " + filename).c_str());
+
+  const int carbon_type = para.elements[0] == "C" ? 0 : 1;
+  std::vector<float> weights(2 * frames.size());
+  std::map<std::pair<int, int>, size_t> missing;
+  for (size_t i = 0; i < frames.size(); ++i) {
+    const auto& frame = frames[i];
+    const int carbon = std::count(frame.type.begin(), frame.type.end(), carbon_type);
+    const auto fraction = reduce_fraction(carbon, frame.num_atom);
+    const auto row = table.find(fraction);
+    if (row == table.end()) {
+      ++missing[fraction];
+      continue;
+    }
+    weights[2 * i + (1 - carbon_type)] = row->second[0];
+    weights[2 * i + carbon_type] = row->second[1];
+  }
+  if (!missing.empty()) {
+    std::ostringstream message;
+    message << filename << ": missing methanol fractions in train.xyz:";
+    for (const auto& [fraction, count] : missing)
+      message << "\n    " << fraction.first << '/' << fraction.second << " ("
+              << 100.0 * fraction.first / fraction.second << "%, " << count << " frames)";
+    PRINT_INPUT_ERROR(message.str().c_str());
+  }
+  return weights;
+}
 
 Fitness::Fitness(Parameters& para)
 {
@@ -52,6 +149,8 @@ Fitness::Fitness(Parameters& para)
   stream_train = para.stream_train == 1;
   const auto train_read_begin = Clock::now();
   read_structures(true, para, structures_train, para.molecular_force ? &para.bonded_parameters : nullptr);
+  if (!para.composition_force_weights_file.empty())
+    train_force_weight_squared = read_composition_force_weights(para, structures_train);
   const auto train_read_end = Clock::now();
   num_batches = (structures_train.size() - 1) / para.batch_size + 1;
   printf("Number of devices = %d\n", deviceCount);
@@ -87,7 +186,8 @@ Fitness::Fitness(Parameters& para)
         printf("Constructing train_set in device  %d.\n", device_id);
         CHECK(gpuSetDevice(device_id));
         train_set[batch_id][device_id].construct(
-          para, structures_train, count - batch_size, count, device_id);
+          para, structures_train, batch_begin[batch_id], batch_end[batch_id], device_id,
+          false, train_force_weight_squared);
         print_line_2();
       }
     }
@@ -149,6 +249,8 @@ Fitness::Fitness(Parameters& para)
   if (!stream_train) {
     structures_train.clear();
     structures_train.shrink_to_fit();
+    train_force_weight_squared.clear();
+    train_force_weight_squared.shrink_to_fit();
   }
   if (perf_timing) {
     const auto constructor_end = Clock::now();
@@ -217,7 +319,8 @@ std::vector<Dataset>& Fitness::load_train_batch(Parameters& para, int batch_id, 
   for (int device_id = 0; device_id < device_count; ++device_id) {
     CHECK(gpuSetDevice(device_id));
     (*current_train_set)[device_id].construct(
-      para, structures_train, batch_begin[batch_id], batch_end[batch_id], device_id, true);
+      para, structures_train, batch_begin[batch_id], batch_end[batch_id], device_id,
+      true, train_force_weight_squared);
   }
   current_batch_id = batch_id;
   max_NN_radial = std::max(max_NN_radial, (*current_train_set)[0].max_NN_radial);
@@ -533,6 +636,67 @@ void Fitness::get_save_potential_label(Parameters& para, const int generation, s
   }
 }
 
+static void write_validation_force_rmse_by_type(
+  const Parameters& para, const Dataset& dataset, int step)
+{
+  struct ForceError {
+    size_t count = 0;
+    double squared_error = 0.0;
+  };
+  using ForceErrors = std::array<ForceError, 2>; // O, C
+  using Fraction = std::pair<int, int>;
+  const auto fraction_less = [](const Fraction& a, const Fraction& b) {
+    return int64_t(a.first) * b.second < int64_t(b.first) * a.second;
+  };
+  std::map<Fraction, ForceErrors, decltype(fraction_less)> by_concentration(fraction_less);
+  const int carbon_type =
+    std::find(para.elements.begin(), para.elements.end(), "C") - para.elements.begin();
+
+  for (int nc = 0; nc < dataset.Nc; ++nc) {
+    const auto& frame = dataset.get_structure(nc);
+    const int carbon = std::count(frame.type.begin(), frame.type.end(), carbon_type);
+    auto& errors = by_concentration[reduce_fraction(carbon, frame.num_atom)];
+    for (int m = 0; m < frame.num_atom; ++m) {
+      auto& error = errors[frame.type[m] == carbon_type];
+      ++error.count;
+      const size_t atom = dataset.Na_sum_cpu[nc] + m;
+      for (size_t axis = 0; axis < 3; ++axis) {
+        const size_t index = atom + axis * dataset.N;
+        const double residual = double(dataset.force_cpu[index]) - dataset.force_ref_cpu[index];
+        error.squared_error += residual * residual;
+      }
+    }
+  }
+
+  ForceErrors all{};
+  for (const auto& entry : by_concentration) {
+    for (size_t t = 0; t < all.size(); ++t) {
+      all[t].count += entry.second[t].count;
+      all[t].squared_error += entry.second[t].squared_error;
+    }
+  }
+
+  const bool first = step == para.output_interval;
+  FILE* csv = my_fopen("validation_force_rmse_by_type.csv", first ? "w" : "a");
+  if (first)
+    fprintf(csv, "generation,scope,methanol_fraction,type,N,rmse_eV_per_A\n");
+  const auto write_rows = [&](const char* scope, const char* fraction, const ForceErrors& errors) {
+    for (size_t t = 0; t < errors.size(); ++t) {
+      const auto& error = errors[t];
+      fprintf(csv, "%d,%s,%s,%c,%zu,", step, scope, fraction, "OC"[t], error.count);
+      if (error.count != 0)
+        fprintf(csv, "%.12g", std::sqrt(error.squared_error / (3.0 * error.count)));
+      fputc('\n', csv);
+    }
+  };
+  write_rows("all", "", all);
+  for (const auto& [fraction, errors] : by_concentration) {
+    const auto key = std::to_string(fraction.first) + "/" + std::to_string(fraction.second);
+    write_rows("concentration", key.c_str(), errors);
+  }
+  fclose(csv);
+}
+
 void Fitness::report_error(
   Parameters& para,
   const int generation,
@@ -717,6 +881,8 @@ void Fitness::report_error(
         fclose(fid_force);
         fclose(fid_virial);
         fclose(fid_stress);
+        if (para.validation_force_rmse_by_type)
+          write_validation_force_rmse_by_type(para, test_set[0], generation + 1);
         if ((para.charge_mode || para.charge_vdw)) {
           FILE* fid_charge = my_fopen("charge_test.out", "w");
           update_charge(fid_charge, test_set[0]);

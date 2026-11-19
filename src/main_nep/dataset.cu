@@ -659,7 +659,8 @@ void Dataset::construct(
   int n1,
   int n2,
   int device_id,
-  bool borrow_input_structures)
+  bool borrow_input_structures,
+  const std::vector<float>& frame_force_weight_squared)
 {
   this->device_id = device_id;
   print_statistics = !borrow_input_structures || std::getenv("GPUMD_STREAM_VERBOSE") != nullptr;
@@ -678,6 +679,9 @@ void Dataset::construct(
 
   find_Na(para);
   initialize_gpu_data(para);
+  frame_force_weight_squared_gpu.resize(frame_force_weight_squared.empty() ? 0 : 2 * size_t(Nc));
+  if (frame_force_weight_squared_gpu.size() != 0)
+    frame_force_weight_squared_gpu.copy_from_host(frame_force_weight_squared.data() + 2 * size_t(n1));
   find_neighbor(para);
 }
 
@@ -688,6 +692,7 @@ static __global__ void gpu_sum_force_error(
   int* g_Na_sum,
   int* g_type,
   float* g_type_weight,
+  const float* g_frame_force_weight_squared,
   float* g_fx,
   float* g_fy,
   float* g_fz,
@@ -712,8 +717,12 @@ static __global__ void gpu_sum_force_error(
     float dz = g_fz[n] - fz_ref;
     float diff_square = dx * dx + dy * dy + dz * dz;
     if (use_weight) {
-      float type_weight = g_type_weight[g_type[n]];
-      diff_square *= type_weight * type_weight;
+      if (g_frame_force_weight_squared) {
+        diff_square *= g_frame_force_weight_squared[2 * bid + g_type[n]];
+      } else {
+        float type_weight = g_type_weight[g_type[n]];
+        diff_square *= type_weight * type_weight;
+      }
     }
     if (use_weight && force_delta > 0.0f) {
       float force_magnitude = sqrt(fx_ref * fx_ref + fy_ref * fy_ref + fz_ref * fz_ref);
@@ -746,6 +755,7 @@ std::vector<float> Dataset::get_rmse_force(Parameters& para, const bool use_weig
     Na_sum.data(),
     type.data(),
     type_weight_gpu.data(),
+    frame_force_weight_squared_gpu.size() ? frame_force_weight_squared_gpu.data() : nullptr,
     force.data(),
     force.data() + N,
     force.data() + N * 2,

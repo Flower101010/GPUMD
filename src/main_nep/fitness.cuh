@@ -50,6 +50,7 @@ protected:
   bool stream_train = false;
   int current_batch_id = -1;
   std::vector<Structure> structures_train;
+  std::vector<float> train_force_weight_squared; // frame-major, in NEP type order
   std::vector<int> batch_begin;
   std::vector<int> batch_end;
   std::vector<std::vector<Dataset>> train_set;
