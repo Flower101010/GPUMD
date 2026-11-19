@@ -125,6 +125,11 @@ void SNES::initialize_mu_and_sigma(Parameters& para)
       mu[para.number_of_variables_ann_1 * para.num_types] = 2.0f; // make sure initial sqrt(epsilon_inf) > 0
     }
   } else {
+    if (para.methanol_type >= 0) {
+      char header[256];
+      if (!fgets(header, sizeof(header), fid_restart))
+        PRINT_INPUT_ERROR("Could not read composition checkpoint header.");
+    }
     for (int n = 0; n < number_of_variables; ++n) {
       int count = fscanf(fid_restart, "%f%f", &mu[n], &sigma[n]);
       PRINT_SCANF_ERROR(count, 2, "Reading error for nep.restart.");
@@ -523,6 +528,8 @@ void SNES::compute(Parameters& para, Fitness* fitness_function)
     }
     for (int n = 0; n < number_of_variables; ++n) {
       tokens = get_tokens(input);
+      if (tokens.empty())
+        PRINT_INPUT_ERROR("Incomplete NEP parameter or scaler block.");
       population[n] = get_double_from_token(tokens[0], __FILE__, __LINE__);
     }
     const int descriptor_offset = para.number_of_variables_ann * (para.train_mode == 2 ? 2 : 1);
@@ -541,8 +548,12 @@ void SNES::compute(Parameters& para, Fitness* fitness_function)
       para.basis_size_angular);
     for (int d = 0; d < para.dim; ++d) {
       tokens = get_tokens(input);
+      if (tokens.empty())
+        PRINT_INPUT_ERROR("Incomplete NEP parameter or scaler block.");
       para.q_scaler_cpu[d] = get_double_from_token(tokens[0], __FILE__, __LINE__);
     }
+    if (para.methanol_type >= 0 && para.q_scaler_cpu.back() != 1.0f)
+      PRINT_INPUT_ERROR("The composition descriptor scaler must be 1.");
     para.q_scaler_gpu[0].copy_from_host(para.q_scaler_cpu.data());
     fitness_function->predict(para, population.data());
   }
@@ -763,6 +774,8 @@ void SNES::output_mu_and_sigma(Parameters& para, const char* filename)
     para.basis_size_radial,
     para.basis_size_angular);
   FILE* fid_restart = my_fopen(filename, "w");
+  if (para.methanol_type >= 0)
+    fprintf(fid_restart, "%s\n", para.composition_restart_header().c_str());
   for (int n = 0; n < number_of_variables; ++n) {
     fprintf(fid_restart, "%15.7e %15.7e\n", mu_file[n], sigma_file[n]);
   }

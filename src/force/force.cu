@@ -37,6 +37,7 @@ The driver class calculating force and related quantities.
 #include "tersoff1988.cuh"
 #include "tersoff1989.cuh"
 #include "tersoff_mini.cuh"
+#include "utilities/nep_composition.cuh"
 #include "utilities/common.cuh"
 #include "utilities/error.cuh"
 #include "utilities/gpu_macro.cuh"
@@ -138,12 +139,14 @@ void Force::parse_potential(
   } else if (
     strcmp(potential_name, "nep4") == 0 || strcmp(potential_name, "nep4_zbl") == 0 ||
     strcmp(potential_name, "nep4_temperature") == 0 ||
-    strcmp(potential_name, "nep4_zbl_temperature") == 0) {
+    strcmp(potential_name, "nep4_zbl_temperature") == 0 || is_composition_nep(potential_name)) {
     int num_gpus;
     CHECK(gpuGetDeviceCount(&num_gpus));
 #ifdef ZHEYONG
     num_gpus = 3;
 #endif
+    if (is_composition_nep(potential_name) && (num_gpus != 1 || num_param != 2))
+      PRINT_INPUT_ERROR("Composition NEP requires single-GPU MD with no partition direction.");
     if (num_gpus == 1) {
       potential.reset(new NEP(param[1], number_of_atoms));
     } else {

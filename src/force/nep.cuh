@@ -137,6 +137,8 @@ private:
   ANN annmb;
   ZBL zbl;
   ExpandedBox ebox;
+  int methanol_type = -1;
+  GPU_Vector<float> methanol_fraction;
   DFTD3 dftd3;
   Neighbor neighbor;
 

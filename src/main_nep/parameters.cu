@@ -16,6 +16,7 @@
 #include "parameters.cuh"
 #include "model/read_molecular_force.cuh"
 #include "utilities/common.cuh"
+#include "utilities/nep_composition.cuh"
 #include "utilities/error.cuh"
 #include "utilities/gpu_macro.cuh"
 #include "utilities/read_file.cuh"
@@ -41,6 +42,26 @@ Parameters::Parameters()
 
   set_default_parameters();
   read_nep_in();
+  if (prediction == 1 && train_mode == 0) {
+    std::ifstream model("nep.txt");
+    const auto first_line = get_tokens(model);
+    if (!first_line.empty() && is_composition_nep(first_line[0])) {
+      NepTxtHeader header;
+      std::string error;
+      if (!read_nep_txt_header("nep.txt", header, error))
+        PRINT_INPUT_ERROR(error.c_str());
+      if (composition_species.empty())
+        composition_species = header.composition_species;
+    }
+  }
+  if (!composition_species.empty()) {
+    if (version != 4 || train_mode != 0 || charge_mode || vdw || charge_vdw ||
+        num_hidden_layers != 1 || fine_tune)
+      PRINT_INPUT_ERROR("composition_descriptor requires a one-hidden-layer NEP4 potential and does not support fine_tune.");
+    methanol_type = composition_methanol_type(elements, composition_species);
+    if (methanol_type < 0)
+      PRINT_INPUT_ERROR("composition_descriptor must name both model types in water, methanol order.");
+  }
   if (is_zbl_set) {
     read_zbl_in();
   }
@@ -69,6 +90,9 @@ Parameters::Parameters()
     bonded_parameters = read_bonded_parameters(molecular_force_file);
   }
   report_inputs();
+  if (methanol_type >= 0)
+    printf("    Composition descriptor: %s (water), %s (methanol).\n",
+      composition_species[0].c_str(), composition_species[1].c_str());
   if (!composition_force_weights_file.empty())
     printf("    Composition force weights: %s\n", composition_force_weights_file.c_str());
   if (validation_force_rmse_by_type)
@@ -286,7 +310,7 @@ void Parameters::calculate_parameters()
     PRINT_INPUT_ERROR("Number of angular descriptors should not exceed 90.");
   }
 
-  dim = dim_radial + dim_angular;
+  dim = dim_radial + dim_angular + (methanol_type >= 0);
   if (train_mode == 3) {
     dim += 1; // concatenate temeprature with descriptors
   }
@@ -333,6 +357,8 @@ void Parameters::calculate_parameters()
   check_existing_model();
 
   q_scaler_cpu.resize(dim, 1.0e10f);
+  if (methanol_type >= 0)
+    q_scaler_cpu.back() = 1.0f;
   if (fine_tune) {
     std::ifstream input(fine_tune_nep_txt);
     if (!input.is_open()) {
@@ -373,9 +399,13 @@ void Parameters::calculate_parameters()
     }
     for (int n = 0; n < q_scaler_cpu.size(); ++n) {
       tokens = get_tokens(input);
+      if (tokens.empty())
+        PRINT_INPUT_ERROR("Incomplete NEP scaler block.");
       q_scaler_cpu[n] = get_double_from_token(tokens[0], __FILE__, __LINE__);
     }
     input.close();
+    if (methanol_type >= 0 && q_scaler_cpu.back() != 1.0f)
+      PRINT_INPUT_ERROR("The composition descriptor scaler must be 1.");
   }
 
   int deviceCount;
@@ -413,8 +443,8 @@ static bool parse_model_token(const std::string& token, NepTxtHeader& header)
     header.enable_zbl = true;
     rest = rest.substr(4);
   }
-  if (rest.empty() || rest == "_temperature") {
-    header.train_mode = rest.empty() ? 0 : 3;
+  if (rest.empty() || rest == "_temperature" || is_composition_nep(token)) {
+    header.train_mode = rest == "_temperature" ? 3 : 0;
     return true;
   }
   if (rest == "_vdw") {
@@ -485,7 +515,17 @@ bool read_nep_txt_header(const std::string& filename, NepTxtHeader& header, std:
   header.elements.assign(tokens.begin() + 2, tokens.end());
   header.number_of_header_lines = 1;
 
-  // second line: zbl, written only for a model with ZBL
+  header.composition_species.clear();
+  if (is_composition_nep(header.model_token)) {
+    tokens = get_tokens(input);
+    ++header.number_of_header_lines;
+    if (!read_composition_species(tokens, header.elements, header.composition_species)) {
+      error = "Invalid composition_descriptor mapping in " + filename + ".";
+      return false;
+    }
+  }
+
+  // Optional ZBL line.
   header.flexible_zbl = false;
   header.use_typewise_cutoff_zbl = false;
   header.zbl_rc_inner = 0.0f;
@@ -850,6 +890,8 @@ void Parameters::compare_with_nep_txt(
   }
   number_of_nep_txt_header_lines = header.number_of_header_lines;
 
+  if (composition_species != header.composition_species)
+    mismatches.push_back("composition_descriptor mapping or activation differs from " + filename + ".");
   compare_int("version", version, is_version_set, header.version, filename, mismatches);
   compare_int("model_type", train_mode, is_train_mode_set, header.train_mode, filename, mismatches);
   compare_int(
@@ -985,15 +1027,34 @@ void Parameters::check_nep_txt(const std::string& filename, const bool fatal, co
   }
 }
 
+std::string Parameters::composition_restart_header() const
+{
+  return "nep_restart_composition_v1 " + elements[0] + " " + elements[1] + " " +
+    composition_species[0] + " " + composition_species[1] + " " +
+    std::to_string(dim) + " " + std::to_string(num_neurons1) + " " +
+    std::to_string(number_of_variables);
+}
+
 void Parameters::check_nep_restart()
 {
   std::ifstream input("nep.restart");
   if (!input.is_open()) {
     return;
   }
-  // nep.restart has no header, so the number of rows is the only thing that can be checked
+  if (methanol_type >= 0) {
+    std::string header;
+    std::getline(input, header);
+    if (!header.empty() && header.back() == '\r')
+      header.pop_back();
+    if (header != composition_restart_header())
+      PRINT_INPUT_ERROR("nep.restart composition format, mapping or ANN layout does not match nep.in.");
+    check_nep_txt("nep.txt", true, "Provide the model paired with nep.restart.");
+    import_q_scaler = true;
+  }
   int number_of_rows = 0;
   std::vector<std::string> tokens = get_tokens(input);
+  if (!tokens.empty() && tokens[0] == "nep_restart_composition_v1")
+    PRINT_INPUT_ERROR("A composition checkpoint requires composition_descriptor in nep.in.");
   while (tokens.size() >= 2) {
     ++number_of_rows;
     tokens = get_tokens(input);
@@ -1357,6 +1418,10 @@ void Parameters::parse_one_keyword(std::vector<std::string>& tokens)
     parse_batch(param, num_param);
   } else if (strcmp(param[0], "stream_train") == 0) {
     parse_stream_train(param, num_param);
+  } else if (strcmp(param[0], "composition_descriptor") == 0) {
+    if (num_param != 3 || !composition_species.empty())
+      PRINT_INPUT_ERROR("Specify composition_descriptor <water_type> <methanol_type> once.");
+    composition_species = {param[1], param[2]};
   } else if (strcmp(param[0], "composition_force_weights") == 0) {
     if (num_param != 2 || !composition_force_weights_file.empty())
       PRINT_INPUT_ERROR("Specify composition_force_weights <table_file> once.");

@@ -139,6 +139,7 @@ static __global__ void find_descriptor_small_box(
   const int N,
   const int N1,
   const int N2,
+  const float* methanol_fraction,
   const int* g_NN_radial,
   const int* g_NL_radial,
   const int* g_NN_angular,
@@ -231,6 +232,8 @@ static __global__ void find_descriptor_small_box(
     }
 
     // nomalize descriptor
+    if (methanol_fraction)
+      q[annmb.dim - 1] = *methanol_fraction;
     for (int d = 0; d < annmb.dim; ++d) {
       q[d] = q[d] * annmb.q_scaler[d];
     }

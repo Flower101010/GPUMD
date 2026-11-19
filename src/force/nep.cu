@@ -27,6 +27,7 @@ heat transport, Phys. Rev. B. 104, 104309 (2021).
 #include "utilities/error.cuh"
 #include "utilities/gpu_macro.cuh"
 #include "utilities/nep_parameters.cuh"
+#include "utilities/nep_composition.cuh"
 #include "utilities/nep_utilities.cuh"
 #include <algorithm>
 #include <cstddef>
@@ -55,8 +56,10 @@ void NEP::initialize_dftd3()
   std::string line;
   while (std::getline(input_run, line)) {
     std::vector<std::string> tokens = get_tokens(line);
-    if (tokens.size() != 0) {
-      if (tokens[0] == "dftd3") {
+    if (!tokens.empty()) {
+      if (methanol_type >= 0 && tokens[0] == "mc")
+        PRINT_INPUT_ERROR("MCMD does not support composition-dependent NEP models.");
+      if (tokens[0] == "dftd3" && !has_dftd3) {
         has_dftd3 = true;
         if (tokens.size() != 4) {
           std::cout << "dftd3 must have 3 parameters\n";
@@ -66,7 +69,8 @@ void NEP::initialize_dftd3()
         float rc_potential = get_double_from_token(tokens[2], __FILE__, __LINE__);
         float rc_coordination_number = get_double_from_token(tokens[3], __FILE__, __LINE__);
         dftd3.initialize(xc_functional, rc_potential, rc_coordination_number);
-        break;
+        if (methanol_type < 0)
+          break;
       }
     }
   }
@@ -87,7 +91,10 @@ NEP::NEP(const char* file_potential, const int num_atoms)
     std::cout << "The first line of nep.txt should have at least 3 items." << std::endl;
     exit(1);
   }
-  if (tokens[0] == "nep4") {
+  const bool composition = is_composition_nep(tokens[0]);
+  if (composition) {
+    zbl.enabled = tokens[0] == "nep4_zbl_composition";
+  } else if (tokens[0] == "nep4") {
     zbl.enabled = false;
   } else if (tokens[0] == "nep4_zbl") {
     zbl.enabled = true;
@@ -124,6 +131,17 @@ NEP::NEP(const char* file_potential, const int num_atoms)
     }
     zbl.atomic_numbers[n] = atomic_number;
     printf("    type %d (%s with Z = %d).\n", n, tokens[2 + n].c_str(), zbl.atomic_numbers[n]);
+  }
+
+  if (composition) {
+    const std::vector<std::string> types(tokens.begin() + 2, tokens.end());
+    std::vector<std::string> roles;
+    if (!read_composition_species(get_tokens(input), types, roles))
+      PRINT_INPUT_ERROR("Invalid composition_descriptor mapping in NEP model.");
+    methanol_type = composition_methanol_type(types, roles);
+    methanol_fraction.resize(1);
+    printf("    Composition descriptor: %s (water), %s (methanol).\n",
+      roles[0].c_str(), roles[1].c_str());
   }
 
   // zbl
@@ -316,9 +334,11 @@ NEP::NEP(const char* file_potential, const int num_atoms)
   annmb.num_neurons1 = get_int_from_token(tokens[1], __FILE__, __LINE__);
   annmb.dim = (paramb.n_max_radial + 1) + paramb.dim_angular;
   nep_model_type = paramb.model_type;
-  if (paramb.model_type == 3) {
+  if (paramb.model_type == 3 || composition) {
     annmb.dim += 1;
   }
+  if (annmb.dim > MAX_DIM || (composition && tokens[2] != "0"))
+    PRINT_INPUT_ERROR("Unsupported NEP ANN dimensions.");
   printf("    ANN = %d-%d-1.\n", annmb.dim, annmb.num_neurons1);
 
   // calculated parameters:
@@ -341,8 +361,12 @@ NEP::NEP(const char* file_potential, const int num_atoms)
   std::vector<float> parameters(annmb.num_para + annmb.dim);
   for (int n = 0; n < annmb.num_para + annmb.dim; ++n) {
     tokens = get_tokens(input);
+    if (tokens.empty())
+      PRINT_INPUT_ERROR("Incomplete NEP parameter or scaler block.");
     parameters[n] = get_double_from_token(tokens[0], __FILE__, __LINE__);
   }
+  if (composition && parameters.back() != 1.0f)
+    PRINT_INPUT_ERROR("The composition descriptor scaler must be 1.");
   // refactor descriptor parameters memory
   std::vector<float> descriptor_parameters = get_descriptor_parameters_type_pair(
     parameters,
@@ -477,6 +501,7 @@ static __global__ void find_descriptor(
   const int N1,
   const int N2,
   const Box box,
+  const float* methanol_fraction,
   const int* g_NN,
   const int* g_NL,
   const int* g_NN_angular,
@@ -576,6 +601,8 @@ static __global__ void find_descriptor(
     }
 
     // nomalize descriptor
+    if (methanol_fraction)
+      q[annmb.dim - 1] = *methanol_fraction;
     for (int d = 0; d < annmb.dim; ++d) {
       q[d] = q[d] * annmb.q_scaler[d];
     }
@@ -972,6 +999,7 @@ void NEP::compute_large_box(
     N1,
     N2,
     box,
+    methanol_type >= 0 ? methanol_fraction.data() : nullptr,
     nep_data.NN_radial.data(),
     nep_data.NL_radial.data(),
     nep_data.NN_angular.data(),
@@ -1130,6 +1158,7 @@ void NEP::compute_small_box(
     N,
     N1,
     N2,
+    methanol_type >= 0 ? methanol_fraction.data() : nullptr,
     small_box_data.NN_radial.data(),
     small_box_data.NL_radial.data(),
     small_box_data.NN_angular.data(),
@@ -1269,6 +1298,25 @@ static bool get_expanded_box(const double rc, const Box& box, NEP::ExpandedBox& 
   return is_small_box;
 }
 
+static __global__ void find_methanol_fraction(
+  int count, int methanol_type, const int* types, float* fraction)
+{
+  extern __shared__ int totals[];
+  const int thread = threadIdx.x;
+  int subtotal = 0;
+  for (int i = thread; i < count; i += blockDim.x)
+    subtotal += types[i] == methanol_type;
+  totals[thread] = subtotal;
+  __syncthreads();
+  for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+    if (thread < stride)
+      totals[thread] += totals[thread + stride];
+    __syncthreads();
+  }
+  if (thread == 0)
+    *fraction = static_cast<float>(static_cast<double>(totals[0]) / count);
+}
+
 void NEP::compute(
   Box& box,
   const GPU_Vector<int>& type,
@@ -1277,6 +1325,14 @@ void NEP::compute(
   GPU_Vector<double>& force_per_atom,
   GPU_Vector<double>& virial_per_atom)
 {
+  if (methanol_type >= 0) {
+    if (type.size() == 0)
+      PRINT_INPUT_ERROR("composition_descriptor requires a nonempty configuration.");
+    constexpr int block_size = 256;
+    find_methanol_fraction<<<1, block_size, block_size * sizeof(int)>>>(
+      type.size(), methanol_type, type.data(), methanol_fraction.data());
+    GPU_CHECK_KERNEL
+  }
   const bool is_small_box = get_expanded_box(paramb.rc_radial_max, box, ebox);
   if (is_small_box) {
     // update small_box_data

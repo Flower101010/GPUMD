@@ -13,6 +13,7 @@
     along with GPUMD.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "utilities/nep_composition.cuh"
 #include "dataset.cuh"
 #include "mic.cuh"
 #include "parameters.cuh"
@@ -222,6 +223,9 @@ void Dataset::initialize_gpu_data(Parameters& para)
     avirial_ref_cpu.resize(N * (first_structure.atomic_virial_diag_only ? 3 : 6));
   }
   temperature_ref_cpu.resize(N);
+  std::vector<float> fractions;
+  if (para.methanol_type >= 0)
+    fractions.resize(Nc);
 
   for (int n = 0; n < Nc; ++n) {
     const Structure& structure = get_structure(n);
@@ -233,6 +237,12 @@ void Dataset::initialize_gpu_data(Parameters& para)
          structure.bonded_baseline.force.size() != size_t(3 * structure.num_atom) ||
          structure.bonded_baseline.virial.size() != size_t(6 * structure.num_atom)))
       throw std::runtime_error("Bonded baseline size does not match frame");
+    if (para.methanol_type >= 0) {
+      if (structure.num_atom <= 0)
+        PRINT_INPUT_ERROR("composition_descriptor requires a nonempty configuration.");
+      fractions[n] = methanol_mole_fraction(
+        structure.type.data(), structure.num_atom, para.methanol_type);
+    }
     weight_cpu[n] = structure.weight;
     if ((para.charge_mode || para.charge_vdw)) {
       charge_ref_cpu[n] = structure.charge;
@@ -327,6 +337,10 @@ void Dataset::initialize_gpu_data(Parameters& para)
   num_cell.copy_from_host(num_cell_cpu.data());
   r.copy_from_host(r_cpu.data());
   type.copy_from_host(type_cpu.data());
+  if (para.methanol_type >= 0) {
+    methanol_fraction.resize(Nc);
+    methanol_fraction.copy_from_host(fractions.data());
+  }
 }
 
 static __global__ void gpu_add_bonded_baseline(

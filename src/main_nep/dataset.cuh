@@ -37,6 +37,7 @@ public:
   int max_NN_angular; // angular neighbor list size
 
   GPU_Vector<int> Na;          // number of atoms in each configuration
+  GPU_Vector<float> methanol_fraction; // one value per configuration
   GPU_Vector<int> Na_sum;      // prefix sum of Na
   std::vector<int> Na_cpu;     // number of atoms in each configuration
   std::vector<int> Na_sum_cpu; // prefix sum of Na_cpu

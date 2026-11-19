@@ -1,5 +1,6 @@
 /* Copyright 2017 Zheyong Fan and GPUMD development team. GPL-3.0-or-later. */
 #include "cg_model.cuh"
+#include "utilities/nep_composition.cuh"
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -234,7 +235,7 @@ void header(const std::string& file, const std::vector<std::string>& types)
   std::string name, extra;
   int n = 0;
   stream >> name >> n;
-  if ((name != "nep4" && name != "nep4_zbl") || n != int(types.size()))
+  if ((name != "nep4" && name != "nep4_zbl" && !is_composition_nep(name)) || n != int(types.size()))
     throw std::runtime_error("CG residual NEP header/type count mismatch");
   for (auto& t : types) {
     std::string actual;

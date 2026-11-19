@@ -476,7 +476,10 @@ void Fitness::output_atomic(
 
 void Fitness::write_nep_txt(FILE* fid_nep, Parameters& para, float* elite)
 {
-  if (para.train_mode == 0) { // potential model
+  if (para.methanol_type >= 0) {
+    const char* name = para.enable_zbl ? "nep4_zbl_composition" : "nep4_composition";
+    fprintf(fid_nep, "%s %d ", name, para.num_types);
+  } else if (para.train_mode == 0) { // potential model
     if (!(para.charge_mode || para.charge_vdw)) {
       if (para.version == 4) {
         if (para.enable_zbl) {
@@ -530,6 +533,9 @@ void Fitness::write_nep_txt(FILE* fid_nep, Parameters& para, float* elite)
     fprintf(fid_nep, "%s ", para.elements[n].c_str());
   }
   fprintf(fid_nep, "\n");
+  if (para.methanol_type >= 0)
+    fprintf(fid_nep, "composition_descriptor %s %s\n",
+      para.composition_species[0].c_str(), para.composition_species[1].c_str());
   if (para.enable_zbl) {
     if (para.flexible_zbl) {
       fprintf(fid_nep, "zbl 0 0\n");

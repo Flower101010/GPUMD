@@ -22,6 +22,7 @@
 // the model hyperparameters as recorded in the header of a nep.txt file
 struct NepTxtHeader {
   std::string model_token;
+  std::vector<std::string> composition_species;
   int version;
   int train_mode;
   int charge_mode;
@@ -53,7 +54,7 @@ struct NepTxtHeader {
   int has_q_134;
   int num_neurons1;
   int num_neurons2;
-  int number_of_header_lines; // 6 without a zbl line, 7 with one
+  int number_of_header_lines; // includes optional composition and ZBL lines
 };
 
 // parse the header of a nep.txt file; returns false and sets error if it cannot be parsed
@@ -69,6 +70,9 @@ public:
   int batch_size;             // number of configurations in one batch
   int stream_train;           // keep only the current training batch on GPU
   std::string composition_force_weights_file;
+  std::vector<std::string> composition_species;
+  int methanol_type = -1;
+  std::string composition_restart_header() const;
   bool validation_force_rmse_by_type = false;
   int num_types;              // number of atom types
   int population_size;        // population size for SNES

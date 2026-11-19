@@ -273,6 +273,14 @@ void NEP::update_potential(Parameters& para, float* parameters, ANN& ann)
   ann.c = pointer;
 }
 
+static __global__ void append_methanol_fraction(
+  const int* size, const int* offset, const float* fraction, float* descriptor)
+{
+  const int frame = blockIdx.x;
+  for (int i = threadIdx.x; i < size[frame]; i += blockDim.x)
+    descriptor[offset[frame] + i] = fraction[frame];
+}
+
 static void __global__ find_max_min(
   const int N, const float* g_q, float* g_q_scaler, float* g_q_scaler_max, float* g_q_scaler_min)
 {
@@ -806,6 +814,16 @@ void NEP::find_force(
       GPU_CHECK_KERNEL
     }
 
+    if (para.methanol_type >= 0) {
+      const size_t offset = static_cast<size_t>(para.dim - 1) * dataset[device_id].N;
+      append_methanol_fraction<<<dataset[device_id].Nc, 128>>>(
+        dataset[device_id].Na.data(),
+        dataset[device_id].Na_sum.data(),
+        dataset[device_id].methanol_fraction.data(),
+        nep_data[device_id].descriptors.data() + offset);
+      GPU_CHECK_KERNEL
+    }
+
     if (para.prediction == 1 && para.output_descriptor >= 1) {
       FILE* fid_descriptor = my_fopen("descriptor.out", "a");
       std::vector<float> descriptor_cpu(nep_data[device_id].descriptors.size());
@@ -838,7 +856,8 @@ void NEP::find_force(
     }
 
     if (calculate_q_scaler) {
-      find_max_min<<<annmb[device_id].dim, 1024>>>(
+      const int scaler_dim = annmb[device_id].dim - (para.methanol_type >= 0);
+      find_max_min<<<scaler_dim, 1024>>>(
         dataset[device_id].N,
         nep_data[device_id].descriptors.data(),
         para.q_scaler_gpu[device_id].data(),

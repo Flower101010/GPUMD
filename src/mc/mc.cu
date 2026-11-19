@@ -22,6 +22,7 @@ The driver class for the various MC ensembles.
 #include "mc_ensemble_sgc.cuh"
 #include "model/atom.cuh"
 #include "utilities/common.cuh"
+#include "utilities/nep_composition.cuh"
 #include "utilities/compact_nep.cuh"
 #include "utilities/gpu_macro.cuh"
 #include "utilities/read_file.cuh"
@@ -174,7 +175,9 @@ static std::vector<std::string> get_atom_symbols_in_nep()
   std::string line;
   std::getline(input_potential, line);
   std::vector<std::string> tokens = get_tokens(line);
-  if (tokens[0].substr(0, 3) != "nep") {
+  if (!tokens.empty() && is_composition_nep(tokens[0]))
+    PRINT_INPUT_ERROR("MCMD does not support composition-dependent NEP models.");
+  if (tokens.empty() || tokens[0].substr(0, 3) != "nep") {
     PRINT_INPUT_ERROR("MCMD only supports NEP models.");
   }
 

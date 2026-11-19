@@ -13,6 +13,7 @@
 
 #include "compact_nep.cuh"
 #include "error.cuh"
+#include "nep_composition.cuh"
 #include "read_file.cuh"
 #include <cstdio>
 #include <cstdlib>
@@ -406,6 +407,11 @@ void prepare_compact_nep_files(const std::vector<std::string>& atom_symbols)
     PRINT_INPUT_ERROR("There is no 'potential' keyword in run.in.");
   }
 
+  for (const auto& file : potential_files) {
+    const auto header = get_first_line(file);
+    if (!header.empty() && is_composition_nep(header[0]))
+      return; // retain the full binary model and its type indices at pure endpoints
+  }
   std::vector<std::string> first = get_first_line(potential_files.back());
   if (!is_compactable_nep(first)) {
     return;

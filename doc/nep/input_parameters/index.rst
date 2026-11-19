@@ -16,6 +16,7 @@ Below you can find a listing of keywords for the ``nep.in`` input file.
    model_type
    type
    type_weight
+   composition_descriptor
    composition_force_weights
    zbl
    use_typewise_cutoff_zbl
