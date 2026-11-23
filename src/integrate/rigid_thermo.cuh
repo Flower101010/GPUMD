@@ -18,7 +18,7 @@ public:
   void clear();
   int degrees_of_freedom() const { return degrees_of_freedom_; }
   int translational_degrees_of_freedom() const { return 3 * (atoms_ - members_ + bodies_); }
-  int rotational_degrees_of_freedom() const { return 3 * bodies_; }
+  int rotational_degrees_of_freedom() const { return rotational_degrees_of_freedom_; }
   // GPU 归约独立状态，不要求 bead 速度已重建；仅将两个标量同步到 HOST。
   // 不推进约束 virial 窗口。当前只支持初始化器接受的非线性刚体。
   KineticSample sample_kinetic_energy(const RigidBodySystem& rigid, const Atom& atom);
@@ -46,6 +46,7 @@ private:
   int bodies_ = 0;
   int members_ = 0;
   int degrees_of_freedom_ = 0;
+  int rotational_degrees_of_freedom_ = 0;
   double half_step_ = 0.0;
   GPU_Vector<Quaternion> previous_quats_;
   GPU_Vector<double> constraint_virial_;

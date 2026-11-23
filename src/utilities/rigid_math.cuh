@@ -189,24 +189,54 @@ angular_momentum_to_conjqm(const Quaternion& q, const Vec3& angular_momentum_spa
   return {2.0 * product.w, 2.0 * product.x, 2.0 * product.y, 2.0 * product.z};
 }
 
-RIGID_MATH_HD inline Vec3 conjqm_to_angular_momentum(const Quaternion& q, const Quaternion& p)
+RIGID_MATH_HD inline Vec3 conjqm_to_body_angular_momentum(const Quaternion& q, const Quaternion& p)
 {
   const Quaternion body = multiply(conjugate(q), p);
-  return rotate(q, {0.5 * body.x, 0.5 * body.y, 0.5 * body.z});
+  return {0.5 * body.x, 0.5 * body.y, 0.5 * body.z};
+}
+
+RIGID_MATH_HD inline Vec3 conjqm_to_angular_momentum(const Quaternion& q, const Quaternion& p)
+{
+  return rotate(q, conjqm_to_body_angular_momentum(q, p));
+}
+
+RIGID_MATH_HD inline Vec3 apply_inverse_inertia(const Vec3& body, const Vec3& inertia)
+{
+  assert(detail::finite(inertia.x) && inertia.x >= 0.0);
+  assert(detail::finite(inertia.y) && inertia.y >= 0.0);
+  assert(detail::finite(inertia.z) && inertia.z >= 0.0);
+  return {
+    inertia.x == 0.0 ? 0.0 : body.x / inertia.x,
+    inertia.y == 0.0 ? 0.0 : body.y / inertia.y,
+    inertia.z == 0.0 ? 0.0 : body.z / inertia.z};
 }
 
 RIGID_MATH_HD inline Vec3 angular_momentum_to_omega(
   const Quaternion& q, const Vec3& angular_momentum_space, const Vec3& inertia)
 {
-  assert(detail::finite(inertia.x) && inertia.x >= 0.0);
-  assert(detail::finite(inertia.y) && inertia.y >= 0.0);
-  assert(detail::finite(inertia.z) && inertia.z >= 0.0);
-  const Vec3 body = inverse_rotate(q, angular_momentum_space);
-  const Vec3 omega_body{
-    inertia.x == 0.0 ? 0.0 : body.x / inertia.x,
-    inertia.y == 0.0 ? 0.0 : body.y / inertia.y,
-    inertia.z == 0.0 ? 0.0 : body.z / inertia.z};
-  return rotate(q, omega_body);
+  return rotate(q, apply_inverse_inertia(inverse_rotate(q, angular_momentum_space), inertia));
+}
+
+RIGID_MATH_HD inline void project_dimer_momentum(const Quaternion& q, Quaternion& p)
+{
+  const auto body = conjqm_to_body_angular_momentum(q, p);
+  p = multiply(q, {0.0, 0.0, 2.0 * body.y, 2.0 * body.z});
+}
+
+// A linear rotor has I=(0,I_perp,I_perp). During free drift, its space-frame
+// angular momentum is constant and perpendicular to the molecular axis.
+RIGID_MATH_HD inline void drift_dimer(Quaternion& q, Quaternion& p, double inertia, double dt)
+{
+  const auto body = conjqm_to_body_angular_momentum(q, p);
+  const double magnitude = hypot(body.y, body.z);
+  if (magnitude == 0.0)
+    return;
+  const double half_angle = 0.5 * dt * magnitude / inertia;
+  const double sine = sin(half_angle);
+  q = multiply(q, {cos(half_angle), 0.0, sine * (body.y / magnitude), sine * (body.z / magnitude)});
+  normalize(q);
+  // The transverse body-frame momentum is unchanged by this rotation about itself.
+  p = multiply(q, {0.0, 0.0, 2.0 * body.y, 2.0 * body.z});
 }
 
 RIGID_MATH_HD inline void

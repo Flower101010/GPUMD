@@ -220,7 +220,13 @@ int main()
     assert(caught && !rigid.initialized() && rigid.number_of_bodies() == 0);
   };
   populate(atom,{1,1},{{1,1,1},{2,1,1}},{{0,0,0},{0,0,0}});
-  fails({0,0}); // 两个点质量 bead 必然组成线性刚体，当前仍明确拒绝。
+  rigid.initialize(atom,box,{0,0});
+  rigid.copy_to_host(snapshot);
+  assert(rigid.number_of_dimers() == 1 && snapshot.bodies[0].geometry.rotational_dof == 2);
+  near(snapshot.bodies[0].geometry.inertia,{0,0.5,0.5});
+  populate(atom,{1,1},{{1,1,1},{1,1,1}},{{0,0,0},{0,0,0}});
+  fails({0,0});
+  assert(rigid.number_of_dimers() == 0);
   populate(atom,{1,1,1},{{1,1,1},{2,1,1},{3,1,1}},{{0,0,0},{0,0,0},{0,0,0}});
   fails({0,0,0}); // 线性
   populate(atom,{1,1,1},{{1,1,1},{1,1,1},{1,1,1}},{{0,0,0},{0,0,0},{0,0,0}});

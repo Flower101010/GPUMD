@@ -111,10 +111,17 @@ __global__ void integrate_rotation(double h, RigidBodySystem::DeviceView view)
   if (b >= view.number_of_bodies)
     return;
   auto& state = view.state[b];
-  if constexpr (Kick)
+  const auto& geometry = view.geometry[b];
+  const bool dimer = geometry.rotational_dof == 2;
+  if constexpr (Kick) {
     rigid_math::kick_rotation(state.quat, state.conjqm, view.load[b].torque, h);
-  else
-    rigid_math::integrate_free_rotation(state.quat, state.conjqm, view.geometry[b].inertia, h);
+    if (dimer)
+      rigid_math::project_dimer_momentum(state.quat, state.conjqm);
+  } else if (dimer) {
+    rigid_math::drift_dimer(state.quat, state.conjqm, geometry.inertia.y, h);
+  } else {
+    rigid_math::integrate_free_rotation(state.quat, state.conjqm, geometry.inertia, h);
+  }
 }
 
 template <bool Kick>

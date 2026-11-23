@@ -42,7 +42,7 @@ below for supported inputs, usage and precautions.
 | Validation force RMSE by type | `validation_force_rmse_by_type 1` writes unweighted O/C validation force RMSE to `validation_force_rmse_by_type.csv` at each reporting interval, both across the full validation set and by methanol fraction. | [CSV format](doc/nep/input_parameters/validation_force_rmse_by_type.rst) |
 | Pair-specific cutoffs  | `cross_cutoff i j radial angular` overrides the symmetric cutoff for a selected pair of different types; other pairs retain the default averaging rule. Indices start at 0 and follow the `type` order.  | [cutoff and cross_cutoff](doc/nep/input_parameters/cutoff.rst), [cluster build and usage](INSTALL_CLUSTER.md) |
 | Multi-bead CG  | Fixed harmonic bond/angle and periodic proper-dihedral terms plus a trainable residual NEP, with per-frame topology, shared parameters and complete model packages for MD.  | [build, training and MD tutorial ](examples/multibead_cg/README.md), [detailed guide](doc/gpumd/multibead_cg_guide_zh.md) |
-| Rigid-body NVE/NVT/NPT | GPU integration of nonlinear multi-bead rigid bodies mixed with free particles, using Miller quaternion dynamics, NHC for NVT, and separate NH chains with an isotropic MTK piston for NPT, under bead forces from a temperature-independent NEP or another supported potential. | [usage and precautions](doc/gpumd/rigid_body_guide_zh.md), [input parameters](doc/gpumd/input_parameters/ensemble_standard.rst) |
+| Rigid-body NVE/NVT/NPT | GPU integration of linear two-bead bodies, nonlinear rigid bodies and free particles, using quaternion dynamics, NHC for NVT, and separate NH chains with an isotropic MTK piston for NPT, under bead forces from a temperature-independent NEP or another supported potential. | [usage and precautions](doc/gpumd/rigid_body_guide_zh.md), [input parameters](doc/gpumd/input_parameters/ensemble_standard.rst) |
 
 For streaming, add `stream_train 1` to `nep.in` or `gnep.in`; the default is `0`.
 Pair-specific cutoffs belong in `nep.in` after `type` and `cutoff`, for example:
@@ -81,9 +81,13 @@ separate translation and rotation Nose-Hoover chains following LAMMPS
 
 The zero-based grouping-method index selects molecule membership in `model.xyz`.
 Each multi-member group forms one rigid body; each singleton group is a free
-particle and must have its own label. Different bodies may have different bead
-counts; membership is not restricted to three beads. Initial bead velocities are
-projected onto rigid translation and rotation.
+particle and must have its own label. A group with two distinct beads is a
+linear rigid body with three translational and two rotational degrees of freedom.
+Its fixed length comes from the initial minimum-image separation. Groups with
+three or more beads must be nonlinear. Initial bead velocities are projected
+onto rigid translation and rotation. For rigid two-bead methanol mixed with
+single-bead water, give each methanol pair a shared label and each water bead
+a unique label. The rigid ensemble maintains the separation directly.
 
 For example, with molecule labels in grouping method `0`:
 
@@ -118,18 +122,18 @@ volume/density as well as target temperature and pressure. See the
 
 An additional compatibility mode is available as
 `ensemble rigid_npt_lammps 300 300 200 0.0001 2000 0`, with the same units and
-restrictions as `rigid_npt`. It follows LAMMPS `FixRigidNHSmall`'s
+restrictions as `rigid_npt` for nonlinear bodies. Use standard `rigid_npt` for
+two-bead rigid bodies. The compatibility mode follows LAMMPS `FixRigidNHSmall`'s
 `remap -> set_xv -> remap` ordering and discrete impulse constraint virial,
 including the small step-end changes in internal bead distances. Use it for
 LAMMPS behavior comparisons; `rigid_npt` retains geometry-preserving box scaling.
 See [usage and limitations](doc/gpumd/rigid_npt_lammps.md).
 
-Temperature and kinetic energy use `3*N_free + 6*N_body` degrees of freedom.
+Temperature uses `3*N_free + 5*N_dimer + 6*N_nonlinear` degrees of freedom.
 Global pressure includes the rigid constraint virial; per-atom virials remain
-interaction-only. Current support requires nonlinear bodies; NVE/NVT use a fixed
-box, while NPT supports isotropic dilation of a fully periodic orthogonal box.
-See the linked input documentation
-for supported outputs and action restrictions. Consecutive runs reconstruct the
+interaction-only. NVE/NVT use a fixed box. NPT supports isotropic dilation of a
+fully periodic orthogonal box. See the linked input documentation for supported
+outputs and action restrictions. Consecutive runs reconstruct the
 body state, and NVT/NPT reinitialize their chains and piston at each run boundary;
 bead restart output is not an exact checkpoint of the extended dynamics.
 

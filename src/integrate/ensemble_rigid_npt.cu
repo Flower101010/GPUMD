@@ -35,6 +35,12 @@ Ensemble_Rigid_NPT::Ensemble_Rigid_NPT(
 
 void Ensemble_Rigid_NPT::initialize(Atom& atom, const Box& box, const std::vector<Group>& groups)
 {
+  initialize_system(atom, box, groups, true);
+}
+
+void Ensemble_Rigid_NPT::initialize_system(
+  Atom& atom, const Box& box, const std::vector<Group>& groups, bool allow_dimers)
+{
   if (stage_ == Stage::half_step)
     throw std::logic_error("Cannot reinitialize rigid NPT between integration stages.");
   stage_ = Stage::uninitialized;
@@ -49,6 +55,8 @@ void Ensemble_Rigid_NPT::initialize(Atom& atom, const Box& box, const std::vecto
   const auto labels = rigid_body_labels_from_group(groups, molecule_grouping_method_, atom.number_of_atoms);
   try {
     rigid_.initialize(atom, box, labels);
+    if (!allow_dimers && rigid_.number_of_dimers() > 0)
+      throw std::invalid_argument("rigid_npt_lammps requires nonlinear rigid bodies; use rigid_npt for dimers.");
     rigid_.rebuild_positions(atom, box);
     rigid_.rebuild_velocities(atom);
     thermo_state_.initialize(rigid_);

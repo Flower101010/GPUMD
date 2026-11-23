@@ -29,7 +29,7 @@ public:
     Atom& atom,
     GPU_Vector<double>& thermo) override;
 
-  // 3*N_free + 6*N_nonlinear_body，不自动扣除全体系动量自由度。
+  // 3*N_free + 5*N_dimer + 6*N_nonlinear; no global momentum subtraction.
   int thermal_degrees_of_freedom() const override;
   const RigidBodySystem& rigid_bodies() const { return rigid_; }
   // 总压力诊断用的每体约束 virial，6*B SoA：xx,yy,zz,xy,xz,yz。
