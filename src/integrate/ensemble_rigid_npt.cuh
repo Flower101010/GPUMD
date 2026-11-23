@@ -45,6 +45,7 @@ protected:
   RigidThermo thermo_state_;
   std::unique_ptr<RigidNH> nh_;
 
+  void initialize_system(Atom& atom, const Box& box, const std::vector<Group>& groups, bool allow_dimers);
   void check_step(double dt, const Box& box, const Atom& atom, const GPU_Vector<double>& thermo) const;
   double update_thermo(
     const std::vector<Group>& groups, const Box& box, const Atom& atom, GPU_Vector<double>& thermo);

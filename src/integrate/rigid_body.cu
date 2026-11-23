@@ -309,10 +309,8 @@ __global__ void reconstruct_velocities(RigidBodySystem::ConstDeviceView view, do
     return;
   const auto& g = view.geometry[b];
   const auto& s = view.state[b];
-  // conjugate(q)*p = (0,2*L_body)，直接求 omega，避免 L 在两个坐标系之间往返。
-  const Quaternion qp = multiply(conjugate(s.quat), s.conjqm);
-  const Vec3 omega =
-    rotate(s.quat, {0.5 * qp.x / g.inertia.x, 0.5 * qp.y / g.inertia.y, 0.5 * qp.z / g.inertia.z});
+  const Vec3 body_momentum = conjqm_to_body_angular_momentum(s.quat, s.conjqm);
+  const Vec3 omega = rotate(s.quat, apply_inverse_inertia(body_momentum, g.inertia));
   for (int j = g.first_member; j < g.first_member + g.natoms; ++j) {
     const Vec3 r = rotate(s.quat, view.member_displace[j]);
     write_device_vec(
@@ -334,6 +332,7 @@ void RigidBodySystem::clear()
   number_of_atoms_ = 0;
   number_of_bodies_ = 0;
   number_of_members_ = 0;
+  number_of_dimers_ = 0;
   current_box_ = {};
   initialized_pbc_ = {};
 }
@@ -531,6 +530,32 @@ void RigidBodySystem::setup_bodies_static(
     require(finite(center), "Non-finite body center.");
     cell.wrap(center);
     state.xcm = center;
+    if (g.natoms == 2) {
+      const int second = members[g.first_member + 1];
+      const Vec3 bond = subtract(read_vec(positions, second, N), anchor);
+      const double length = norm(bond);
+      const double first_mass = masses[members[g.first_member]];
+      const double second_mass_fraction = masses[second] / g.mass;
+      const double transverse_inertia = first_mass * second_mass_fraction * length * length;
+      require(
+        std::isfinite(transverse_inertia) && transverse_inertia > 0,
+        "A rigid dimer requires distinct positions and finite positive transverse inertia.");
+
+      Vec3 axes[3]{bond, {}, {}};
+      require(normalize(axes[0]), "Invalid rigid dimer axis.");
+      const Vec3 reference = std::abs(axes[0].z) < 0.9 ? Vec3{0, 0, 1} : Vec3{0, 1, 0};
+      axes[1] = cross(reference, axes[0]);
+      require(normalize(axes[1]), "Invalid rigid dimer transverse axis.");
+      axes[2] = cross(axes[0], axes[1]);
+      state.quat = axes_to_quaternion(axes);
+      g.inertia = {0, transverse_inertia, transverse_inertia};
+      g.rotational_dof = 2;
+      displace[g.first_member] = {-second_mass_fraction * length, 0, 0};
+      displace[g.first_member + 1] = {(first_mass / g.mass) * length, 0, 0};
+      ++number_of_dimers_;
+      continue;
+    }
+
     double tensor[3][3] = {};
     std::vector<Vec3> relative(g.natoms);
     for (int k = 0; k < g.natoms; ++k) {
@@ -584,6 +609,8 @@ void RigidBodySystem::setup_bodies_dynamic(
     }
     require(finite(L), "Overflow computing rigid angular momentum.");
     state.conjqm = angular_momentum_to_conjqm(state.quat, L);
+    if (g.rotational_dof == 2)
+      project_dimer_momentum(state.quat, state.conjqm);
     require(
       std::isfinite(state.conjqm.w) && std::isfinite(state.conjqm.x) &&
         std::isfinite(state.conjqm.y) && std::isfinite(state.conjqm.z),

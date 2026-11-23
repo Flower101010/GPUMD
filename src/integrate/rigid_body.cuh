@@ -20,7 +20,7 @@ public:
     int natoms;         // 成员数 >= 2；范围 [first_member, first_member+natoms)
     double mass;        // 总质量 M；sum(m_i*s_i)=0
     Vec3 inertia;       // 三个有限正主惯量；当前拒绝线性/退化几何
-    int rotational_dof; // 按惯量秩确定；当前仅支持非线性刚体（3）
+    int rotational_dof; // Two for a dimer, three for a nonlinear body.
   };
 
   struct BodyState {
@@ -99,6 +99,7 @@ public:
   bool initialized() const;
   int number_of_bodies() const;
   int number_of_members() const;
+  int number_of_dimers() const { return number_of_dimers_; }
   DeviceView device_view();
   ConstDeviceView device_view() const;
 
@@ -152,7 +153,7 @@ private:
     int number_of_atoms, const std::vector<int>& body_labels, std::vector<int>& atom_to_body);
   // 从一致展开成员求 M/X_cm/惯性张量，再把质心包装到盒内。
   // 主惯量升序、右手主轴、quat 和固定 displace。
-  // 重根主轴需可复现；初始化时用相对容差拒绝近线性几何。
+  // 二珠体由键轴确定姿态；其余几何用相对容差拒绝近线性体。
   void setup_bodies_static(
     HostSnapshot& snapshot,
     const Box& box,
@@ -168,6 +169,7 @@ private:
   int number_of_atoms_ = 0;
   int number_of_bodies_ = 0;
   int number_of_members_ = 0;
+  int number_of_dimers_ = 0;
   std::array<double, 9> current_box_{};
   std::array<int, 3> initialized_pbc_{};
   GPU_Vector<BodyGeometry> geometry_;

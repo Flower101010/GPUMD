@@ -1,0 +1,19 @@
+gpumd_molecular_force 2
+number_of_atoms 6
+harmonic_bond_parameters 2
+1.2 5
+1.3999999999999999 3
+harmonic_angle_parameters 1
+1.8999999999999999 2
+periodic_dihedral_parameters 2
+0.20000000000000001 3 0.40000000000000002
+0.070000000000000007 1 -0.29999999999999999
+bonds 4
+0 1 0
+1 2 1
+3 4 1
+4 5 0
+angles 2
+0 1 2 0
+3 4 5 0
+dihedrals 0

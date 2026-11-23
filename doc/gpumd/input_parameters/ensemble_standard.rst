@@ -20,8 +20,9 @@ There is no need to further specify any other parameters and the full command is
 
 :attr:`rigid_nve`
 ^^^^^^^^^^^^^^^^^^
-The fixed-box rigid NVE integrator advances free particles and nonlinear rigid
-bodies, including bead forces supplied by a temperature-independent NEP::
+The fixed-box rigid NVE integrator advances free particles, linear two-bead
+rigid bodies and nonlinear rigid bodies under bead forces from supported
+potentials, including a temperature-independent NEP::
 
     ensemble rigid_nve <grouping_method>
 
@@ -31,7 +32,9 @@ from 0 to ``N_atoms-1``; ``-1`` is not a valid XYZ group label. Every multi-memb
 group is one rigid body; every singleton is a free particle. Assign each free particle a
 unique group label. Do not select species or thermostat-region grouping.
 XYZ group labels remain nonnegative; the internal adapter maps singleton labels
-to -1. Linear, coincident and near-linear bodies are not supported in this version.
+to -1. A two-member group must have distinct positions. Its initial
+minimum-image separation defines its fixed length and its rotation has two
+degrees of freedom. Groups with three or more members must be nonlinear.
 Initialization assumes compact bodies whose coherent fractional span is less
 than half the box in each periodic direction.
 
@@ -59,7 +62,7 @@ not yet adapted.
 
 The global pressure in ``thermo.out`` includes bead kinetic, interaction and
 rigid constraint virial terms after a complete integration step. Temperature
-and kinetic energy use ``3*N_free + 6*N_body`` DOFs without subtracting global
+uses ``3*N_free + 5*N_dimer + 6*N_nonlinear`` DOFs without subtracting global
 translation. XYZ/per-atom virials remain interaction-only; they do not contain
 the separate constraint contribution. Wrapped XYZ output does not allocate
 unwrapped-position tracking unless that quantity is explicitly requested.
@@ -100,7 +103,7 @@ in units of integration steps and must be at least 1; the actual relaxation
 time is ``T_coup * time_step``. The final argument is the zero-based molecule
 grouping-method index, with the same membership and geometry rules as
 ``rigid_nve``: singleton groups are free particles and multi-member groups
-are nonlinear rigid bodies.
+are linear two-bead bodies or nonlinear rigid bodies.
 
 For example::
 
@@ -117,7 +120,7 @@ rigid translation/rotation without rescaling them to the target temperature.
 
 The translation chain controls free particles and body centers of mass with
 ``f_t = 3*(N_free+N_body)``; the rotation chain controls Miller momenta with
-``f_r = 3*N_body``. Each chain has 10 links, one subcycle and the LAMMPS
+``f_r = (2*N_dimer + 3*N_nonlinear)``. Each chain has 10 links, one subcycle and the LAMMPS
 three-weight Yoshida setting. Purely free-particle systems skip the rotation chain.
 Including free particles in the translation chain is a mixed-system extension;
 a LAMMPS rigid fix itself thermostats only its rigid bodies.
@@ -201,13 +204,13 @@ and Yoshida setting are currently fixed by the implementation and have no extra
 Choose the timestep and relaxation times for your system. Only fully periodic
 orthogonal boxes and isotropic dilation are supported. Bodies keep their
 internal geometry while centers of mass and free particles follow box dilation.
-The grouping, nonlinear-body, potential and output/action restrictions of
+The grouping, body-geometry, potential and output/action restrictions of
 ``rigid_nve`` apply. Fixed/moving groups, external deformation, adaptive steps,
 velocity correction and unwrapped storage are rejected.
 
 The physical translation chain includes all free particles and body centers
 of mass; a separate chain controls body rotation. The DOFs are
-``f_t=3*(N_free+N_body)`` and ``f_r=3*N_body``. Each chain defaults to 10 links,
+``f_t=3*(N_free+N_body)`` and ``f_r=(2*N_dimer + 3*N_nonlinear)``. Each chain defaults to 10 links,
 one subcycle and the LAMMPS three-weight Yoshida setting. A purely free-particle
 system skips the rotation chain.
 

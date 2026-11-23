@@ -71,7 +71,7 @@ void Ensemble_Rigid_NPT_LAMMPS::initialize(Atom& atom, const Box& box, const std
     throw std::logic_error("Cannot reinitialize rigid NPT between integration stages.");
   initial_velocities_.resize(atom.velocity_per_atom.size());
   initial_velocities_.copy_from_device(atom.velocity_per_atom.data());
-  Ensemble_Rigid_NPT::initialize(atom, box, groups);
+  initialize_system(atom, box, groups, false);
   auto parameters = nh_->parameters();
   parameters.lammps_compatibility = true;
   nh_.reset(new RigidNH(parameters));

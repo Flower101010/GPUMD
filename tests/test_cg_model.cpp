@@ -83,7 +83,7 @@ int main()
   write("package/cg_model.json", valid + " trailing");
   fails([&] { read_cg_model("package/cg_model.json"); }, "Trailing");
   write("package/cg_model.json", valid);
-  auto fixture = fs::path(GPUMD_TEST_SOURCE_DIR) / "developers/cg_stage_a/input_draft";
+  auto fixture = fs::path(GPUMD_TEST_SOURCE_DIR) / "tests/fixtures/multibead_cg";
   for (auto name : {"frame4", "frame6"}) {
     auto t = read_topology((fixture / (std::string(name) + ".topology.in.draft")).string(), p);
     auto combined =

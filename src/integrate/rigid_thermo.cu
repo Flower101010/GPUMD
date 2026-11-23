@@ -18,8 +18,8 @@ __global__ void reduce_kinetic_energy(
     const auto& s = view.state[b];
     const auto& g = view.geometry[b];
     kt += g.mass * rigid_math::norm_squared(s.vcm);
-    const Quaternion qp = rigid_math::multiply(rigid_math::conjugate(s.quat), s.conjqm);
-    kr += 0.25 * (qp.x * qp.x / g.inertia.x + qp.y * qp.y / g.inertia.y + qp.z * qp.z / g.inertia.z);
+    const Vec3 momentum = rigid_math::conjqm_to_body_angular_momentum(s.quat, s.conjqm);
+    kr += rigid_math::dot(momentum, rigid_math::apply_inverse_inertia(momentum, g.inertia));
   }
   const std::size_t n = view.number_of_atoms;
   for (std::size_t i = t; i < n; i += blockDim.x) {
@@ -70,9 +70,9 @@ __global__ void tally_body_constraint_virial(
     return;
   const auto& g = view.geometry[b];
   const auto& s = view.state[b];
-  const Quaternion qp = rigid_math::multiply(rigid_math::conjugate(s.quat), s.conjqm);
+  const Vec3 momentum = rigid_math::conjqm_to_body_angular_momentum(s.quat, s.conjqm);
   const Vec3 omega = rigid_math::rotate(
-    s.quat, {0.5 * qp.x / g.inertia.x, 0.5 * qp.y / g.inertia.y, 0.5 * qp.z / g.inertia.z});
+    s.quat, rigid_math::apply_inverse_inertia(momentum, g.inertia));
   const Quaternion q_position = is_step1 ? previous_quats[b] : s.quat;
   const std::size_t n = view.number_of_atoms;
   double w[6] = {0, 0, 0, 0, 0, 0};
@@ -122,12 +122,10 @@ __global__ void instantaneous_constraint_virial(
   const auto& g = view.geometry[b];
   const auto& s = view.state[b];
   const auto& load = view.load[b];
-  const Vec3 angular_momentum = inverse_rotate(s.quat, conjqm_to_angular_momentum(s.quat, s.conjqm));
-  const Vec3 omega_body{angular_momentum.x / g.inertia.x,
-    angular_momentum.y / g.inertia.y, angular_momentum.z / g.inertia.z};
+  const Vec3 angular_momentum = conjqm_to_body_angular_momentum(s.quat, s.conjqm);
+  const Vec3 omega_body = apply_inverse_inertia(angular_momentum, g.inertia);
   const Vec3 torque = subtract(inverse_rotate(s.quat, load.torque), cross(omega_body, angular_momentum));
-  const Vec3 alpha = rotate(s.quat,
-    {torque.x / g.inertia.x, torque.y / g.inertia.y, torque.z / g.inertia.z});
+  const Vec3 alpha = rotate(s.quat, apply_inverse_inertia(torque, g.inertia));
   const Vec3 omega = rotate(s.quat, omega_body);
   const Vec3 acceleration_cm = scale(load.fcm, 1 / g.mass);
   const std::size_t n = view.number_of_atoms;
@@ -151,7 +149,7 @@ void RigidThermo::clear()
   previous_quats_.clear();
   constraint_virial_.clear();
   kinetic_sample_.clear();
-  atoms_ = bodies_ = members_ = degrees_of_freedom_ = 0;
+  atoms_ = bodies_ = members_ = degrees_of_freedom_ = rotational_degrees_of_freedom_ = 0;
   half_step_ = 0;
   stage_ = Stage::uninitialized;
 }
@@ -160,8 +158,9 @@ void RigidThermo::initialize(const RigidBodySystem& rigid)
 {
   clear();
   const auto view = rigid.device_view();
-  const long long dof =
-    3LL * (view.number_of_atoms - view.number_of_members) + 6LL * view.number_of_bodies;
+  const long long translation = 3LL * (view.number_of_atoms - view.number_of_members + view.number_of_bodies);
+  const long long rotation = 3LL * view.number_of_bodies - rigid.number_of_dimers();
+  const long long dof = translation + rotation;
   if (dof > std::numeric_limits<int>::max())
     throw std::overflow_error("Too many rigid thermal degrees of freedom.");
   previous_quats_.resize(view.number_of_bodies);
@@ -172,6 +171,7 @@ void RigidThermo::initialize(const RigidBodySystem& rigid)
   bodies_ = view.number_of_bodies;
   members_ = view.number_of_members;
   degrees_of_freedom_ = static_cast<int>(dof);
+  rotational_degrees_of_freedom_ = static_cast<int>(rotation);
   stage_ = Stage::ready;
 }
 
