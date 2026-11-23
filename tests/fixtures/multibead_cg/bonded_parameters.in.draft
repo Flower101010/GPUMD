@@ -1,0 +1,9 @@
+gpumd_bonded_parameters 1
+harmonic_bond_parameters 2
+1.2 5
+1.3999999999999999 3
+harmonic_angle_parameters 1
+1.8999999999999999 2
+periodic_dihedral_parameters 2
+0.20000000000000001 3 0.40000000000000002
+0.070000000000000007 1 -0.29999999999999999

@@ -244,7 +244,7 @@ int main(int argc, char** argv)
   const auto tmp = fs::temp_directory_path() / ("gpumd-bonded-dataset-" + std::to_string(getpid()));
   fs::create_directories(tmp);
   fs::current_path(tmp);
-  const auto fixture = fs::path(GPUMD_TEST_SOURCE_DIR) / "developers/cg_stage_a/input_draft";
+  const auto fixture = fs::path(GPUMD_TEST_SOURCE_DIR) / "tests/fixtures/multibead_cg";
   fs::copy_file(fixture / "bonded_parameters.in.draft", "bonded.in");
   const std::string xyz = read(fixture / "train.xyz.draft");
   write("train.xyz", xyz);

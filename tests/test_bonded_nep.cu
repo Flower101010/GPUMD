@@ -146,7 +146,7 @@ int main(int argc, char** argv)
   auto temp = fs::temp_directory_path() / ("gpumd-bonded-nep-" + std::to_string(getpid()));
   fs::create_directories(temp);
   fs::current_path(temp);
-  auto fixture = fs::path(GPUMD_TEST_SOURCE_DIR) / "developers/cg_stage_a/input_draft";
+  auto fixture = fs::path(GPUMD_TEST_SOURCE_DIR) / "tests/fixtures/multibead_cg";
   fs::copy_file(fixture / "bonded_parameters.in.draft", "bonded.in");
   fs::copy_file(fixture / "train.xyz.draft", "train.xyz");
   std::ofstream("nep.in")
